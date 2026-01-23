@@ -12,6 +12,27 @@ SCHNORR_BASELINE = 80000
 AVERAGE_CUTOFF = SCHNORR_BASELINE / 2
 
 
+def extract_opcode(name: str) -> str:
+    """Extract the core opcode from a benchmark name like '3DUP_HASH256_DROP_...' -> 'HASH256'"""
+    # Known opcodes (including ones with numbers)
+    known_opcodes = {'HASH256', 'SHA256', 'HASH160', 'SHA1', 'RIPEMD160', 'LSHIFT', 'RSHIFT',
+                     'AND', 'OR', 'XOR', 'NOT', 'CAT', 'SUBSTR', 'MUL', 'DIV', 'MOD'}
+    parts = name.split('_')
+    for part in parts:
+        if part in known_opcodes:
+            return part
+        if part.endswith('DUP') or part == 'DUP':
+            continue
+        if part == 'DROP':
+            continue
+        if any(c.isdigit() for c in part):
+            continue
+        if part.lower() == 'shift':
+            continue
+        return part
+    return name
+
+
 def extract_machine_info(filepath: str) -> dict:
     info = {'cpu': 'Unknown', 'arch': 'Unknown', 'file': Path(filepath).name}
     with open(filepath, 'r') as f:
@@ -174,7 +195,7 @@ def create_averaged_visualization(current_script: list[dict], gsr_added: list[di
     fig_height = max(10, min(30, max_operations * 0.6))
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, fig_height))
     subtitle = f'All individual data points across {num_machines} machine(s) - Operations with average >= {AVERAGE_CUTOFF:,.0f} Schnorr equivalents'
-    fig.suptitle(f'Benchmark Results: Current Bitcoin Script vs New GSR Operations\n({subtitle})',
+    fig.suptitle(f'Worst Case Block Sized Script: Current Bitcoin Script vs New GSR Operations\n({subtitle})',
                  fontsize=14, fontweight='bold')
 
     curr_color = '#3498db'
@@ -192,12 +213,15 @@ def create_averaged_visualization(current_script: list[dict], gsr_added: list[di
             ax1.scatter(r['seconds'], i, color=curr_color, s=100, marker='D', edgecolors='black', linewidth=1, zorder=5)
 
         ax1.axvline(x=schnorr_time, color=schnorr_color, linestyle='--', linewidth=2, label=f'Schnorr baseline ({schnorr_time:.2f}s)')
+        # Add legend entries for markers
+        ax1.scatter([], [], color=curr_color, alpha=0.6, s=50, edgecolors='white', linewidth=0.5, label='Individual machines')
+        ax1.scatter([], [], color=curr_color, s=100, marker='D', edgecolors='black', linewidth=1, label='Mean across machines')
         ax1.set_yticks(range(len(names)))
         ax1.set_yticklabels(names, fontsize=8)
         ax1.set_xlabel('Execution Time (seconds)')
         ax1.set_title('Current Bitcoin Script', fontsize=12, fontweight='bold', color=curr_color)
         ax1.invert_yaxis()
-        ax1.legend(loc='lower right')
+        ax1.legend(loc='lower right', fontsize=8)
         ax1.grid(axis='x', alpha=0.3)
     else:
         ax1.text(0.5, 0.5, 'No current script operations', ha='center', va='center', transform=ax1.transAxes)
@@ -214,18 +238,21 @@ def create_averaged_visualization(current_script: list[dict], gsr_added: list[di
             ax2.scatter(r['seconds'], i, color=gsr_color, s=100, marker='D', edgecolors='black', linewidth=1, zorder=5)
 
         ax2.axvline(x=schnorr_time, color=schnorr_color, linestyle='--', linewidth=2, label=f'Schnorr baseline ({schnorr_time:.2f}s)')
+        # Add legend entries for markers
+        ax2.scatter([], [], color=gsr_color, alpha=0.6, s=50, edgecolors='white', linewidth=0.5, label='Individual machines')
+        ax2.scatter([], [], color=gsr_color, s=100, marker='D', edgecolors='black', linewidth=1, label='Mean across machines')
         ax2.set_yticks(range(len(names)))
         ax2.set_yticklabels(names, fontsize=8)
         ax2.set_xlabel('Execution Time (seconds)')
         ax2.set_title('New Operations Added by GSR', fontsize=12, fontweight='bold', color=gsr_color)
         ax2.invert_yaxis()
-        ax2.legend(loc='lower right')
+        ax2.legend(loc='lower right', fontsize=8)
         ax2.grid(axis='x', alpha=0.3)
     else:
         ax2.text(0.5, 0.5, 'No new GSR operations', ha='center', va='center', transform=ax2.transAxes)
         ax2.set_title('New Operations Added by GSR', fontsize=12, fontweight='bold', color=gsr_color)
 
-    plt.tight_layout()
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
     print(f"Saved: {output_path}")
 
@@ -239,7 +266,7 @@ def create_schnorr_equivalents_visualization(current_script: list[dict], gsr_add
     fig_height = max(10, min(30, max_operations * 0.6))
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, fig_height))
     subtitle = f'All individual data points across {num_machines} machine(s) - Operations with average >= {AVERAGE_CUTOFF:,.0f} Schnorr equivalents'
-    fig.suptitle(f'Benchmark Results: Current Bitcoin Script vs New GSR Operations\n({subtitle})',
+    fig.suptitle(f'Worst Case Block Sized Script: Current Bitcoin Script vs New GSR Operations\n({subtitle})',
                  fontsize=14, fontweight='bold')
 
     curr_color = '#3498db'
@@ -257,12 +284,15 @@ def create_schnorr_equivalents_visualization(current_script: list[dict], gsr_add
             ax1.scatter(r['schnorr_equivalents'], i, color=curr_color, s=100, marker='D', edgecolors='black', linewidth=1, zorder=5)
 
         ax1.axvline(x=SCHNORR_BASELINE, color=schnorr_color, linestyle='--', linewidth=2, label=f'Block limit ({SCHNORR_BASELINE:,} sigs)')
+        # Add legend entries for markers
+        ax1.scatter([], [], color=curr_color, alpha=0.6, s=50, edgecolors='white', linewidth=0.5, label='Individual machines')
+        ax1.scatter([], [], color=curr_color, s=100, marker='D', edgecolors='black', linewidth=1, label='Mean across machines')
         ax1.set_yticks(range(len(names)))
         ax1.set_yticklabels(names, fontsize=8)
         ax1.set_xlabel('Schnorr Signature Equivalents (per block)')
         ax1.set_title('Current Bitcoin Script', fontsize=12, fontweight='bold', color=curr_color)
         ax1.invert_yaxis()
-        ax1.legend(loc='lower right')
+        ax1.legend(loc='lower right', fontsize=8)
         ax1.grid(axis='x', alpha=0.3)
         ax1.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: format(int(x), ',')))
 
@@ -281,12 +311,15 @@ def create_schnorr_equivalents_visualization(current_script: list[dict], gsr_add
             ax2.scatter(r['schnorr_equivalents'], i, color=gsr_color, s=100, marker='D', edgecolors='black', linewidth=1, zorder=5)
 
         ax2.axvline(x=SCHNORR_BASELINE, color=schnorr_color, linestyle='--', linewidth=2, label=f'Block limit ({SCHNORR_BASELINE:,} sigs)')
+        # Add legend entries for markers
+        ax2.scatter([], [], color=gsr_color, alpha=0.6, s=50, edgecolors='white', linewidth=0.5, label='Individual machines')
+        ax2.scatter([], [], color=gsr_color, s=100, marker='D', edgecolors='black', linewidth=1, label='Mean across machines')
         ax2.set_yticks(range(len(names)))
         ax2.set_yticklabels(names, fontsize=8)
         ax2.set_xlabel('Schnorr Signature Equivalents (per block)')
         ax2.set_title('New Operations Added by GSR', fontsize=12, fontweight='bold', color=gsr_color)
         ax2.invert_yaxis()
-        ax2.legend(loc='lower right')
+        ax2.legend(loc='lower right', fontsize=8)
         ax2.grid(axis='x', alpha=0.3)
         ax2.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: format(int(x), ',')))
 
@@ -294,9 +327,35 @@ def create_schnorr_equivalents_visualization(current_script: list[dict], gsr_add
         ax2.text(0.5, 0.5, 'No new GSR operations', ha='center', va='center', transform=ax2.transAxes)
         ax2.set_title('New Operations Added by GSR', fontsize=12, fontweight='bold', color=gsr_color)
 
-    plt.tight_layout()
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
     print(f"Saved: {output_path}")
+
+
+def get_machine_sort_key(machine_info: dict) -> tuple:
+    """
+    Returns a sort key tuple: (arch_order, vendor_order, cpu_name)
+    Groups: ARM first, then x86
+    Subgroups: Apple, AMD, Intel, Other
+    """
+    cpu = machine_info['cpu'].lower()
+    arch = machine_info['arch'].lower()
+    
+    if 'arm' in arch or 'aarch' in arch:
+        arch_order = 0
+    else:
+        arch_order = 1
+    
+    if 'apple' in cpu or 'm1' in cpu or 'm2' in cpu or 'm3' in cpu or 'm4' in cpu:
+        vendor_order = 0
+    elif 'amd' in cpu or 'ryzen' in cpu:
+        vendor_order = 1
+    elif 'intel' in cpu or 'core' in cpu:
+        vendor_order = 2
+    else:
+        vendor_order = 3
+    
+    return (arch_order, vendor_order, machine_info['cpu'])
 
 
 def create_per_machine_visualization(all_machine_data: list[tuple], output_path: str):
@@ -304,12 +363,15 @@ def create_per_machine_visualization(all_machine_data: list[tuple], output_path:
     if num_machines == 0:
         return
     
+    all_machine_data = sorted(all_machine_data, key=lambda x: get_machine_sort_key(x[1]))
+    
     machine_names = []
     curr_worst_times = []
     curr_worst_names = []
     gsr_worst_times = []
     gsr_worst_names = []
     schnorr_times = []
+    gsr_all_ops = []
     
     for results, machine_info in all_machine_data:
         cpu_short = machine_info['cpu'][:30] + '...' if len(machine_info['cpu']) > 30 else machine_info['cpu']
@@ -320,6 +382,7 @@ def create_per_machine_visualization(all_machine_data: list[tuple], output_path:
         schnorr_times.append(schnorr['seconds'] if schnorr else 0)
         
         current_script, gsr_added = analyze_results(results)
+        gsr_all_ops.append(gsr_added)
         
         if current_script:
             curr_worst_times.append(current_script[0]['seconds'])
@@ -336,32 +399,42 @@ def create_per_machine_visualization(all_machine_data: list[tuple], output_path:
             gsr_worst_names.append('N/A')
     
     fig, ax = plt.subplots(figsize=(14, max(6, num_machines * 1.5)))
-    fig.suptitle('Worst Case Performance Across All Machines\n(Current Script vs New GSR Operations)', 
+    fig.suptitle('Worst Case Block Sized Script: Performance Across All Machines', 
                  fontsize=14, fontweight='bold')
     
     y_pos = range(num_machines)
-    bar_height = 0.35
+    bar_height = 0.25
     
     curr_color = '#3498db'
     gsr_color = '#27ae60'
     schnorr_color = '#e74c3c'
     
-    bars1 = ax.barh([y - bar_height/2 for y in y_pos], curr_worst_times, bar_height, 
-                    label='Current Script Worst', color=curr_color, alpha=0.8)
-    bars2 = ax.barh([y + bar_height/2 for y in y_pos], gsr_worst_times, bar_height,
+    bars1 = ax.barh([y - bar_height for y in y_pos], curr_worst_times, bar_height, 
+                    label='Current Script Worst (excluding sigops)', color=curr_color, alpha=0.8)
+    bars2 = ax.barh([y for y in y_pos], gsr_worst_times, bar_height,
                     label='New GSR Worst', color=gsr_color, alpha=0.8)
+    bars3 = ax.barh([y + bar_height for y in y_pos], schnorr_times, bar_height,
+                    label='Schnorr Baseline', color=schnorr_color, alpha=0.8)
     
-    for i, schnorr_time in enumerate(schnorr_times):
-        if schnorr_time > 0:
-            ax.plot(schnorr_time, i, 'o', color=schnorr_color, markersize=10, zorder=5)
-    
-    for i, (bar1, bar2) in enumerate(zip(bars1, bars2)):
+    for i, (bar1, bar2, bar3) in enumerate(zip(bars1, bars2, bars3)):
         if curr_worst_times[i] > 0:
             ax.text(bar1.get_width() + 0.02, bar1.get_y() + bar1.get_height()/2,
                    f'{curr_worst_times[i]:.2f}s', va='center', fontsize=8)
         if gsr_worst_times[i] > 0:
+            gsr_label = f'{gsr_worst_times[i]:.2f}s'
+            # Check if GSR worst case is the longest bar for this machine
+            other_max = max(curr_worst_times[i], schnorr_times[i])
+            if gsr_worst_times[i] > other_max and other_max > 0:
+                factor = gsr_worst_times[i] / other_max
+                # Find unique opcodes from GSR ops slower than other_max
+                slower_opcodes = set(extract_opcode(op['name']) for op in gsr_all_ops[i] if op['seconds'] > other_max)
+                slower_ops_str = ', '.join(sorted(slower_opcodes))
+                gsr_label += f' ({factor:.1f}x slower: {slower_ops_str})'
             ax.text(bar2.get_width() + 0.02, bar2.get_y() + bar2.get_height()/2,
-                   f'{gsr_worst_times[i]:.2f}s', va='center', fontsize=8)
+                   gsr_label, va='center', fontsize=8)
+        if schnorr_times[i] > 0:
+            ax.text(bar3.get_width() + 0.02, bar3.get_y() + bar3.get_height()/2,
+                   f'{schnorr_times[i]:.2f}s', va='center', fontsize=8)
     
     ax.set_yticks(y_pos)
     ax.set_yticklabels(machine_names, fontsize=9)
@@ -370,15 +443,14 @@ def create_per_machine_visualization(all_machine_data: list[tuple], output_path:
     ax.invert_yaxis()
     ax.grid(axis='x', alpha=0.3)
     
-    from matplotlib.lines import Line2D
     legend_elements = [
-        mpatches.Patch(facecolor=curr_color, alpha=0.8, label='Current Script Worst Case'),
+        mpatches.Patch(facecolor=curr_color, alpha=0.8, label='Current Script Worst Case (excluding sigops)'),
         mpatches.Patch(facecolor=gsr_color, alpha=0.8, label='New GSR Worst Case'),
-        Line2D([0], [0], marker='o', color='w', markerfacecolor=schnorr_color, markersize=10, label='Schnorr Baseline')
+        mpatches.Patch(facecolor=schnorr_color, alpha=0.8, label='Schnorr Baseline')
     ]
     ax.legend(handles=legend_elements, loc='lower right')
     
-    plt.tight_layout()
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
     print(f"Saved: {output_path}")
     
@@ -387,6 +459,221 @@ def create_per_machine_visualization(all_machine_data: list[tuple], output_path:
     for i, (results, machine_info) in enumerate(all_machine_data):
         cpu_short = machine_info['cpu'][:35] + '...' if len(machine_info['cpu']) > 35 else machine_info['cpu']
         print(f"{cpu_short:<40} {curr_worst_times[i]:<15.3f} {gsr_worst_times[i]:<15.3f} {schnorr_times[i]:<12.3f}")
+    print()
+
+
+def get_vendor_name(cpu: str) -> str:
+    """Determine vendor from CPU name."""
+    cpu_lower = cpu.lower()
+    if 'apple' in cpu_lower or any(f'm{i}' in cpu_lower for i in range(1, 10)):
+        return 'Apple'
+    elif 'amd' in cpu_lower or 'ryzen' in cpu_lower:
+        return 'AMD'
+    elif 'intel' in cpu_lower or 'core' in cpu_lower:
+        return 'Intel'
+    elif 'rpi' in cpu_lower or 'raspberry' in cpu_lower or 'bcm' in cpu_lower or 'arm' in cpu_lower:
+        return 'ARM (RPi/Other)'
+    else:
+        return 'Other'
+
+
+def create_machine_scatter_plot(all_machine_data: list[tuple], output_path: str):
+    """Create a scatter plot comparing current vs GSR worst case performance per machine."""
+    if not all_machine_data:
+        return
+    
+    # Collect data per machine
+    machine_data = []
+    for results, machine_info in all_machine_data:
+        schnorr = get_schnorr_baseline(results)
+        current_script, gsr_added = analyze_results(results)
+        
+        curr_worst_no_schnorr = current_script[0]['seconds'] if current_script else 0
+        schnorr_time = schnorr['seconds'] if schnorr else 0
+        # Current script worst case includes Schnorr
+        curr_worst = max(curr_worst_no_schnorr, schnorr_time)
+        gsr_worst = gsr_added[0]['seconds'] if gsr_added else 0
+        
+        vendor = get_vendor_name(machine_info['cpu'])
+        cpu_short = machine_info['cpu'][:25] + '...' if len(machine_info['cpu']) > 25 else machine_info['cpu']
+        
+        machine_data.append({
+            'cpu': cpu_short,
+            'vendor': vendor,
+            'arch': machine_info['arch'],
+            'curr_worst': curr_worst,
+            'gsr_worst': gsr_worst,
+            'schnorr': schnorr_time,
+            'gsr_name': gsr_added[0]['name'] if gsr_added else '',
+            'curr_name': current_script[0]['name'] if current_script else '',
+        })
+    
+    fig, ax = plt.subplots(figsize=(12, 10))
+    fig.suptitle('Worst Case Block Sized Script: Machine Performance Comparison',
+                 fontsize=14, fontweight='bold')
+    
+    # Vendor colors
+    vendor_colors = {
+        'Apple': '#666666',
+        'AMD': '#ED1C24',
+        'Intel': '#0071C5',
+        'ARM (RPi/Other)': '#76B900',
+        'Other': '#9B59B6'
+    }
+    
+    # Scatter points per vendor
+    for vendor in vendor_colors:
+        vendor_machines = [m for m in machine_data if m['vendor'] == vendor]
+        if not vendor_machines:
+            continue
+        
+        x = [m['curr_worst'] for m in vendor_machines]
+        y = [m['gsr_worst'] for m in vendor_machines]
+        
+        ax.scatter(x, y, c=vendor_colors[vendor], label=vendor, s=150, alpha=0.8, 
+                   edgecolors='black', linewidth=1, zorder=5)
+    
+    # Add machine labels
+    for m in machine_data:
+        ax.annotate(m['cpu'], (m['curr_worst'], m['gsr_worst']),
+                   xytext=(5, 5), textcoords='offset points', fontsize=7, alpha=0.8)
+    
+    # Diagonal parity line (GSR = Current)
+    max_val = max(max(m['curr_worst'] for m in machine_data), 
+                  max(m['gsr_worst'] for m in machine_data)) * 1.1
+    ax.plot([0, max_val], [0, max_val], 'k--', alpha=0.5, linewidth=1.5, 
+            label='Parity (GSR = Current)')
+    
+    # Add regions annotation
+    ax.fill_between([0, max_val], [0, max_val], [max_val, max_val], 
+                    alpha=0.1, color='red', label='GSR slower')
+    ax.fill_between([0, max_val], [0, 0], [0, max_val], 
+                    alpha=0.1, color='green', label='GSR faster')
+    
+    ax.set_xlabel('Current Script Worst Case incl. Schnorr (seconds)', fontsize=11)
+    ax.set_ylabel('New GSR Worst Case (seconds)', fontsize=11)
+    ax.set_xlim(0, max_val)
+    ax.set_ylim(0, max_val)
+    ax.set_aspect('equal')
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc='upper left', fontsize=9)
+    
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    print(f"Saved: {output_path}")
+
+
+def create_vendor_grouped_visualization(all_machine_data: list[tuple], output_path: str):
+    """Create a visualization grouping machines by vendor (Apple, AMD, Intel)."""
+    if not all_machine_data:
+        return
+    
+    # Group machines by vendor
+    vendor_data = defaultdict(lambda: {
+        'curr_worst_times': [], 'gsr_worst_times': [], 'schnorr_times': [],
+        'gsr_all_ops': [], 'machines': []
+    })
+    
+    for results, machine_info in all_machine_data:
+        vendor = get_vendor_name(machine_info['cpu'])
+        
+        schnorr = get_schnorr_baseline(results)
+        current_script, gsr_added = analyze_results(results)
+        
+        vendor_data[vendor]['schnorr_times'].append(schnorr['seconds'] if schnorr else 0)
+        vendor_data[vendor]['machines'].append(machine_info['cpu'])
+        vendor_data[vendor]['gsr_all_ops'].extend(gsr_added)
+        
+        if current_script:
+            vendor_data[vendor]['curr_worst_times'].append(current_script[0]['seconds'])
+        if gsr_added:
+            vendor_data[vendor]['gsr_worst_times'].append(gsr_added[0]['seconds'])
+    
+    # Calculate averages per vendor
+    vendor_names = []
+    avg_curr_worst = []
+    avg_gsr_worst = []
+    avg_schnorr = []
+    vendor_gsr_ops = []
+    machine_counts = []
+    
+    # Order: Apple, AMD, Intel, ARM/Other
+    vendor_order = ['Apple', 'AMD', 'Intel', 'ARM (RPi/Other)', 'Other']
+    for vendor in vendor_order:
+        if vendor not in vendor_data:
+            continue
+        data = vendor_data[vendor]
+        n = len(data['machines'])
+        vendor_names.append(f"{vendor}\n({n} machine{'s' if n > 1 else ''})")
+        machine_counts.append(n)
+        
+        avg_curr_worst.append(sum(data['curr_worst_times']) / len(data['curr_worst_times']) if data['curr_worst_times'] else 0)
+        avg_gsr_worst.append(sum(data['gsr_worst_times']) / len(data['gsr_worst_times']) if data['gsr_worst_times'] else 0)
+        avg_schnorr.append(sum(data['schnorr_times']) / len(data['schnorr_times']) if data['schnorr_times'] else 0)
+        vendor_gsr_ops.append(data['gsr_all_ops'])
+    
+    num_vendors = len(vendor_names)
+    fig, ax = plt.subplots(figsize=(12, max(5, num_vendors * 1.8)))
+    fig.suptitle('Worst Case Block Sized Script: Performance by Hardware Vendor (Averaged)', 
+                 fontsize=14, fontweight='bold')
+    
+    y_pos = range(num_vendors)
+    bar_height = 0.25
+    
+    curr_color = '#3498db'
+    gsr_color = '#27ae60'
+    schnorr_color = '#e74c3c'
+    
+    bars1 = ax.barh([y - bar_height for y in y_pos], avg_curr_worst, bar_height, 
+                    label='Current Script Worst (avg)', color=curr_color, alpha=0.8)
+    bars2 = ax.barh([y for y in y_pos], avg_gsr_worst, bar_height,
+                    label='New GSR Worst (avg)', color=gsr_color, alpha=0.8)
+    bars3 = ax.barh([y + bar_height for y in y_pos], avg_schnorr, bar_height,
+                    label='Schnorr Baseline (avg)', color=schnorr_color, alpha=0.8)
+    
+    for i, (bar1, bar2, bar3) in enumerate(zip(bars1, bars2, bars3)):
+        if avg_curr_worst[i] > 0:
+            ax.text(bar1.get_width() + 0.05, bar1.get_y() + bar1.get_height()/2,
+                   f'{avg_curr_worst[i]:.2f}s', va='center', fontsize=9)
+        if avg_gsr_worst[i] > 0:
+            gsr_label = f'{avg_gsr_worst[i]:.2f}s'
+            other_max = max(avg_curr_worst[i], avg_schnorr[i])
+            if avg_gsr_worst[i] > other_max and other_max > 0:
+                factor = avg_gsr_worst[i] / other_max
+                # Find unique opcodes from GSR ops slower than other_max
+                slower_opcodes = set(extract_opcode(op['name']) for op in vendor_gsr_ops[i] if op['seconds'] > other_max)
+                if slower_opcodes:
+                    slower_ops_str = ', '.join(sorted(slower_opcodes))
+                    gsr_label += f' ({factor:.1f}x slower: {slower_ops_str})'
+            ax.text(bar2.get_width() + 0.05, bar2.get_y() + bar2.get_height()/2,
+                   gsr_label, va='center', fontsize=9)
+        if avg_schnorr[i] > 0:
+            ax.text(bar3.get_width() + 0.05, bar3.get_y() + bar3.get_height()/2,
+                   f'{avg_schnorr[i]:.2f}s', va='center', fontsize=9)
+    
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(vendor_names, fontsize=10)
+    ax.set_xlabel('Execution Time (seconds)')
+    ax.set_ylabel('Hardware Vendor')
+    ax.invert_yaxis()
+    ax.grid(axis='x', alpha=0.3)
+    
+    legend_elements = [
+        mpatches.Patch(facecolor=curr_color, alpha=0.8, label='Current Script Worst Case (avg)'),
+        mpatches.Patch(facecolor=gsr_color, alpha=0.8, label='New GSR Worst Case (avg)'),
+        mpatches.Patch(facecolor=schnorr_color, alpha=0.8, label='Schnorr Baseline (avg)')
+    ]
+    ax.legend(handles=legend_elements, loc='lower right')
+    
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    print(f"Saved: {output_path}")
+    
+    print("\nPER-VENDOR AVERAGED WORST CASES")
+    print(f"{'Vendor':<20} {'Machines':<10} {'Current Script':<15} {'New GSR':<15} {'Schnorr':<12}")
+    for i, vendor in enumerate(vendor_names):
+        vendor_clean = vendor.split('\n')[0]
+        print(f"{vendor_clean:<20} {machine_counts[i]:<10} {avg_curr_worst[i]:<15.3f} {avg_gsr_worst[i]:<15.3f} {avg_schnorr[i]:<12.3f}")
     print()
 
 
@@ -434,13 +721,16 @@ def main():
     plots_dir.mkdir(exist_ok=True)
     
     output_base = 'benchmark_analysis' if len(csv_paths) > 1 else Path(csv_paths[0]).stem + '_analysis'
-    create_averaged_visualization(current_script, gsr_added, schnorr, len(csv_paths), f'plots/{output_base}_averaged.png')
-    create_schnorr_equivalents_visualization(current_script, gsr_added, schnorr, len(csv_paths), f'plots/{output_base}_schnorr_equivalents.png')
+    create_averaged_visualization(current_script, gsr_added, schnorr, len(csv_paths), f'plots/{output_base}_seconds.png')
+    create_schnorr_equivalents_visualization(current_script, gsr_added, schnorr, len(csv_paths), f'plots/{output_base}_schnorr_units.png')
 
     if len(csv_paths) > 1:
         create_per_machine_visualization(all_machine_data, f'plots/{output_base}_per_machine.png')
+        create_vendor_grouped_visualization(all_machine_data, f'plots/{output_base}_by_vendor.png')
+        create_machine_scatter_plot(all_machine_data, f'plots/{output_base}_scatter.png')
     else:
         create_per_machine_visualization(all_machine_data, f'plots/{output_base}_machine.png')
+        create_machine_scatter_plot(all_machine_data, f'plots/{output_base}_scatter.png')
 
 
 if __name__ == '__main__':
