@@ -1,0 +1,11 @@
+{
+  "joint_sha256": "b740f85f644823961d330eeb4d6a85699ec671ad1a53ce62ebe9769abc54cd1a",
+  "source_check": {
+    "unmatched": [],
+    "checked": 60,
+    "commits": [
+      "60bc3ca40a43f5c1a8c5e68f043f2e3622483e58"
+    ],
+    "note": "Compared with each recorded Git commit, accepting LF or CRLF. Unmatched hashes require the original source bytes for review."
+  }
+}

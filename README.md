@@ -1,26 +1,40 @@
 # varopsData
-Collection of csv files produced by the bench_varops bitcoin core benchmark.
 
-://github.com/rustyrussell/bips/blob/guilt/varops/bip-unknown-script-restoration.mediawiki).
+Calibration data and analysis for the BIP 440 varops cost model of Tapscript v2 (GSR).
 
-## Benchmark Results
+The report is [`0.4.0/joint-calibration.html`](0.4.0/joint-calibration.html). The measurement tool, the
+cost model and its method live on the `gsr` branch of [jmoik/bitcoin](https://github.com/jmoik/bitcoin/tree/gsr):
+`dev/varops/primitive-calibration/` (`run_calibration.py`, `costing-methodology.md`, `varops-primitives.md`)
+and `src/script/varops.h`.
 
-### Machine Performance Scatter
-![Benchmark Analysis - Scatter](plots/benchmark_analysis_scatter.png)
-*Figure 1: Scatter plot comparing each machine's current script worst case (including Schnorr) against its GSR worst case. Points below the diagonal indicate machines where worst-case GSR operations are faster than current worst-case operations.*
+## Contents
 
-### Absolute Time (Seconds)
-![Benchmark Analysis - Seconds](plots/benchmark_analysis_seconds.png)
-*Figure 2: Execution time in seconds for top 5 worst-case operations on each side. Left: current Bitcoin Script; right: new GSR operations. Error bars show mean ± std across machines. Labels include varops percentage.*
+| Path | |
+|---|---|
+| `e3-20260930-60bc3ca40a/` | Current dataset: six machines, 3 epochs, gsr `60bc3ca40a`. Per-machine artifacts, joint fit, fit log and a README with the run details. |
+| `fit_calibrations.py` | Fits each machine and takes the envelope of the machine fits as the pricing basis, then rounds it to the candidate schedule. |
+| `render_joint_calibration.py` | Builds the report from a joint fit; `restyle_report.py` applies the page style. |
+| `test_calibration_pipeline.py` | Tests for fitting, rounding and rendering. |
 
-### Performance by Individual Machine
-![Benchmark Analysis - Per Machine](plots/benchmark_analysis_per_machine.png)
-*Figure 3: Worst-case execution times across all tested machines, comparing current script operations (excluding sigops), new GSR operations, and the Schnorr baseline. Machines are grouped by architecture and vendor.*
+Datasets are named `e<epochs>-<date>-<gsr commit>`.
 
-### Performance by Vendor
-![Benchmark Analysis - By Vendor](plots/benchmark_analysis_by_vendor.png)
-*Figure 4: Averaged worst-case performance grouped by hardware vendor. This aggregation reveals vendor-specific performance characteristics across Apple, AMD, Intel, and ARM (Raspberry Pi) platforms.*
+## Pipeline
 
-### Schnorr-Normalized Units
-![Benchmark Analysis - Schnorr Units](plots/benchmark_analysis_schnorr_units.png)
-*Figure 5: Performance expressed in Schnorr signature equivalents per block. This normalization allows comparison against the existing block validation budget of 80,000 signature operations.*
+Measure on each machine, in a checkout of the `gsr` branch:
+
+    python3 dev/varops/primitive-calibration/run_calibration.py --reference-epochs 3 --epochs 3 \
+        --sample-ms 5 --copy-sample-ms 50 --output varop-calibration-<machine>-3epoch.json
+
+Collect the artifacts in a new dataset folder, then fit and render:
+
+    python3 fit_calibrations.py <dataset>/varop-calibration-*.json --source-root <gsr checkout>
+    python3 render_joint_calibration.py <dataset>/joint-calibration.json \
+        --output 0.4.0/joint-calibration.html --source-root <gsr checkout>
+    python3 -m unittest test_calibration_pipeline
+
+`--source-root` checks the source hashes recorded in each artifact against their Git commits.
+
+## History
+
+Until 2026-04-10 this repository collected `bench_varops` worst-case results for the original BIP 440 cost model,
+including runs contributed by others. Those CSV files and plots remain in the Git history (`906848d`).

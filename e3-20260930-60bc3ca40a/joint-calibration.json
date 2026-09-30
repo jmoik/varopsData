@@ -1,0 +1,510 @@
+{
+  "schema": "varop-joint-fit-v2",
+  "status": "provisional multi-machine fit, not an accepted consensus schedule",
+  "model_id": "producer-normalize-v1",
+  "target_fraction": 0.9,
+  "pricing_basis": "envelope",
+  "schedule_combination": "Envelope of recorded independently fitted machine curves after same-machine normalization (see envelope_combination); DIVCORE is refit per machine from the recorded samples for trimmed-length quotient rows as fixed + step + cell. Round after combining; SIG remains fixed at 500000. Coefficientwise maxima are kept for comparison.",
+  "envelope_combination": "Envelope: the cheapest curve of each family's form that covers every machine's fitted curve at every chargeable size. With feature vector phi(x) >= 0 and machine fits theta_m, it minimizes the weighted mean relative charge sum_x w(x) theta.phi(x) / max_m theta_m.phi(x) over the family's fixtures x (same path-group and size-decade weights as the fits), subject to theta.phi(x) >= theta_m.phi(x) for every machine m and every chargeable size x, and theta >= 0. Sizes start at zero except where an operation cannot be smaller: a hash processes at least one 64-byte block, a division has at least one quotient row and one divisor limb, and a multiplication's shorter operand is at most as long as the longer one. RIPEMD160 and SHA1 take at most 520 bytes; other sizes are unbounded. Where sizes start at zero and are unbounded, the envelope equals the coefficientwise maximum. Constant primitives and SIG use the maximum.",
+  "method": "Per-machine median of raw fixture epochs, normalized so that a full 40-billion-varop budget of fitted work takes the target fraction of the recorded local pre-v2 reference (rate derived from the recorded reference time, whatever target the artifact was collected with); equal path-group and size-decade weights; weighted squared log error with a 100\u00d7 underprediction penalty; nonnegative predefined coefficients; no coefficient rounding. SIG diagnostic fits do not replace the fixed 500000 allowance.",
+  "machines": [
+    {
+      "file": "varop-calibration-m4pro-3epoch.json",
+      "model_id": "producer-normalize-v1",
+      "sha256": "ac7010287a97d90ae6d997114a6954d636980a45363543def90064a6f0977c99",
+      "cpu": "Apple M4 Pro",
+      "epochs": 3,
+      "head": "60bc3ca40a43f5c1a8c5e68f043f2e3622483e58",
+      "fixture_count": 8220,
+      "reference_seconds": 1.67826425,
+      "target_fraction": 0.9,
+      "recorded_target_fraction": 0.9,
+      "varops_per_nanosecond": 26.482387648097994,
+      "source_sha256": {
+        "src/bench/bench_varops.cpp": "644dfe15ac9b0ed4ac089166c53520b9103c563a65a954f191832630b21c20a0",
+        "src/bench/bench_varops_primitives.cpp": "b1335e45c1de2a842a0f345ce072fab0457c6401763497e59cf8c819bf1eb8a5",
+        "src/script/varops.h": "722fcea68e122e56a4bee5331f75241c7678cfe7def294b61cfeb7e406a2cb7d",
+        "src/script/interpreter.cpp": "89a28570f966baa57c5a325c6f6fc2e2a1a3aa01ae9b7f56c4c16642903a1a34",
+        "src/script/val64.h": "3c265169f6b3ecaeb885480c48b627c86ebb02e903a888f0ffdaeca2730328d4",
+        "src/script/val64.cpp": "af6f2d4e36644478fba1abfc511140e9d59de37623bdc2037e1b7120a93a1db3",
+        "src/script/valtype_stack.h": "9ddfd1b9058dd7a47f6ed98ca36633b65abfcd8dd74688ed70c405f586bf6b25",
+        "src/script/valtype_stack.cpp": "d79e75de94c122644f3d24ea212747bccd19e89a63e97f21464a5f18380c704b",
+        "dev/varops/primitive-calibration/plot_reduced_pilot.py": "a1e5aa2186f3d599fce38d56f7366b1bcfca81c42821eb5351283f8778f50e63",
+        "dev/varops/primitive-calibration/run_calibration.py": "bc4794b519aae467900a94b2c2ddd181ee842bc23c40cd2abe2e4dd2abc89666"
+      }
+    },
+    {
+      "file": "varop-calibration-m1pro-3epoch.json",
+      "model_id": "producer-normalize-v1",
+      "sha256": "d9c69f1555f8c5d28824e430b9696e80975381c590ececd10ab4aef906dc1d39",
+      "cpu": "Apple M1 Pro",
+      "epochs": 3,
+      "head": "60bc3ca40a43f5c1a8c5e68f043f2e3622483e58",
+      "fixture_count": 8220,
+      "reference_seconds": 2.294811458,
+      "target_fraction": 0.9,
+      "recorded_target_fraction": 0.9,
+      "varops_per_nanosecond": 19.367362093955713,
+      "source_sha256": {
+        "src/bench/bench_varops.cpp": "644dfe15ac9b0ed4ac089166c53520b9103c563a65a954f191832630b21c20a0",
+        "src/bench/bench_varops_primitives.cpp": "b1335e45c1de2a842a0f345ce072fab0457c6401763497e59cf8c819bf1eb8a5",
+        "src/script/varops.h": "722fcea68e122e56a4bee5331f75241c7678cfe7def294b61cfeb7e406a2cb7d",
+        "src/script/interpreter.cpp": "89a28570f966baa57c5a325c6f6fc2e2a1a3aa01ae9b7f56c4c16642903a1a34",
+        "src/script/val64.h": "3c265169f6b3ecaeb885480c48b627c86ebb02e903a888f0ffdaeca2730328d4",
+        "src/script/val64.cpp": "af6f2d4e36644478fba1abfc511140e9d59de37623bdc2037e1b7120a93a1db3",
+        "src/script/valtype_stack.h": "9ddfd1b9058dd7a47f6ed98ca36633b65abfcd8dd74688ed70c405f586bf6b25",
+        "src/script/valtype_stack.cpp": "d79e75de94c122644f3d24ea212747bccd19e89a63e97f21464a5f18380c704b",
+        "dev/varops/primitive-calibration/plot_reduced_pilot.py": "a1e5aa2186f3d599fce38d56f7366b1bcfca81c42821eb5351283f8778f50e63",
+        "dev/varops/primitive-calibration/run_calibration.py": "bc4794b519aae467900a94b2c2ddd181ee842bc23c40cd2abe2e4dd2abc89666"
+      }
+    },
+    {
+      "file": "varop-calibration-intel12500-3epoch.json",
+      "model_id": "producer-normalize-v1",
+      "sha256": "94d772e86386def936b860f92dd51ed56849b98607496c0e69e1679e47fa6e21",
+      "cpu": "12th Gen Intel(R) Core(TM) i5-12500",
+      "epochs": 3,
+      "head": "60bc3ca40a43f5c1a8c5e68f043f2e3622483e58",
+      "fixture_count": 8220,
+      "reference_seconds": 2.735859317,
+      "target_fraction": 0.9,
+      "recorded_target_fraction": 0.9,
+      "varops_per_nanosecond": 16.245149802943775,
+      "source_sha256": {
+        "src/bench/bench_varops.cpp": "644dfe15ac9b0ed4ac089166c53520b9103c563a65a954f191832630b21c20a0",
+        "src/bench/bench_varops_primitives.cpp": "b1335e45c1de2a842a0f345ce072fab0457c6401763497e59cf8c819bf1eb8a5",
+        "src/script/varops.h": "722fcea68e122e56a4bee5331f75241c7678cfe7def294b61cfeb7e406a2cb7d",
+        "src/script/interpreter.cpp": "89a28570f966baa57c5a325c6f6fc2e2a1a3aa01ae9b7f56c4c16642903a1a34",
+        "src/script/val64.h": "3c265169f6b3ecaeb885480c48b627c86ebb02e903a888f0ffdaeca2730328d4",
+        "src/script/val64.cpp": "af6f2d4e36644478fba1abfc511140e9d59de37623bdc2037e1b7120a93a1db3",
+        "src/script/valtype_stack.h": "9ddfd1b9058dd7a47f6ed98ca36633b65abfcd8dd74688ed70c405f586bf6b25",
+        "src/script/valtype_stack.cpp": "d79e75de94c122644f3d24ea212747bccd19e89a63e97f21464a5f18380c704b",
+        "dev/varops/primitive-calibration/plot_reduced_pilot.py": "a1e5aa2186f3d599fce38d56f7366b1bcfca81c42821eb5351283f8778f50e63",
+        "dev/varops/primitive-calibration/run_calibration.py": "bc4794b519aae467900a94b2c2ddd181ee842bc23c40cd2abe2e4dd2abc89666"
+      }
+    },
+    {
+      "file": "varop-calibration-ryzen99500x-3epoch.json",
+      "model_id": "producer-normalize-v1",
+      "sha256": "d1efd648cef32a4a7cfeb0a0b6c61fb9eface53ec012627a48e6de69364c520c",
+      "cpu": "Unknown",
+      "epochs": 3,
+      "head": "60bc3ca40a43f5c1a8c5e68f043f2e3622483e58",
+      "fixture_count": 8220,
+      "reference_seconds": 1.8281393,
+      "target_fraction": 0.9,
+      "recorded_target_fraction": 0.9,
+      "varops_per_nanosecond": 24.3113008097602,
+      "source_sha256": {
+        "src\\bench\\bench_varops.cpp": "a74ebabd3f69583182db4534dd31de2af20b1a8e6b67194a1ed289f93b53501b",
+        "src\\bench\\bench_varops_primitives.cpp": "557af9628456bd34c7a71c9d48944c6ed8ffa3407f9f91b39e3e9228ac57c930",
+        "src\\script\\varops.h": "6f90c0276e7a9f834ec761f499a5c980ce8f65255220ff94b6c59d3dfc9c7eb8",
+        "src\\script\\interpreter.cpp": "990779aebb223c82ec405fea213644662fff25d126e32ed62c15a758e0f8d5ac",
+        "src\\script\\val64.h": "5d0fbeb866fb8b67b0306883bcc08a8245d23737bfe2f434bc13095a84e35895",
+        "src\\script\\val64.cpp": "6a332ee568074b0db491b46433976da358d15cf5f277f83b51576f1df4c83a4b",
+        "src\\script\\valtype_stack.h": "5ce34bf5170ad23bdea1d18e6b69a97fa6703ed444ee5156090d7a2ad662077a",
+        "src\\script\\valtype_stack.cpp": "2d8753ca4433213658e0c36193034e6773bf65efb7dad87f423ac42bb8ec0c4c",
+        "dev\\varops\\primitive-calibration\\plot_reduced_pilot.py": "765e2026bb1a36766ff7d2c11f1c1c616106115d849ffa11e44b7ff2b33f974b",
+        "dev\\varops\\primitive-calibration\\run_calibration.py": "7b7cd6f351439b88947ced8cb3d49436322e2ce52aafcf8e756718d4d13b95ed"
+      }
+    },
+    {
+      "file": "varop-calibration-i77700-3epoch.json",
+      "model_id": "producer-normalize-v1",
+      "sha256": "76d77c9a312ca6a4978c24544ab220eea8b73da72337a11e62f660c3dec168e1",
+      "cpu": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
+      "epochs": 3,
+      "head": "60bc3ca40a43f5c1a8c5e68f043f2e3622483e58",
+      "fixture_count": 8220,
+      "reference_seconds": 3.48374813,
+      "target_fraction": 0.9,
+      "recorded_target_fraction": 0.9,
+      "varops_per_nanosecond": 12.757651467887388,
+      "source_sha256": {
+        "src/bench/bench_varops.cpp": "644dfe15ac9b0ed4ac089166c53520b9103c563a65a954f191832630b21c20a0",
+        "src/bench/bench_varops_primitives.cpp": "b1335e45c1de2a842a0f345ce072fab0457c6401763497e59cf8c819bf1eb8a5",
+        "src/script/varops.h": "722fcea68e122e56a4bee5331f75241c7678cfe7def294b61cfeb7e406a2cb7d",
+        "src/script/interpreter.cpp": "89a28570f966baa57c5a325c6f6fc2e2a1a3aa01ae9b7f56c4c16642903a1a34",
+        "src/script/val64.h": "3c265169f6b3ecaeb885480c48b627c86ebb02e903a888f0ffdaeca2730328d4",
+        "src/script/val64.cpp": "af6f2d4e36644478fba1abfc511140e9d59de37623bdc2037e1b7120a93a1db3",
+        "src/script/valtype_stack.h": "9ddfd1b9058dd7a47f6ed98ca36633b65abfcd8dd74688ed70c405f586bf6b25",
+        "src/script/valtype_stack.cpp": "d79e75de94c122644f3d24ea212747bccd19e89a63e97f21464a5f18380c704b",
+        "dev/varops/primitive-calibration/plot_reduced_pilot.py": "a1e5aa2186f3d599fce38d56f7366b1bcfca81c42821eb5351283f8778f50e63",
+        "dev/varops/primitive-calibration/run_calibration.py": "bc4794b519aae467900a94b2c2ddd181ee842bc23c40cd2abe2e4dd2abc89666"
+      }
+    },
+    {
+      "file": "varop-calibration-ryzen53600-3epoch.json",
+      "model_id": "producer-normalize-v1",
+      "sha256": "5f0a87ae3a9284f29aec13de9ae26a1865a37070ddb2401c4edd69f2bf94a150",
+      "cpu": "AMD Ryzen 5 3600 6-Core Processor",
+      "epochs": 3,
+      "head": "60bc3ca40a43f5c1a8c5e68f043f2e3622483e58",
+      "fixture_count": 8220,
+      "reference_seconds": 3.550646111,
+      "target_fraction": 0.9,
+      "recorded_target_fraction": 0.9,
+      "varops_per_nanosecond": 12.517283630929684,
+      "source_sha256": {
+        "src/bench/bench_varops.cpp": "644dfe15ac9b0ed4ac089166c53520b9103c563a65a954f191832630b21c20a0",
+        "src/bench/bench_varops_primitives.cpp": "b1335e45c1de2a842a0f345ce072fab0457c6401763497e59cf8c819bf1eb8a5",
+        "src/script/varops.h": "722fcea68e122e56a4bee5331f75241c7678cfe7def294b61cfeb7e406a2cb7d",
+        "src/script/interpreter.cpp": "89a28570f966baa57c5a325c6f6fc2e2a1a3aa01ae9b7f56c4c16642903a1a34",
+        "src/script/val64.h": "3c265169f6b3ecaeb885480c48b627c86ebb02e903a888f0ffdaeca2730328d4",
+        "src/script/val64.cpp": "af6f2d4e36644478fba1abfc511140e9d59de37623bdc2037e1b7120a93a1db3",
+        "src/script/valtype_stack.h": "9ddfd1b9058dd7a47f6ed98ca36633b65abfcd8dd74688ed70c405f586bf6b25",
+        "src/script/valtype_stack.cpp": "d79e75de94c122644f3d24ea212747bccd19e89a63e97f21464a5f18380c704b",
+        "dev/varops/primitive-calibration/plot_reduced_pilot.py": "a1e5aa2186f3d599fce38d56f7366b1bcfca81c42821eb5351283f8778f50e63",
+        "dev/varops/primitive-calibration/run_calibration.py": "bc4794b519aae467900a94b2c2ddd181ee842bc23c40cd2abe2e4dd2abc89666"
+      }
+    }
+  ],
+  "source_check": {
+    "unmatched": [],
+    "checked": 60,
+    "commits": [
+      "60bc3ca40a43f5c1a8c5e68f043f2e3622483e58"
+    ],
+    "note": "Compared with each recorded Git commit, accepting LF or CRLF. Unmatched hashes require the original source bytes for review."
+  },
+  "schedule_rounding": {
+    "coefficient": "up to two significant figures, and at least to a whole varop",
+    "sig_policy": 500000,
+    "rule": "Ceiling each coefficient independently, flats and rates alike (rates per byte of W(n) or H(n) or per counted item), to two significant figures and at least to a whole varop; preserve zero/exact multiples; no refitting.",
+    "status": "Installed as provisional research candidate; source discrepancy and multi-machine script confirmation remain open."
+  },
+  "primitives": {
+    "F": {
+      "envelope_coefficients": [
+        305.2687212707492,
+        0.0
+      ],
+      "candidate_coefficients": [
+        310,
+        0
+      ],
+      "candidate_formula": "310",
+      "maximum_coefficients": [
+        305.2687212707492,
+        0.0
+      ],
+      "maximum_candidate_coefficients": [
+        310,
+        0
+      ],
+      "notes": ""
+    },
+    "PREP": {
+      "envelope_coefficients": [
+        176.32105142720323,
+        0.0007893079882876432
+      ],
+      "candidate_coefficients": [
+        180,
+        1
+      ],
+      "candidate_formula": "180 + 1 \u00d7 W(n)/8",
+      "maximum_coefficients": [
+        176.32105142720323,
+        0.0007893079882876432
+      ],
+      "maximum_candidate_coefficients": [
+        180,
+        1
+      ],
+      "notes": ""
+    },
+    "PRODUCE": {
+      "envelope_coefficients": [
+        678.3309620233165,
+        6.406201076611635
+      ],
+      "candidate_coefficients": [
+        680,
+        7
+      ],
+      "candidate_formula": "680 + 7 \u00d7 W(n)",
+      "maximum_coefficients": [
+        678.3309620233165,
+        6.406201076611635
+      ],
+      "maximum_candidate_coefficients": [
+        680,
+        7
+      ],
+      "notes": ""
+    },
+    "NORMALIZE": {
+      "envelope_coefficients": [
+        188.76590598428595,
+        0
+      ],
+      "candidate_coefficients": [
+        190,
+        0
+      ],
+      "candidate_formula": "190",
+      "maximum_coefficients": [
+        188.76590598428595,
+        0
+      ],
+      "maximum_candidate_coefficients": [
+        190,
+        0
+      ],
+      "notes": ""
+    },
+    "READ": {
+      "envelope_coefficients": [
+        74.19354908292003,
+        1.1643332939025532
+      ],
+      "candidate_coefficients": [
+        75,
+        2
+      ],
+      "candidate_formula": "75 + 2 \u00d7 W(n)",
+      "maximum_coefficients": [
+        74.19354908292003,
+        1.1643332939025532
+      ],
+      "maximum_candidate_coefficients": [
+        75,
+        2
+      ],
+      "notes": ""
+    },
+    "ARITH": {
+      "envelope_coefficients": [
+        111.78228807435964,
+        2.6871500159511186
+      ],
+      "candidate_coefficients": [
+        120,
+        3
+      ],
+      "candidate_formula": "120 + 3 \u00d7 W(n)",
+      "maximum_coefficients": [
+        111.78228807435964,
+        2.6871500159511186
+      ],
+      "maximum_candidate_coefficients": [
+        120,
+        3
+      ],
+      "notes": ""
+    },
+    "BIT": {
+      "envelope_coefficients": [
+        89.95315002144844,
+        1.813917621282439
+      ],
+      "candidate_coefficients": [
+        90,
+        2
+      ],
+      "candidate_formula": "90 + 2 \u00d7 W(n)",
+      "maximum_coefficients": [
+        89.95315002144844,
+        1.813917621282439
+      ],
+      "maximum_candidate_coefficients": [
+        90,
+        2
+      ],
+      "notes": ""
+    },
+    "MOVE": {
+      "envelope_coefficients": [
+        179.2708091369833,
+        22.533440904944595
+      ],
+      "candidate_coefficients": [
+        180,
+        23
+      ],
+      "candidate_formula": "180 + 23 \u00d7 k",
+      "maximum_coefficients": [
+        179.2708091369833,
+        22.533440904944595
+      ],
+      "maximum_candidate_coefficients": [
+        180,
+        23
+      ],
+      "notes": ""
+    },
+    "DIVCORE": {
+      "envelope_coefficients": [
+        0.0,
+        492.34670669576025,
+        32.42129320128396
+      ],
+      "candidate_coefficients": [
+        0,
+        500,
+        33
+      ],
+      "candidate_formula": "0 + 500 \u00d7 s + 33 \u00d7 s \u00d7 v",
+      "maximum_coefficients": [
+        171.37152010848794,
+        493.4346776915138,
+        32.42129320128396
+      ],
+      "maximum_candidate_coefficients": [
+        180,
+        500,
+        33
+      ],
+      "notes": ""
+    },
+    "H256": {
+      "envelope_coefficients": [
+        277.0079913868826,
+        37.23670420736617
+      ],
+      "candidate_coefficients": [
+        280,
+        38
+      ],
+      "candidate_formula": "280 + 38 \u00d7 H(n)",
+      "maximum_coefficients": [
+        445.8573780694477,
+        37.23670420736617
+      ],
+      "maximum_candidate_coefficients": [
+        450,
+        38
+      ],
+      "notes": ""
+    },
+    "H160": {
+      "envelope_coefficients": [
+        24.61609871355313,
+        40.30052750057179
+      ],
+      "candidate_coefficients": [
+        25,
+        41
+      ],
+      "candidate_formula": "25 + 41 \u00d7 H(n)",
+      "maximum_coefficients": [
+        273.02786449262123,
+        40.30958749819874
+      ],
+      "maximum_candidate_coefficients": [
+        280,
+        41
+      ],
+      "notes": ""
+    },
+    "H1": {
+      "envelope_coefficients": [
+        188.91297410728635,
+        23.764509030376598
+      ],
+      "candidate_coefficients": [
+        190,
+        24
+      ],
+      "candidate_formula": "190 + 24 \u00d7 H(n)",
+      "maximum_coefficients": [
+        397.5975925255318,
+        23.932799721890298
+      ],
+      "maximum_candidate_coefficients": [
+        400,
+        24
+      ],
+      "notes": ""
+    },
+    "SIG": {
+      "envelope_coefficients": [
+        557640.0073561218,
+        0.0
+      ],
+      "candidate_coefficients": [
+        500000,
+        0
+      ],
+      "candidate_formula": "500000",
+      "maximum_coefficients": [
+        557640.0073561218,
+        0.0
+      ],
+      "maximum_candidate_coefficients": [
+        500000,
+        0
+      ],
+      "notes": "SIG is a measured residual; 500000-varop sigops parity is a separate policy decision"
+    },
+    "TWEAK": {
+      "envelope_coefficients": [
+        165950.45256219042,
+        0.0
+      ],
+      "candidate_coefficients": [
+        170000,
+        0
+      ],
+      "candidate_formula": "170000",
+      "maximum_coefficients": [
+        165950.45256219042,
+        0.0
+      ],
+      "maximum_candidate_coefficients": [
+        170000,
+        0
+      ],
+      "notes": ""
+    },
+    "SELECT": {
+      "envelope_coefficients": [
+        2268.818266370345,
+        180.26862549443538
+      ],
+      "candidate_coefficients": [
+        2300,
+        190
+      ],
+      "candidate_formula": "2300 + 190 \u00d7 k",
+      "maximum_coefficients": [
+        2268.818266370345,
+        180.26862549443538
+      ],
+      "maximum_candidate_coefficients": [
+        2300,
+        190
+      ],
+      "notes": ""
+    },
+    "MULCORE": {
+      "envelope_coefficients": [
+        338.3052447239112,
+        4.323055117589562,
+        109.88658034792114,
+        28.255655454207833
+      ],
+      "candidate_coefficients": [
+        340,
+        5,
+        110,
+        29
+      ],
+      "candidate_formula": "340 + 5 \u00d7 u + 110 \u00d7 v + 29 \u00d7 u \u00d7 v",
+      "maximum_coefficients": [
+        338.3052447239112,
+        4.323055117589562,
+        113.43475211914765,
+        28.255655454207833
+      ],
+      "maximum_candidate_coefficients": [
+        340,
+        5,
+        120,
+        29
+      ],
+      "notes": ""
+    }
+  }
+}

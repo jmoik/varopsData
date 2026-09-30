@@ -1,3 +1,6 @@
-bench_varops_data_duplicates/
-tmp/
-oldplots/
+.DS_Store
+__pycache__/
+.claude/
+*.bak*
+# run_calibration.py writes here when run without --output
+primitive-calibration/
