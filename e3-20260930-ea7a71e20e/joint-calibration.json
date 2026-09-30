@@ -11,150 +11,150 @@
     {
       "file": "varop-calibration-m4pro-3epoch.json",
       "model_id": "producer-normalize-v1",
-      "sha256": "ac7010287a97d90ae6d997114a6954d636980a45363543def90064a6f0977c99",
+      "sha256": "3834982af14f0ef9e3131d05d140d00c5abbf03f31f8627c96e8fc58bf1d18c3",
       "cpu": "Apple M4 Pro",
       "epochs": 3,
-      "head": "60bc3ca40a43f5c1a8c5e68f043f2e3622483e58",
+      "head": "ea7a71e20e7f6a4d0c1851fc3e5b45f58e062728",
       "fixture_count": 8220,
-      "reference_seconds": 1.67826425,
+      "reference_seconds": 1.714799791,
       "target_fraction": 0.9,
       "recorded_target_fraction": 0.9,
-      "varops_per_nanosecond": 26.482387648097994,
+      "varops_per_nanosecond": 25.918153639688917,
       "source_sha256": {
-        "src/bench/bench_varops.cpp": "644dfe15ac9b0ed4ac089166c53520b9103c563a65a954f191832630b21c20a0",
-        "src/bench/bench_varops_primitives.cpp": "b1335e45c1de2a842a0f345ce072fab0457c6401763497e59cf8c819bf1eb8a5",
-        "src/script/varops.h": "722fcea68e122e56a4bee5331f75241c7678cfe7def294b61cfeb7e406a2cb7d",
+        "src/bench/bench_varops.cpp": "f190d8807b7c478b3ca8af0a13c3a025aa8191d96c11d5fc896e56cf5743a252",
+        "src/bench/bench_varops_primitives.cpp": "248c45995d6262bcda95680f4f32bec8cddf486c64a96cefc2f68bcbc1d32466",
+        "src/script/varops.h": "7726efeab5c97564410cea3817a0e54dfb8e8c3eaba6dfad9eb70b8b36190748",
         "src/script/interpreter.cpp": "89a28570f966baa57c5a325c6f6fc2e2a1a3aa01ae9b7f56c4c16642903a1a34",
         "src/script/val64.h": "3c265169f6b3ecaeb885480c48b627c86ebb02e903a888f0ffdaeca2730328d4",
-        "src/script/val64.cpp": "af6f2d4e36644478fba1abfc511140e9d59de37623bdc2037e1b7120a93a1db3",
+        "src/script/val64.cpp": "b9d44c0b19378edfad6a11de1f831b23c2645137eec6947f9527c13f7f224d0c",
         "src/script/valtype_stack.h": "9ddfd1b9058dd7a47f6ed98ca36633b65abfcd8dd74688ed70c405f586bf6b25",
         "src/script/valtype_stack.cpp": "d79e75de94c122644f3d24ea212747bccd19e89a63e97f21464a5f18380c704b",
-        "dev/varops/primitive-calibration/plot_reduced_pilot.py": "a1e5aa2186f3d599fce38d56f7366b1bcfca81c42821eb5351283f8778f50e63",
+        "dev/varops/primitive-calibration/plot_reduced_pilot.py": "3b2940750c71b0b95f787a54dc7622c19837bd1aa3378ab5ac505af55e1db539",
         "dev/varops/primitive-calibration/run_calibration.py": "bc4794b519aae467900a94b2c2ddd181ee842bc23c40cd2abe2e4dd2abc89666"
       }
     },
     {
       "file": "varop-calibration-m1pro-3epoch.json",
       "model_id": "producer-normalize-v1",
-      "sha256": "d9c69f1555f8c5d28824e430b9696e80975381c590ececd10ab4aef906dc1d39",
+      "sha256": "d0a93abb7080b29fe8e5a84a252874c8a579fbdfd9df62d60420cdef2eddfd1f",
       "cpu": "Apple M1 Pro",
       "epochs": 3,
-      "head": "60bc3ca40a43f5c1a8c5e68f043f2e3622483e58",
+      "head": "ea7a71e20e7f6a4d0c1851fc3e5b45f58e062728",
       "fixture_count": 8220,
-      "reference_seconds": 2.294811458,
+      "reference_seconds": 2.255735834,
       "target_fraction": 0.9,
       "recorded_target_fraction": 0.9,
-      "varops_per_nanosecond": 19.367362093955713,
+      "varops_per_nanosecond": 19.702858718892188,
       "source_sha256": {
-        "src/bench/bench_varops.cpp": "644dfe15ac9b0ed4ac089166c53520b9103c563a65a954f191832630b21c20a0",
-        "src/bench/bench_varops_primitives.cpp": "b1335e45c1de2a842a0f345ce072fab0457c6401763497e59cf8c819bf1eb8a5",
-        "src/script/varops.h": "722fcea68e122e56a4bee5331f75241c7678cfe7def294b61cfeb7e406a2cb7d",
+        "src/bench/bench_varops.cpp": "f190d8807b7c478b3ca8af0a13c3a025aa8191d96c11d5fc896e56cf5743a252",
+        "src/bench/bench_varops_primitives.cpp": "248c45995d6262bcda95680f4f32bec8cddf486c64a96cefc2f68bcbc1d32466",
+        "src/script/varops.h": "7726efeab5c97564410cea3817a0e54dfb8e8c3eaba6dfad9eb70b8b36190748",
         "src/script/interpreter.cpp": "89a28570f966baa57c5a325c6f6fc2e2a1a3aa01ae9b7f56c4c16642903a1a34",
         "src/script/val64.h": "3c265169f6b3ecaeb885480c48b627c86ebb02e903a888f0ffdaeca2730328d4",
-        "src/script/val64.cpp": "af6f2d4e36644478fba1abfc511140e9d59de37623bdc2037e1b7120a93a1db3",
+        "src/script/val64.cpp": "b9d44c0b19378edfad6a11de1f831b23c2645137eec6947f9527c13f7f224d0c",
         "src/script/valtype_stack.h": "9ddfd1b9058dd7a47f6ed98ca36633b65abfcd8dd74688ed70c405f586bf6b25",
         "src/script/valtype_stack.cpp": "d79e75de94c122644f3d24ea212747bccd19e89a63e97f21464a5f18380c704b",
-        "dev/varops/primitive-calibration/plot_reduced_pilot.py": "a1e5aa2186f3d599fce38d56f7366b1bcfca81c42821eb5351283f8778f50e63",
+        "dev/varops/primitive-calibration/plot_reduced_pilot.py": "3b2940750c71b0b95f787a54dc7622c19837bd1aa3378ab5ac505af55e1db539",
         "dev/varops/primitive-calibration/run_calibration.py": "bc4794b519aae467900a94b2c2ddd181ee842bc23c40cd2abe2e4dd2abc89666"
       }
     },
     {
       "file": "varop-calibration-intel12500-3epoch.json",
       "model_id": "producer-normalize-v1",
-      "sha256": "94d772e86386def936b860f92dd51ed56849b98607496c0e69e1679e47fa6e21",
+      "sha256": "8a3d4d68802165e70c888a664b13ae211fa05a02525488157f84f4c110f9fbac",
       "cpu": "12th Gen Intel(R) Core(TM) i5-12500",
       "epochs": 3,
-      "head": "60bc3ca40a43f5c1a8c5e68f043f2e3622483e58",
+      "head": "ea7a71e20e7f6a4d0c1851fc3e5b45f58e062728",
       "fixture_count": 8220,
-      "reference_seconds": 2.735859317,
+      "reference_seconds": 2.735725393,
       "target_fraction": 0.9,
       "recorded_target_fraction": 0.9,
-      "varops_per_nanosecond": 16.245149802943775,
+      "varops_per_nanosecond": 16.245945063845245,
       "source_sha256": {
-        "src/bench/bench_varops.cpp": "644dfe15ac9b0ed4ac089166c53520b9103c563a65a954f191832630b21c20a0",
-        "src/bench/bench_varops_primitives.cpp": "b1335e45c1de2a842a0f345ce072fab0457c6401763497e59cf8c819bf1eb8a5",
-        "src/script/varops.h": "722fcea68e122e56a4bee5331f75241c7678cfe7def294b61cfeb7e406a2cb7d",
+        "src/bench/bench_varops.cpp": "f190d8807b7c478b3ca8af0a13c3a025aa8191d96c11d5fc896e56cf5743a252",
+        "src/bench/bench_varops_primitives.cpp": "248c45995d6262bcda95680f4f32bec8cddf486c64a96cefc2f68bcbc1d32466",
+        "src/script/varops.h": "7726efeab5c97564410cea3817a0e54dfb8e8c3eaba6dfad9eb70b8b36190748",
         "src/script/interpreter.cpp": "89a28570f966baa57c5a325c6f6fc2e2a1a3aa01ae9b7f56c4c16642903a1a34",
         "src/script/val64.h": "3c265169f6b3ecaeb885480c48b627c86ebb02e903a888f0ffdaeca2730328d4",
-        "src/script/val64.cpp": "af6f2d4e36644478fba1abfc511140e9d59de37623bdc2037e1b7120a93a1db3",
+        "src/script/val64.cpp": "b9d44c0b19378edfad6a11de1f831b23c2645137eec6947f9527c13f7f224d0c",
         "src/script/valtype_stack.h": "9ddfd1b9058dd7a47f6ed98ca36633b65abfcd8dd74688ed70c405f586bf6b25",
         "src/script/valtype_stack.cpp": "d79e75de94c122644f3d24ea212747bccd19e89a63e97f21464a5f18380c704b",
-        "dev/varops/primitive-calibration/plot_reduced_pilot.py": "a1e5aa2186f3d599fce38d56f7366b1bcfca81c42821eb5351283f8778f50e63",
+        "dev/varops/primitive-calibration/plot_reduced_pilot.py": "3b2940750c71b0b95f787a54dc7622c19837bd1aa3378ab5ac505af55e1db539",
         "dev/varops/primitive-calibration/run_calibration.py": "bc4794b519aae467900a94b2c2ddd181ee842bc23c40cd2abe2e4dd2abc89666"
       }
     },
     {
       "file": "varop-calibration-ryzen99500x-3epoch.json",
       "model_id": "producer-normalize-v1",
-      "sha256": "d1efd648cef32a4a7cfeb0a0b6c61fb9eface53ec012627a48e6de69364c520c",
+      "sha256": "50a6aebb21c7ea0ebbe3c3cbbfaf49f3a1e141880338b3eea0b7ad08dbeb630b",
       "cpu": "Unknown",
       "epochs": 3,
-      "head": "60bc3ca40a43f5c1a8c5e68f043f2e3622483e58",
+      "head": "ea7a71e20e7f6a4d0c1851fc3e5b45f58e062728",
       "fixture_count": 8220,
-      "reference_seconds": 1.8281393,
+      "reference_seconds": 1.5912293,
       "target_fraction": 0.9,
       "recorded_target_fraction": 0.9,
-      "varops_per_nanosecond": 24.3113008097602,
+      "varops_per_nanosecond": 27.930886167345236,
       "source_sha256": {
-        "src\\bench\\bench_varops.cpp": "a74ebabd3f69583182db4534dd31de2af20b1a8e6b67194a1ed289f93b53501b",
-        "src\\bench\\bench_varops_primitives.cpp": "557af9628456bd34c7a71c9d48944c6ed8ffa3407f9f91b39e3e9228ac57c930",
-        "src\\script\\varops.h": "6f90c0276e7a9f834ec761f499a5c980ce8f65255220ff94b6c59d3dfc9c7eb8",
+        "src\\bench\\bench_varops.cpp": "40b242fa4e831f858089925dd73fd9362ec1da1cbf3ceb28e9a7cacc84b5b587",
+        "src\\bench\\bench_varops_primitives.cpp": "7cd66ce83f84baf706face840b9e1a7e0f5238f71be5dbf16e0257431a6a1a3d",
+        "src\\script\\varops.h": "f6bb9f4b5bb665da72393aba9bba78f924b6759dea349c9bceed119822f04e62",
         "src\\script\\interpreter.cpp": "990779aebb223c82ec405fea213644662fff25d126e32ed62c15a758e0f8d5ac",
         "src\\script\\val64.h": "5d0fbeb866fb8b67b0306883bcc08a8245d23737bfe2f434bc13095a84e35895",
-        "src\\script\\val64.cpp": "6a332ee568074b0db491b46433976da358d15cf5f277f83b51576f1df4c83a4b",
+        "src\\script\\val64.cpp": "74e1de1bdea490d4ec0bd3bcdd84d5f4b61f1a76aec19f9242687fb3eb2bb015",
         "src\\script\\valtype_stack.h": "5ce34bf5170ad23bdea1d18e6b69a97fa6703ed444ee5156090d7a2ad662077a",
         "src\\script\\valtype_stack.cpp": "2d8753ca4433213658e0c36193034e6773bf65efb7dad87f423ac42bb8ec0c4c",
-        "dev\\varops\\primitive-calibration\\plot_reduced_pilot.py": "765e2026bb1a36766ff7d2c11f1c1c616106115d849ffa11e44b7ff2b33f974b",
+        "dev\\varops\\primitive-calibration\\plot_reduced_pilot.py": "8af6118fde6b870d124a2f29c10aae50009a7cb0d7e18b4d55719da6d0c07038",
         "dev\\varops\\primitive-calibration\\run_calibration.py": "7b7cd6f351439b88947ced8cb3d49436322e2ce52aafcf8e756718d4d13b95ed"
       }
     },
     {
       "file": "varop-calibration-i77700-3epoch.json",
       "model_id": "producer-normalize-v1",
-      "sha256": "76d77c9a312ca6a4978c24544ab220eea8b73da72337a11e62f660c3dec168e1",
+      "sha256": "5ca6f7dc372a7bb8f7435f1fc81beea6d422d4e23a4e72331ebd7bf92245bf60",
       "cpu": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
       "epochs": 3,
-      "head": "60bc3ca40a43f5c1a8c5e68f043f2e3622483e58",
+      "head": "ea7a71e20e7f6a4d0c1851fc3e5b45f58e062728",
       "fixture_count": 8220,
-      "reference_seconds": 3.48374813,
+      "reference_seconds": 3.482664401,
       "target_fraction": 0.9,
       "recorded_target_fraction": 0.9,
-      "varops_per_nanosecond": 12.757651467887388,
+      "varops_per_nanosecond": 12.761621370030033,
       "source_sha256": {
-        "src/bench/bench_varops.cpp": "644dfe15ac9b0ed4ac089166c53520b9103c563a65a954f191832630b21c20a0",
-        "src/bench/bench_varops_primitives.cpp": "b1335e45c1de2a842a0f345ce072fab0457c6401763497e59cf8c819bf1eb8a5",
-        "src/script/varops.h": "722fcea68e122e56a4bee5331f75241c7678cfe7def294b61cfeb7e406a2cb7d",
+        "src/bench/bench_varops.cpp": "f190d8807b7c478b3ca8af0a13c3a025aa8191d96c11d5fc896e56cf5743a252",
+        "src/bench/bench_varops_primitives.cpp": "248c45995d6262bcda95680f4f32bec8cddf486c64a96cefc2f68bcbc1d32466",
+        "src/script/varops.h": "7726efeab5c97564410cea3817a0e54dfb8e8c3eaba6dfad9eb70b8b36190748",
         "src/script/interpreter.cpp": "89a28570f966baa57c5a325c6f6fc2e2a1a3aa01ae9b7f56c4c16642903a1a34",
         "src/script/val64.h": "3c265169f6b3ecaeb885480c48b627c86ebb02e903a888f0ffdaeca2730328d4",
-        "src/script/val64.cpp": "af6f2d4e36644478fba1abfc511140e9d59de37623bdc2037e1b7120a93a1db3",
+        "src/script/val64.cpp": "b9d44c0b19378edfad6a11de1f831b23c2645137eec6947f9527c13f7f224d0c",
         "src/script/valtype_stack.h": "9ddfd1b9058dd7a47f6ed98ca36633b65abfcd8dd74688ed70c405f586bf6b25",
         "src/script/valtype_stack.cpp": "d79e75de94c122644f3d24ea212747bccd19e89a63e97f21464a5f18380c704b",
-        "dev/varops/primitive-calibration/plot_reduced_pilot.py": "a1e5aa2186f3d599fce38d56f7366b1bcfca81c42821eb5351283f8778f50e63",
+        "dev/varops/primitive-calibration/plot_reduced_pilot.py": "3b2940750c71b0b95f787a54dc7622c19837bd1aa3378ab5ac505af55e1db539",
         "dev/varops/primitive-calibration/run_calibration.py": "bc4794b519aae467900a94b2c2ddd181ee842bc23c40cd2abe2e4dd2abc89666"
       }
     },
     {
       "file": "varop-calibration-ryzen53600-3epoch.json",
       "model_id": "producer-normalize-v1",
-      "sha256": "5f0a87ae3a9284f29aec13de9ae26a1865a37070ddb2401c4edd69f2bf94a150",
+      "sha256": "ac51b76aacb161998cd29ca3ceaf4ebaa9d86e0fa29c3e7752ae8c2a8fb32d62",
       "cpu": "AMD Ryzen 5 3600 6-Core Processor",
       "epochs": 3,
-      "head": "60bc3ca40a43f5c1a8c5e68f043f2e3622483e58",
+      "head": "ea7a71e20e7f6a4d0c1851fc3e5b45f58e062728",
       "fixture_count": 8220,
-      "reference_seconds": 3.550646111,
+      "reference_seconds": 3.198791319,
       "target_fraction": 0.9,
       "recorded_target_fraction": 0.9,
-      "varops_per_nanosecond": 12.517283630929684,
+      "varops_per_nanosecond": 13.894136882408004,
       "source_sha256": {
-        "src/bench/bench_varops.cpp": "644dfe15ac9b0ed4ac089166c53520b9103c563a65a954f191832630b21c20a0",
-        "src/bench/bench_varops_primitives.cpp": "b1335e45c1de2a842a0f345ce072fab0457c6401763497e59cf8c819bf1eb8a5",
-        "src/script/varops.h": "722fcea68e122e56a4bee5331f75241c7678cfe7def294b61cfeb7e406a2cb7d",
+        "src/bench/bench_varops.cpp": "f190d8807b7c478b3ca8af0a13c3a025aa8191d96c11d5fc896e56cf5743a252",
+        "src/bench/bench_varops_primitives.cpp": "248c45995d6262bcda95680f4f32bec8cddf486c64a96cefc2f68bcbc1d32466",
+        "src/script/varops.h": "7726efeab5c97564410cea3817a0e54dfb8e8c3eaba6dfad9eb70b8b36190748",
         "src/script/interpreter.cpp": "89a28570f966baa57c5a325c6f6fc2e2a1a3aa01ae9b7f56c4c16642903a1a34",
         "src/script/val64.h": "3c265169f6b3ecaeb885480c48b627c86ebb02e903a888f0ffdaeca2730328d4",
-        "src/script/val64.cpp": "af6f2d4e36644478fba1abfc511140e9d59de37623bdc2037e1b7120a93a1db3",
+        "src/script/val64.cpp": "b9d44c0b19378edfad6a11de1f831b23c2645137eec6947f9527c13f7f224d0c",
         "src/script/valtype_stack.h": "9ddfd1b9058dd7a47f6ed98ca36633b65abfcd8dd74688ed70c405f586bf6b25",
         "src/script/valtype_stack.cpp": "d79e75de94c122644f3d24ea212747bccd19e89a63e97f21464a5f18380c704b",
-        "dev/varops/primitive-calibration/plot_reduced_pilot.py": "a1e5aa2186f3d599fce38d56f7366b1bcfca81c42821eb5351283f8778f50e63",
+        "dev/varops/primitive-calibration/plot_reduced_pilot.py": "3b2940750c71b0b95f787a54dc7622c19837bd1aa3378ab5ac505af55e1db539",
         "dev/varops/primitive-calibration/run_calibration.py": "bc4794b519aae467900a94b2c2ddd181ee842bc23c40cd2abe2e4dd2abc89666"
       }
     }
@@ -163,7 +163,7 @@
     "unmatched": [],
     "checked": 60,
     "commits": [
-      "60bc3ca40a43f5c1a8c5e68f043f2e3622483e58"
+      "ea7a71e20e7f6a4d0c1851fc3e5b45f58e062728"
     ],
     "note": "Compared with each recorded Git commit, accepting LF or CRLF. Unmatched hashes require the original source bytes for review."
   },
@@ -176,7 +176,7 @@
   "primitives": {
     "F": {
       "envelope_coefficients": [
-        305.2687212707492,
+        303.5524809022463,
         0.0
       ],
       "candidate_coefficients": [
@@ -185,7 +185,7 @@
       ],
       "candidate_formula": "310",
       "maximum_coefficients": [
-        305.2687212707492,
+        303.5524809022463,
         0.0
       ],
       "maximum_candidate_coefficients": [
@@ -196,8 +196,8 @@
     },
     "PREP": {
       "envelope_coefficients": [
-        176.32105142720323,
-        0.0007893079882876432
+        178.43717848330078,
+        0.0008583419811663225
       ],
       "candidate_coefficients": [
         180,
@@ -205,8 +205,8 @@
       ],
       "candidate_formula": "180 + 1 \u00d7 W(n)/8",
       "maximum_coefficients": [
-        176.32105142720323,
-        0.0007893079882876432
+        178.43717848330078,
+        0.0008583419811663225
       ],
       "maximum_candidate_coefficients": [
         180,
@@ -216,68 +216,68 @@
     },
     "PRODUCE": {
       "envelope_coefficients": [
-        678.3309620233165,
-        6.406201076611635
+        730.8660180438251,
+        7.106334126473475
       ],
       "candidate_coefficients": [
-        680,
-        7
+        740,
+        8
       ],
-      "candidate_formula": "680 + 7 \u00d7 W(n)",
+      "candidate_formula": "740 + 8 \u00d7 W(n)",
       "maximum_coefficients": [
-        678.3309620233165,
-        6.406201076611635
+        730.8660180438251,
+        7.106334126473475
       ],
       "maximum_candidate_coefficients": [
-        680,
-        7
+        740,
+        8
       ],
       "notes": ""
     },
     "NORMALIZE": {
       "envelope_coefficients": [
-        188.76590598428595,
+        193.32358126229371,
         0
       ],
       "candidate_coefficients": [
-        190,
+        200,
         0
       ],
-      "candidate_formula": "190",
+      "candidate_formula": "200",
       "maximum_coefficients": [
-        188.76590598428595,
+        193.32358126229371,
         0
       ],
       "maximum_candidate_coefficients": [
-        190,
+        200,
         0
       ],
       "notes": ""
     },
     "READ": {
       "envelope_coefficients": [
-        74.19354908292003,
-        1.1643332939025532
+        78.57397891964112,
+        0.9824108324485666
       ],
       "candidate_coefficients": [
-        75,
-        2
+        79,
+        1
       ],
-      "candidate_formula": "75 + 2 \u00d7 W(n)",
+      "candidate_formula": "79 + 1 \u00d7 W(n)",
       "maximum_coefficients": [
-        74.19354908292003,
-        1.1643332939025532
+        78.57397891964112,
+        0.9824108324485666
       ],
       "maximum_candidate_coefficients": [
-        75,
-        2
+        79,
+        1
       ],
       "notes": ""
     },
     "ARITH": {
       "envelope_coefficients": [
-        111.78228807435964,
-        2.6871500159511186
+        118.54263872885114,
+        2.7069115689099004
       ],
       "candidate_coefficients": [
         120,
@@ -285,8 +285,8 @@
       ],
       "candidate_formula": "120 + 3 \u00d7 W(n)",
       "maximum_coefficients": [
-        111.78228807435964,
-        2.6871500159511186
+        118.54263872885114,
+        2.7069115689099004
       ],
       "maximum_candidate_coefficients": [
         120,
@@ -296,8 +296,8 @@
     },
     "BIT": {
       "envelope_coefficients": [
-        89.95315002144844,
-        1.813917621282439
+        89.95182666842,
+        1.824295363652679
       ],
       "candidate_coefficients": [
         90,
@@ -305,8 +305,8 @@
       ],
       "candidate_formula": "90 + 2 \u00d7 W(n)",
       "maximum_coefficients": [
-        89.95315002144844,
-        1.813917621282439
+        89.95182666842,
+        1.824295363652679
       ],
       "maximum_candidate_coefficients": [
         90,
@@ -316,29 +316,29 @@
     },
     "MOVE": {
       "envelope_coefficients": [
-        179.2708091369833,
-        22.533440904944595
+        173.9984418779953,
+        18.654601477120053
       ],
       "candidate_coefficients": [
         180,
-        23
+        19
       ],
-      "candidate_formula": "180 + 23 \u00d7 k",
+      "candidate_formula": "180 + 19 \u00d7 k",
       "maximum_coefficients": [
-        179.2708091369833,
-        22.533440904944595
+        173.9984418779953,
+        18.654601477120053
       ],
       "maximum_candidate_coefficients": [
         180,
-        23
+        19
       ],
       "notes": ""
     },
     "DIVCORE": {
       "envelope_coefficients": [
         0.0,
-        492.34670669576025,
-        32.42129320128396
+        494.3992284425368,
+        32.55233439132369
       ],
       "candidate_coefficients": [
         0,
@@ -347,9 +347,9 @@
       ],
       "candidate_formula": "0 + 500 \u00d7 s + 33 \u00d7 s \u00d7 v",
       "maximum_coefficients": [
-        171.37152010848794,
-        493.4346776915138,
-        32.42129320128396
+        179.55075057219418,
+        495.71122622610403,
+        32.55233439132369
       ],
       "maximum_candidate_coefficients": [
         180,
@@ -360,17 +360,17 @@
     },
     "H256": {
       "envelope_coefficients": [
-        277.0079913868826,
-        37.23670420736617
+        255.89517086802744,
+        37.249517439478375
       ],
       "candidate_coefficients": [
-        280,
+        260,
         38
       ],
-      "candidate_formula": "280 + 38 \u00d7 H(n)",
+      "candidate_formula": "260 + 38 \u00d7 H(n)",
       "maximum_coefficients": [
-        445.8573780694477,
-        37.23670420736617
+        446.8628611535939,
+        37.249517439478375
       ],
       "maximum_candidate_coefficients": [
         450,
@@ -380,28 +380,28 @@
     },
     "H160": {
       "envelope_coefficients": [
-        24.61609871355313,
-        40.30052750057179
+        52.408526060999066,
+        39.37838371769993
       ],
       "candidate_coefficients": [
-        25,
-        41
+        53,
+        40
       ],
-      "candidate_formula": "25 + 41 \u00d7 H(n)",
+      "candidate_formula": "53 + 40 \u00d7 H(n)",
       "maximum_coefficients": [
-        273.02786449262123,
-        40.30958749819874
+        332.60563468218237,
+        39.37838371769993
       ],
       "maximum_candidate_coefficients": [
-        280,
-        41
+        340,
+        40
       ],
       "notes": ""
     },
     "H1": {
       "envelope_coefficients": [
-        188.91297410728635,
-        23.764509030376598
+        184.01912794147006,
+        23.83885348574602
       ],
       "candidate_coefficients": [
         190,
@@ -409,18 +409,18 @@
       ],
       "candidate_formula": "190 + 24 \u00d7 H(n)",
       "maximum_coefficients": [
-        397.5975925255318,
-        23.932799721890298
+        278.1033939009892,
+        23.83885348574602
       ],
       "maximum_candidate_coefficients": [
-        400,
+        280,
         24
       ],
       "notes": ""
     },
     "SIG": {
       "envelope_coefficients": [
-        557640.0073561218,
+        575045.4586711911,
         0.0
       ],
       "candidate_coefficients": [
@@ -429,7 +429,7 @@
       ],
       "candidate_formula": "500000",
       "maximum_coefficients": [
-        557640.0073561218,
+        575045.4586711911,
         0.0
       ],
       "maximum_candidate_coefficients": [
@@ -440,7 +440,7 @@
     },
     "TWEAK": {
       "envelope_coefficients": [
-        165950.45256219042,
+        168386.63382641866,
         0.0
       ],
       "candidate_coefficients": [
@@ -449,7 +449,7 @@
       ],
       "candidate_formula": "170000",
       "maximum_coefficients": [
-        165950.45256219042,
+        168386.63382641866,
         0.0
       ],
       "maximum_candidate_coefficients": [
@@ -460,47 +460,47 @@
     },
     "SELECT": {
       "envelope_coefficients": [
-        2268.818266370345,
-        180.26862549443538
+        2242.6698241968725,
+        262.3149442473587
       ],
       "candidate_coefficients": [
         2300,
-        190
+        270
       ],
-      "candidate_formula": "2300 + 190 \u00d7 k",
+      "candidate_formula": "2300 + 270 \u00d7 k",
       "maximum_coefficients": [
-        2268.818266370345,
-        180.26862549443538
+        2242.6698241968725,
+        262.3149442473587
       ],
       "maximum_candidate_coefficients": [
         2300,
-        190
+        270
       ],
       "notes": ""
     },
     "MULCORE": {
       "envelope_coefficients": [
-        338.3052447239112,
-        4.323055117589562,
-        109.88658034792114,
-        28.255655454207833
+        327.8335521901264,
+        9.382855426736912,
+        106.78248858587104,
+        28.291673273032124
       ],
       "candidate_coefficients": [
-        340,
-        5,
+        330,
+        10,
         110,
         29
       ],
-      "candidate_formula": "340 + 5 \u00d7 u + 110 \u00d7 v + 29 \u00d7 u \u00d7 v",
+      "candidate_formula": "330 + 10 \u00d7 u + 110 \u00d7 v + 29 \u00d7 u \u00d7 v",
       "maximum_coefficients": [
-        338.3052447239112,
-        4.323055117589562,
-        113.43475211914765,
-        28.255655454207833
+        327.8335521901264,
+        9.382855426736912,
+        115.1517015592992,
+        28.291673273032124
       ],
       "maximum_candidate_coefficients": [
-        340,
-        5,
+        330,
+        10,
         120,
         29
       ],

@@ -11,7 +11,7 @@ and `src/script/varops.h`.
 
 | Path | |
 |---|---|
-| `e3-20260930-60bc3ca40a/` | Current dataset: six machines, 3 epochs, gsr `60bc3ca40a`. Per-machine artifacts, joint fit, fit log and a README with the run details. |
+| `e3-20260930-ea7a71e20e/` | Current dataset: six machines, 3 epochs, gsr `ea7a71e20e`. Per-machine artifacts, joint fit, fit log and a README with the run details. |
 | `fit_calibrations.py` | Fits each machine and takes the envelope of the machine fits as the pricing basis, then rounds it to the candidate schedule. |
 | `render_joint_calibration.py` | Builds the report from a joint fit; `restyle_report.py` applies the page style. |
 | `test_calibration_pipeline.py` | Tests for fitting, rounding and rendering. |
