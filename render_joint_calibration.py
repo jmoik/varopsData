@@ -123,7 +123,7 @@ NOTES = {
 # Run conditions that qualify the measurements, shown in the header.
 RUN_NOTES = [
     'The Intel Core i7-7700 has no SHA extensions, so SHA256 runs in software (SSE4/AVX2). Its slowest pre-v2 case is a HASH256 script rather than CHECKSIGVERIFY, and SHA256 costs 37 varops per hashed byte on it, against 8–12 on the machines with SHA extensions. It alone sets the SHA256 byte rate.',
-    'Prepared operands come from a pool no larger than the 8 MB stack one script can hold, which bounds a fixture’s working set by that of one script without assuming it stays in cache. With the earlier 64 MiB pool the flats of READ, ARITH, MUL and DIV on the AMD Ryzen 9 9950X (Windows, clang-cl) were far above the other machines (MUL 2,551, DIV 1,294), consistent with memory misses on a working set no script can hold; with the smaller pool its flats are in line with the others.',
+    'Prepared operands are cycled through a pool of 8 MB, the stack payload limit of one script. The size is a chosen measurement setting, not a proven bound on a script’s working set, which also includes retained capacity, temporaries and other evaluator memory; complete-script benchmarks cover those. With an earlier 64 MiB pool the flats of READ, ARITH, MUL and DIV on the AMD Ryzen 9 9950X (Windows, clang-cl) were far above the other machines (MUL 2,551, DIV 1,294); with the 8 MB pool they are in line with the others.',
     'The Apple M4 Pro ran on a computer loaded by other work: over the 15 minutes logged, the 1-minute load average had a median of 3.3 and a peak of 7.4. Its worst pre-v2 reference case varied by 14.3% between rounds, against at most 0.3% on the other machines (see Diagnostics). Recheck it on a quiet machine.',
 ]
 
@@ -466,40 +466,35 @@ def diagnostics_html(joint, machines, dataset, same_schedule):
              'while these cases are investigated.</p>']
 
     for name, coverage in diag['charge_coverage'].items():
-        target = coverage['target_fraction']
         label = ('candidate, identical to the implemented charges' if name == 'candidate' and same_schedule
                  else name)
+        above = coverage['above_charge']
         parts.append(f'<h3>Fixtures above the charge · schedule: {esc(label)}</h3>'
-                     f'<p>{len(coverage["above_charge"]):,} of {coverage["checked"]:,} included machine-fixture medians of priced primitives are above '
-                     f'the charge at the {target:g} target; {len(coverage["above_limit"])} are above it at the 1.0 limit. '
-                     f'<strong>Measured ÷ charge at the {target:g} target</strong> uses the normalization of the fits: '
-                     f'above 1, a budget spent on the fixture alone takes more than {target:g}× the machine&#39;s reference. '
-                     f'<strong>At the 1.0 limit</strong> the same measurement is normalized to the reference itself '
-                     f'(the first ratio × {target:g}): above 1, it would take longer than the reference.</p>')
+                     f'<p>{len(above):,} of {coverage["checked"]:,} included machine-fixture medians of priced primitives '
+                     'are above their charge. <strong>Measured ÷ charge</strong> uses the normalization of the fits, a full '
+                     'budget in the machine&#39;s pre-v2 reference time: above 1, a budget spent on the fixture alone would '
+                     'take longer than the reference.</p>')
         worst = {}
-        for item in coverage['above_charge']:
+        for item in above:
             worst.setdefault(item['family'], item)
-        parts.append('<div class="table-wrap"><table><thead><tr><th>Primitive</th><th>Fixtures above charge '
-                     f'({target:g} target)</th><th>Above 1.0 limit</th><th>Worst fixture</th><th>Machine</th>'
-                     f'<th>Measured ÷ charge, {target:g} target</th><th>Measured ÷ charge, 1.0 limit</th></tr></thead><tbody>')
+        parts.append('<div class="table-wrap"><table><thead><tr><th>Primitive</th><th>Fixtures above charge</th>'
+                     '<th>Worst fixture</th><th>Machine</th><th>Measured ÷ charge</th></tr></thead><tbody>')
         for family, item in worst.items():
-            count = sum(other['family'] == family for other in coverage['above_charge'])
-            over = sum(other['family'] == family for other in coverage['above_limit'])
+            count = sum(other['family'] == family for other in above)
             parts.append(f'<tr><td><a href="#{family}">{esc(DISPLAY.get(family, family))}</a></td><td>{count}</td>'
-                         f'<td>{over}</td><td><code>{esc(item["fixture"])}</code></td>'
+                         f'<td><code>{esc(item["fixture"])}</code></td>'
                          f'<td>{esc(names.get(item["machine"], item["machine"]))}</td>'
-                         f'<td>{item["ratio_at_target"]:.2f}×</td><td>{item["ratio_at_limit"]:.2f}×</td></tr>')
+                         f'<td>{item["ratio"]:.2f}×</td></tr>')
         parts.append('</tbody></table></div>')
-        if coverage['above_limit']:
-            parts.append(f'<details><summary>All {len(coverage["above_limit"])} fixtures above the charge at the 1.0 '
-                         'limit</summary><div class="table-wrap"><table><thead><tr><th>Fixture</th><th>Machine</th>'
-                         f'<th>Measured varops ({target:g} target)</th><th>Charged varops</th>'
-                         f'<th>{target:g} target</th><th>1.0 limit</th></tr></thead><tbody>')
-            for item in coverage['above_limit']:
+        if above:
+            parts.append(f'<details><summary>All {len(above)} fixtures above the charge</summary>'
+                         '<div class="table-wrap"><table><thead><tr><th>Fixture</th><th>Machine</th>'
+                         '<th>Measured varops</th><th>Charged varops</th><th>Measured ÷ charge</th></tr></thead><tbody>')
+            for item in above:
                 parts.append(f'<tr><td><code>{esc(item["fixture"])}</code></td>'
                              f'<td>{esc(names.get(item["machine"], item["machine"]))}</td>'
                              f'<td>{item["measured_varops"]:,.0f}</td><td>{item["charged_varops"]:,.0f}</td>'
-                             f'<td>{item["ratio_at_target"]:.2f}×</td><td>{item["ratio_at_limit"]:.2f}×</td></tr>')
+                             f'<td>{item["ratio"]:.2f}×</td></tr>')
             parts.append('</tbody></table></div></details>')
 
     failures = gate['gate_failures']
@@ -542,11 +537,12 @@ def diagnostics_html(joint, machines, dataset, same_schedule):
                          f'<td>{item["max_above_fit"]:.2f}×</td></tr>')
         parts.append('</tbody></table></div></details>')
 
-    parts.append('<h3>Run conditions</h3><p>The runner is being extended to measure the pre-v2 reference before and '
-                 'after the primitives and to sample the one-minute load average during the run; a run is to be repeated '
-                 'if its median load exceeds 1.5 or the reference moves by more than 5%. Both are provisional screening '
-                 'thresholds, not accuracy guarantees. These runs predate the checks and show “not recorded”; their '
-                 'within-run spread comes from the recovered reference samples.</p>')
+    parts.append('<h3>Run conditions</h3><p>The runner now measures the pre-v2 reference before and '
+                 'after the primitives and samples the one-minute load average during the run. A run whose median load '
+                 'exceeds 1.5 or whose reference moves by more than 5% fails its conditions, and the fitter rejects it '
+                 'unless an exploratory fit is requested. Both thresholds are provisional screening checks, not accuracy '
+                 'guarantees. These runs predate the checks and show “not recorded”; their within-run spread comes from '
+                 'the recovered reference samples.</p>')
     parts.append('<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Reference (s)</th>'
                  '<th>Reference drift</th><th>Median load</th><th>Worst reference case: per-round range</th>'
                  '</tr></thead><tbody>')
@@ -588,16 +584,15 @@ def render(joint_path, output, source_root=None, title="Varops 0.4.0 · multi-ma
         raise ValueError("this comparison requires a v2 joint fit")
     if joint.get("model_id") != "producer-normalize-v1":
         raise ValueError("this report renders the producer-normalize-v1 model only")
-    target = joint.get("target_fraction", 1.0)
     machines = []
     for meta in joint["machines"]:
         source = Path(meta["file"])
         if hashlib.sha256(source.read_bytes()).hexdigest() != meta["sha256"]:
             raise ValueError(f"input changed since the joint fit: {source}")
-    machine_models = independent_models([Path(meta["file"]) for meta in joint["machines"]], target)
+    machine_models = independent_models([Path(meta["file"]) for meta in joint["machines"]])
     for meta, model in zip(joint["machines"], machine_models):
         source = Path(meta["file"])
-        points, _ = load_calibration(source, target)
+        points, _ = load_calibration(source)
         identity = (meta['cpu'] + ' ' + source.name).lower()
         key = next((key for key, token in [('m1', 'm1'), ('m4', 'm4'), ('r5', 'ryzen 5 3600'), ('ryzen', 'ryzen'), ('i7', 'i7-7700'), ('intel', 'intel')] if token in identity), None)
         if key is None or any(m['key'] == key for m in machines):
@@ -649,7 +644,7 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
     commit_chip = (f'commit {heads[0]}' if len(heads) == 1 else 'commits ' + ', '.join(heads)) if heads else 'commit unknown'
     parts.append(f'<p><strong>{esc(joint.get("model_id", ""))} · {commit_chip} · {len(joint_model)} primitives · report updated 2026-09-30.</strong> Current candidate prices are shown first.</p>')
     parts.append('<p><strong>Pricing basis: envelope</strong> (solid black) is the cheapest curve of each primitive&#39;s form that stays at or above every machine&#39;s fitted curve at every size the charge applies to. Formally, with feature vector φ(x) ≥ 0 and machine fits θ<sub>m</sub>, it minimizes the weighted mean relative charge Σ<sub>x</sub> w(x)·θ·φ(x) / max<sub>m</sub> θ<sub>m</sub>·φ(x) over the fixtures, with the fits&#39; path-group and size-decade weights, subject to θ·φ(x) ≥ θ<sub>m</sub>·φ(x) for every machine m and every chargeable size x, and θ ≥ 0. Sizes start at zero except where an operation cannot be smaller: a hash always processes at least one 64-byte block, a division has at least one quotient row and one divisor limb, and a multiplication&#39;s shorter operand is at most as long as the longer one. RIPEMD160 and SHA1 take at most 520 bytes; other sizes are unbounded. Where sizes start at zero and are unbounded, covering every machine at size zero needs the largest flat and covering them at large sizes needs the largest rate, so there the envelope takes the largest flat and the largest rate of any machine; it is lower only for DIV, MUL and the hashes. It is unrounded and is the basis of the rounded implementation prices shown below. It covers the individual fitted curves, not necessarily every measurement. SIG remains a fixed policy charge; its comparison curves are diagnostic.</p>')
-    parts.append(f'<p>Fresh {len(machines)}-machine calibration: {sum(len(m["points"]) for m in machines):,} machine-fixture medians; epochs per fixture: {esc(", ".join(str(m["meta"]["epochs"]) for m in machines))}. Each machine is normalized by its own pre-v2 reference: a full 40-billion-varop budget of fitted work is priced to take {100 * target:g}% of it, and complete scripts must stay below 100%. Each machine is fitted independently with equal path-group and size-decade weights and a 100× underprediction penalty. Coefficients remain unrounded; this is not a guaranteed upper bound or whole-script validation.</p>')
+    parts.append(f'<p>Fresh {len(machines)}-machine calibration: {sum(len(m["points"]) for m in machines):,} machine-fixture medians; epochs per fixture: {esc(", ".join(str(m["meta"]["epochs"]) for m in machines))}. Each machine is normalized by its own pre-v2 reference: a full 40-billion-varop budget of fitted work is priced to take that reference time. The schedule holds only if complete scripts stay below the reference on every machine. Each machine is fitted independently with equal path-group and size-decade weights and a 100× underprediction penalty. Coefficients remain unrounded; this is not a guaranteed upper bound or whole-script validation.</p>')
     read_rate = joint['primitives']['READ']['envelope_coefficients'][1]
     parts.append(f'<p>The candidate rounds the envelope up, each coefficient on its own, flats and rates alike: to two significant figures, and at least to a whole varop, so rounding adds at most 10% to any coefficient of 10 or more. Rates are per byte of the padded length the operation processes, W(n) for WRITE, READ, ARITH and BIT (n rounded up to a multiple of 8 bytes, so W(5) = 8), per 64-bit word of W(n) for PREPARE, whose fitted byte rate is far below one varop, and H(n) for the hashes (the message plus its padding, rounded up to a multiple of 64 bytes), or per counted item elsewhere. Zero stays zero and exact multiples keep their value. NORMALIZE is a flat charge and SIG remains fixed at 500,000. Whole varops per byte overcharge large operands most where the fitted rate is small: READ&#39;s {read_rate:.3g} per byte is charged as {math.ceil(read_rate - 1e-9)}. The table below compares it with the prices implemented in the research implementation and BIP draft; where they differ, the implementation has not been updated. Raw fits and plotted curves remain unrounded. Whole-script confirmation on every machine remains required.</p>')
     for note in RUN_NOTES:
@@ -679,6 +674,11 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
     if quick:
         parts.append('<p class="warning"><strong>Quick runs</strong> (full: at least 5 epochs, 10/100 ms, 5 reference epochs). '
                      'Use these fits to check the pipeline and the direction of changes, not as prices. ' + esc('; '.join(quick)) + '.</p>')
+    failed = [machine for machine in machines if (machine['meta'].get('conditions') or {}).get('repeat_required')]
+    if failed:
+        parts.append('<p class="warning"><strong>Exploratory fit</strong>: these runs failed their measurement conditions '
+                     'and must be repeated before pricing: ' + esc('; '.join(
+                         f"{machine['label']} ({', '.join(machine['meta']['conditions']['problems'])})" for machine in failed)) + '.</p>')
     parts.append('<h2 id="comparison">Implemented prices and candidate</h2><div class="table-wrap"><table><thead><tr>'
                  '<th>Primitive or check</th><th>Implemented charge</th><th>Candidate (rounded envelope) or check</th></tr></thead><tbody>')
     for section in SECTIONS:

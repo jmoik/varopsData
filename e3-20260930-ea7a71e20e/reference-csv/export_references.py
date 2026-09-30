@@ -3,7 +3,7 @@
     python3 export_references.py <gsr checkout>
 
 Uses run_calibration.reference_rows from the given checkout, which keeps the per-round
-samples by case name (gsr 4e7b02bd8e and later).
+samples by case name.
 """
 import hashlib
 import json

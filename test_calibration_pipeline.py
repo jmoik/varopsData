@@ -128,17 +128,21 @@ class CalibrationPipelineTests(unittest.TestCase):
         coverage = calibration.charge_coverage({'MOVE': pts}, {'MOVE': [100, 10]}, ['m'], ['M'])
         self.assertEqual(coverage['checked'], 9)
         self.assertEqual([item['fixture'] for item in coverage['above_charge']], ['MOVE/5/g'])
-        self.assertAlmostEqual(coverage['above_charge'][0]['ratio_at_target'], 2)
-        self.assertAlmostEqual(coverage['above_charge'][0]['ratio_at_limit'], 1.8)
-        self.assertEqual(len(coverage['above_limit']), 1)
-        # A charge 1.9x the fit still covers the limit, not the target.
-        coverage = calibration.charge_coverage({'MOVE': pts}, {'MOVE': [190, 19]}, ['m'], ['M'])
-        self.assertEqual((len(coverage['above_charge']), coverage['above_limit']), (1, []))
+        self.assertAlmostEqual(coverage['above_charge'][0]['ratio'], 2)
+        # A charge at twice the fit covers every fixture.
+        coverage = calibration.charge_coverage({'MOVE': pts}, {'MOVE': [200, 20]}, ['m'], ['M'])
+        self.assertEqual(coverage['above_charge'], [])
         # Excluded fixtures are neither gated nor flagged.
         pts[4]['included'] = False
         gate = calibration.quality_gate({'MOVE': pts}, [{'MOVE': (100, 10)}], ['m'], ['M'])
         coverage = calibration.charge_coverage({'MOVE': pts}, {'MOVE': [100, 10]}, ['m'], ['M'])
         self.assertEqual((gate['gate_failures'], coverage['above_charge'], coverage['checked']), ([], [], 8))
+
+    def test_failed_conditions_are_not_admitted(self):
+        failed = dict(file='c.json', conditions=dict(repeat_required=True, problems=['median load 3.3']))
+        machines = [dict(file='a.json', conditions=None),
+                    dict(file='b.json', conditions=dict(repeat_required=False, problems=[])), failed]
+        self.assertEqual(calibration.failed_conditions(machines), [failed])
 
     def test_source_verification_uses_recorded_commit(self):
         raw = b'original\nsource\n'
@@ -158,50 +162,35 @@ class CalibrationPipelineTests(unittest.TestCase):
         self.assertEqual(len(result['unmatched']), 1)
         self.assertEqual(result['checked'], 1)
 
-    def load(self, data, target_fraction=calibration.TARGET_FRACTION):
+    def load(self, data):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)/'synthetic.json'
             path.write_text(json.dumps(data))
-            return calibration.load_calibration(path, target_fraction)
+            return calibration.load_calibration(path)
 
-    def model(self, data, target_fraction):
+    def model(self, data):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)/'synthetic.json'
             path.write_text(json.dumps(data))
-            return calibration.machine_model(path, target_fraction=target_fraction)
+            return calibration.machine_model(path)
 
-    def test_pricing_target_rescales_recorded_reference(self):
-        # 40e9 varops over 0.9 × 2 s: every fitted coefficient rises by 1/0.9.
-        self.assertEqual(calibration.TARGET_FRACTION, 0.9)
-        full, meta = self.load(artifact(), 1.0)
-        target, meta = self.load(artifact(), 0.9)
-        self.assertAlmostEqual(meta['varops_per_nanosecond'], 40 / (2.0 * 0.9))
-        self.assertEqual((meta['target_fraction'], meta['recorded_target_fraction']), (0.9, 1.0))
-        for a, b in zip(full, target):
-            self.assertAlmostEqual(b['y'], a['y'] / 0.9)
-        # An artifact collected at 0.9 prices identically to one rescaled from 1.0.
+    def test_pricing_normalizes_to_the_reference(self):
+        # 40e9 varops over the 2 s reference: 20 varops per nanosecond.
+        points, meta = self.load(artifact())
+        self.assertAlmostEqual(meta['varops_per_nanosecond'], 40 / 2.0)
+        # An artifact that recorded its rate for 0.9 of the reference prices identically.
         collected = artifact()
         collected['normalization'].update(target_fraction_of_local_pre_v2_worst=0.9,
                                           varops_per_nanosecond=40 / (2.0 * 0.9))
         for row in collected['primitive_samples']:
             row['normalized_varops_per_execution'] = row['ns_per_execution'] * 40 / (2.0 * 0.9)
-        recollected, _ = self.load(collected, 0.9)
-        self.assertEqual([p['y'] for p in recollected], [p['y'] for p in target])
-
-    def test_machine_model_scales_with_target(self):
-        full, target = self.model(artifact(), 1.0), self.model(artifact(), 0.9)
-        self.assertEqual(full['F'], (15.0 * 20, 0.0))
-        for a, b in zip(full['F'], target['F']):
-            self.assertAlmostEqual(b, a / 0.9)
-        # PRODUCE is refit from one fixture (6.5 bytes per event); its fitted cost scales.
-        produce = lambda c: c[0] + 6.5 * c[1]
-        self.assertAlmostEqual(produce(target['PRODUCE']) / produce(full['PRODUCE']), 1 / 0.9, places=4)
-        # One synthetic DIVCORE fixture leaves the term split free; its fitted cost still scales.
-        cost = lambda c: c[0] + 9 * c[1] + 18 * c[2]
-        self.assertAlmostEqual(cost(target['DIVCORE']) / cost(full['DIVCORE']), 1 / 0.9, places=4)
+        recollected, _ = self.load(collected)
+        self.assertEqual([p['y'] for p in recollected], [p['y'] for p in points])
+        # So do the machine fits, which are recorded in nanoseconds.
+        self.assertEqual(self.model(collected)['F'], self.model(artifact())['F'])
 
     def test_all_families_and_median(self):
-        points, meta = self.load(artifact(), 1.0)
+        points, meta = self.load(artifact())
         self.assertEqual({p['family'] for p in points}, set(calibration.PRODUCER_ORDER))
         self.assertEqual(meta['model_id'], calibration.MODEL_ID)
         by_name = {p['family']: p for p in points}
@@ -355,7 +344,7 @@ class CalibrationPipelineTests(unittest.TestCase):
         data['primitive_samples'] += [dict(probe=probe, epoch=epoch, ns_per_execution=100,
                                            normalized_varops_per_execution=2000)
                                       for probe in ('BIT/reverse/64', 'H256/secp_tagged/64') for epoch in range(3)]
-        points, _ = self.load(data, 1.0)
+        points, _ = self.load(data)
         self.assertTrue(any(p['label'].startswith('BIT/invert/') for p in points))
         self.assertFalse(any(p['label'].startswith(('BIT/reverse/', 'H256/secp_tagged/')) for p in points))
 

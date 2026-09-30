@@ -16,7 +16,7 @@ corrected export. The artifacts themselves are unchanged.
 
 `<machine>-reference.json` is the corrected export: `run_calibration.reference_rows` keeping the per-round
 samples by case name, with provenance. It reproduces each artifact's reference time and worst case exactly.
-Regenerate with `python3 export_references.py <gsr checkout>` (gsr 4e7b02bd8e or later).
+Regenerate with `python3 export_references.py <gsr checkout>`, using a runner whose `reference_rows` keeps the per-round samples.
 
 Per-round spread of the worst reference case (3 rounds, one run each):
 

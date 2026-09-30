@@ -2,10 +2,12 @@
 """Fit one provisional primitive schedule from multiple calibration JSON files.
 
 Each machine's fixture timings are normalized by its own pre-v2 reference: a full
-40-billion-varop budget is priced to take TARGET_FRACTION of that machine's
-recorded pre-v2 worst case. The pricing rate is derived from the recorded
-reference time, so artifacts collected under another target are rescaled here.
-Inputs remain unchanged. This is a descriptive fit, not consensus validation.
+40-billion-varop budget of fitted work is priced to take that machine's recorded
+pre-v2 worst case. The pricing rate is derived from the recorded reference time,
+whatever normalization the artifact was collected with. Runs whose recorded
+measurement conditions failed are rejected unless explicitly allowed. Inputs
+remain unchanged. This is a descriptive fit; complete scripts on every machine
+decide whether a schedule holds.
 """
 
 import argparse
@@ -30,14 +32,13 @@ PRODUCER_ORDER = "F PREP PRODUCE NORMALIZE READ ARITH BIT MOVE MUL DIVCORE H256 
 CHECKS = {"UNROLL"}
 MODEL_ID = "producer-normalize-v1"
 BUDGET_VAROPS = 40_000_000_000
-# Fitting target: a full budget of fitted work takes 0.9× the local pre-v2 reference.
-# 1.0× remains the hard limit for whole-script verification.
-TARGET_FRACTION = 0.9
 
 
-def pricing_rate(normalization, target_fraction=TARGET_FRACTION):
-    """Varops per nanosecond for pricing at target_fraction of the recorded reference."""
-    return BUDGET_VAROPS / (float(normalization["local_pre_v2_worst_seconds"]) * 1e9 * target_fraction)
+def pricing_rate(normalization, fraction=1.0):
+    """Varops per nanosecond at which a full budget takes the recorded reference time.
+
+    fraction only checks artifacts that recorded their rate for a fraction of it."""
+    return BUDGET_VAROPS / (float(normalization["local_pre_v2_worst_seconds"]) * 1e9 * fraction)
 
 
 def check_source_snapshots(root, machines):
@@ -163,7 +164,7 @@ def fixture(row, producer_manifest=None):
                 group=group, included=included)
 
 
-def load_calibration(path, target_fraction=TARGET_FRACTION):
+def load_calibration(path):
     data = json.loads(path.read_text())
     if data.get("schema") != "varop-calibration-v1":
         raise ValueError(f"{path}: unsupported calibration schema")
@@ -175,12 +176,13 @@ def load_calibration(path, target_fraction=TARGET_FRACTION):
     manifest = {r['probe']: r for r in data.get('producer_manifest', [])}
     normalization = data["normalization"]
     recorded_rate = float(normalization["varops_per_nanosecond"])
-    recorded_fraction = float(normalization["target_fraction_of_local_pre_v2_worst"])
+    # Earlier runners recorded their rate for a fraction of the reference.
+    recorded_fraction = float(normalization.get("target_fraction_of_local_pre_v2_worst", 1.0))
     if int(normalization.get("budget_varops", BUDGET_VAROPS)) != BUDGET_VAROPS:
         raise ValueError(f"{path}: unexpected budget")
     if not math.isclose(recorded_rate, pricing_rate(normalization, recorded_fraction), rel_tol=1e-12):
         raise ValueError(f"{path}: inconsistent normalization")
-    rate = pricing_rate(normalization, target_fraction)
+    rate = pricing_rate(normalization)
     epochs = int(data["fitting"]["metadata"]["epochs"])
     machine = str(path)
     observations = defaultdict(list)
@@ -223,7 +225,6 @@ def load_calibration(path, target_fraction=TARGET_FRACTION):
                 cpu=data["machine"]["cpu"], epochs=epochs,
                 head=data["fitting"]["metadata"].get("head"),
                 fixture_count=len(points), reference_seconds=data["normalization"]["local_pre_v2_worst_seconds"],
-                target_fraction=target_fraction, recorded_target_fraction=recorded_fraction,
                 varops_per_nanosecond=rate, source_sha256=data["source_sha256"],
                 conditions=data.get("conditions"))
     return points, meta
@@ -439,9 +440,9 @@ REFIT_PARTS = ('MULCORE', 'DIVCORE', 'other')
 FIT_PROCESSES = 12
 
 
-def refit_part(path, target_fraction, part):
+def refit_part(path, part):
     """One part of machine_model's refits from the recorded samples."""
-    points, _ = load_calibration(Path(path), target_fraction)
+    points, _ = load_calibration(Path(path))
 
     def included(family):
         return [p for p in points if p['family'] == family and p['included']]
@@ -468,21 +469,20 @@ def refit_part(path, target_fraction, part):
     return model
 
 
-def machine_model(path, target_fraction=TARGET_FRACTION, refits=None):
+def machine_model(path, refits=None):
     """Recorded 100x machine fit in varops, with DIVCORE refit from the recorded samples.
 
-    Recorded fits are in nanoseconds and are converted at the pricing rate for
-    target_fraction. Recorded DIVCORE fits use the superseded quotient-step count;
+    Recorded fits are in nanoseconds and are converted at the pricing rate. Recorded DIVCORE fits use the superseded quotient-step count;
     the same fitter reproduces them exactly from the samples when given that count.
     refits maps each of REFIT_PARTS to its refit_part result, when computed elsewhere.
     """
     data = json.loads(Path(path).read_text())
-    rate = pricing_rate(data['normalization'], target_fraction)
+    rate = pricing_rate(data['normalization'])
     model = {f: tuple(record['under_penalty_100_fit'][k] * rate
                       for k in ('a_ns', 'b_ns', 'c_ns') if k in record['under_penalty_100_fit'])
              for f, record in data['fitting']['fits'].items()}
     if refits is None:
-        refits = {part: refit_part(path, target_fraction, part) for part in REFIT_PARTS}
+        refits = {part: refit_part(path, part) for part in REFIT_PARTS}
     for part in ('DIVCORE', 'MULCORE', 'other'):
         model.update(refits[part])
     for family in CHECKS:
@@ -584,7 +584,7 @@ def envelope_model(models, series):
             for family in models[0]}
 
 
-def independent_models(paths, target_fraction=TARGET_FRACTION):
+def independent_models(paths):
     """Pricing curves: one fit per machine in a single feature basis per family.
 
     DIVCORE is fixed + step + cell on every machine. Maxima over mixed bases
@@ -594,10 +594,10 @@ def independent_models(paths, target_fraction=TARGET_FRACTION):
     refits = [{} for _ in paths]
     with ProcessPoolExecutor(max_workers=min(len(tasks), FIT_PROCESSES, os.cpu_count() or 1)) as pool:
         results = pool.map(refit_part, [paths[index] for index, _ in tasks],
-                           itertools.repeat(target_fraction), [part for _, part in tasks])
+                           [part for _, part in tasks])
         for (index, part), result in zip(tasks, results):
             refits[index][part] = result
-    return [machine_model(path, target_fraction, refits[index]) for index, path in enumerate(paths)]
+    return [machine_model(path, refits[index]) for index, path in enumerate(paths)]
 
 
 # Size-dependent rates are priced per byte of the padded length the operation processes:
@@ -721,15 +721,13 @@ def quality_gate(series, models, machine_keys, machine_names):
                 gate_failures=gate_failures)
 
 
-def charge_coverage(series, schedule, machine_keys, machine_names, target_fraction=TARGET_FRACTION):
+def charge_coverage(series, schedule, machine_keys, machine_names):
     """Included fixtures measured above the charge of one schedule.
 
-    ratio_at_target is measured / charged, with measurements normalized so that a full
-    budget takes the target fraction (0.9) of the machine's reference; above 1, a full
-    budget of that fixture exceeds the target. ratio_at_limit = ratio_at_target *
-    target_fraction; above 1, it would exceed the reference itself. A primitive fixture
-    above its charge is a diagnostic finding; only complete scripts establish a limit
-    violation."""
+    ratio is measured / charged, with measurements normalized so that a full budget
+    takes the machine's pre-v2 reference; above 1, a full budget of that fixture alone
+    would take longer than the reference. A primitive fixture above its charge is a
+    diagnostic finding; only complete scripts establish a limit violation."""
     above, checked = [], 0
     for family, points in series.items():
         if family not in schedule:
@@ -742,11 +740,17 @@ def charge_coverage(series, schedule, machine_keys, machine_names, target_fracti
             charge = candidate_charge(family, p, schedule)
             if p["y"] > charge:
                 above.append(dict(machine=names[p["machine"]], family=family, fixture=p["label"],
-                                  measured_varops=p["y"], charged_varops=charge, ratio_at_target=p["y"] / charge,
-                                  ratio_at_limit=p["y"] / charge * target_fraction))
-    above.sort(key=lambda item: -item["ratio_at_target"])
-    return dict(target_fraction=target_fraction, checked=checked, above_charge=above,
-                above_limit=[item for item in above if item["ratio_at_limit"] > 1])
+                                  measured_varops=p["y"], charged_varops=charge, ratio=p["y"] / charge))
+    above.sort(key=lambda item: -item["ratio"])
+    return dict(checked=checked, above_charge=above)
+
+
+def failed_conditions(machines):
+    """Runs that failed their recorded measurement conditions (BIP 440 admission).
+
+    Such a run is repeated, not priced. Runs from before the runner recorded
+    conditions have none and are reported as not recorded."""
+    return [meta for meta in machines if (meta.get("conditions") or {}).get("repeat_required")]
 
 
 def report_diagnostics(diag, machines):
@@ -758,16 +762,15 @@ def report_diagnostics(diag, machines):
           f"{sum(item['max_above_fit'] > gate['quality_gate']['within_factor'] for item in gate['gate_failures'])} "
           f"with a fixture more than {gate['quality_gate']['within_factor']}x above its fit")
     for name, coverage in diag["charge_coverage"].items():
-        target = coverage["target_fraction"]
-        print(f"Charge coverage, {name} schedule: {len(coverage['above_charge'])} fixtures above the charge at the "
-              f"{target:g} target, {len(coverage['above_limit'])} above the 1.0 limit")
+        print(f"Charge coverage, {name} schedule: {len(coverage['above_charge'])} of {coverage['checked']} "
+              f"fixtures above the charge")
         worst = {}
         for item in coverage["above_charge"]:
             worst.setdefault(item["family"], item)
         for family, item in worst.items():
             count = sum(other["family"] == family for other in coverage["above_charge"])
-            print(f"  {family:<10} {count:4d} fixtures; worst {item['ratio_at_target']:.2f}x at the target, "
-                  f"{item['ratio_at_limit']:.2f}x at the limit: {item['fixture']} on {item['machine']}")
+            print(f"  {family:<10} {count:4d} fixtures; worst {item['ratio']:.2f}x the charge: "
+                  f"{item['fixture']} on {item['machine']}")
     for meta in machines:
         conditions = meta.get("conditions")
         if conditions is None:
@@ -783,13 +786,11 @@ def main():
     parser.add_argument("--implemented", type=Path,
                         help="JSON with the implemented schedule ({source, coefficients}) to check coverage against as well")
     parser.add_argument("--source-root", type=Path, help="Git repository containing the recorded commits for source verification")
-    parser.add_argument("--target-fraction", type=float, default=TARGET_FRACTION,
-                        help="fraction of each machine's pre-v2 reference that a full budget of fitted work may take (default: %(default)s)")
+    parser.add_argument("--allow-failed-conditions", action="store_true",
+                        help="keep runs whose recorded measurement conditions failed, in an exploratory fit")
     parser.add_argument("--allow-source-mismatch", action="store_true",
                         help="retain and label unexplained source differences in an exploratory fit")
     args = parser.parse_args()
-    if not 0 < args.target_fraction <= 1:
-        parser.error("--target-fraction must be greater than 0 and at most 1")
     if len(args.calibrations) < 2:
         parser.error("at least two calibration files are required")
     paths = [p.resolve() for p in args.calibrations]
@@ -802,13 +803,18 @@ def main():
     machines = []
     fixture_sets = []
     for path in paths:
-        points, meta = load_calibration(path, args.target_fraction)
+        points, meta = load_calibration(path)
         # Record inputs relative to the joint fit, so a dataset folder can move.
         meta["file"] = Path(os.path.relpath(path, output.parent)).as_posix()
         machines.append(meta)
         fixture_sets.append({p["label"] for p in points})
         for point in points:
             series[point["family"]].append(point)
+    failed = failed_conditions(machines)
+    if failed and not args.allow_failed_conditions:
+        raise ValueError("runs failed their measurement conditions and must be repeated: " +
+                         "; ".join(f"{Path(meta['file']).name}: {', '.join(meta['conditions']['problems'])}"
+                                   for meta in failed))
     if len({meta["head"] for meta in machines}) != 1:
         raise ValueError("inputs were collected from different commits")
     if len({meta['model_id'] for meta in machines}) != 1:
@@ -833,16 +839,18 @@ def main():
         raise ValueError(f"source differences remain after LF/CRLF normalization: {names}")
     if any(fixtures != fixture_sets[0] for fixtures in fixture_sets[1:]):
         raise ValueError("inputs have different fixture sets")
-    models = independent_models(paths, args.target_fraction)
+    models = independent_models(paths)
     max_coeff = maximum_coefficients(models)
     envelope = envelope_model(models, series)
-    result = dict(schema="varop-joint-fit-v2", status="exploratory multi-machine fit with unresolved source differences" if unmatched else "provisional multi-machine fit, not an accepted consensus schedule",
+    status = ("exploratory multi-machine fit with unresolved source differences" if unmatched else
+              "exploratory multi-machine fit including runs that failed their measurement conditions" if failed else
+              "provisional multi-machine fit, not an accepted consensus schedule")
+    result = dict(schema="varop-joint-fit-v2", status=status,
                   model_id=machines[0]['model_id'],
-                  target_fraction=args.target_fraction,
                   pricing_basis="envelope",
                   schedule_combination="Envelope of recorded independently fitted machine curves after same-machine normalization (see envelope_combination); DIVCORE is refit per machine from the recorded samples for trimmed-length quotient rows as fixed + step + cell. Round after combining; SIG remains fixed at 500000. Coefficientwise maxima are kept for comparison.",
                   envelope_combination=ENVELOPE,
-                  method="Per-machine median of raw fixture epochs, normalized so that a full 40-billion-varop budget of fitted work takes the target fraction of the recorded local pre-v2 reference (rate derived from the recorded reference time, whatever target the artifact was collected with); equal path-group and size-decade weights; weighted squared log error with a 100× underprediction penalty; nonnegative predefined coefficients; no coefficient rounding. SIG diagnostic fits do not replace the fixed 500000 allowance.",
+                  method="Per-machine median of raw fixture epochs, normalized so that a full 40-billion-varop budget of fitted work takes the recorded local pre-v2 reference (rate derived from the recorded reference time, whatever normalization the artifact was collected with); equal path-group and size-decade weights; weighted squared log error with a 100× underprediction penalty; nonnegative predefined coefficients; no coefficient rounding. SIG diagnostic fits do not replace the fixed 500000 allowance.",
                   machines=machines, source_check=source_check,
                   schedule_rounding=dict(coefficient="up to two significant figures, and at least to a whole varop", sig_policy=500000,
                                          rule="Ceiling each coefficient independently, flats and rates alike (rates per byte of W(n) or H(n) or per counted item), to two significant figures and at least to a whole varop; preserve zero/exact multiples; no refitting.",
@@ -870,7 +878,7 @@ def main():
         schedules[f"implemented ({implemented['source']})"] = implemented["coefficients"]
     result["diagnostics"] = dict(
         quality_gate=quality_gate(series, models, keys, labels),
-        charge_coverage={name: charge_coverage(series, schedule, keys, labels, args.target_fraction)
+        charge_coverage={name: charge_coverage(series, schedule, keys, labels)
                          for name, schedule in schedules.items()})
     report_diagnostics(result["diagnostics"], machines)
     if output.exists():

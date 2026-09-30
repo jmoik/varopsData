@@ -1,32 +1,30 @@
 Primitive  Envelope (varops, unrounded)                   Rounded candidate                      Maximum coefficients (unrounded)
-F          303.552                                          310                                    303.552
-PREP       178.437 + 0.000858342 × W(n)                     180 + 1 × W(n)/8                       178.437 + 0.000858342 × W(n)
-PRODUCE    730.866 + 7.10633 × n                            740 + 8 × W(n)                         730.866 + 7.10633 × n
-NORMALIZE  193.324                                          200                                    193.324
-READ       78.574 + 0.982411 × W(n)                         79 + 1 × W(n)                          78.574 + 0.982411 × W(n)
-ARITH      118.543 + 2.70691 × W(n)                         120 + 3 × W(n)                         118.543 + 2.70691 × W(n)
-BIT        89.9518 + 1.8243 × W(n)                          90 + 2 × W(n)                          89.9518 + 1.8243 × W(n)
-MOVE       173.998 + 18.6546 × k                            180 + 19 × k                           173.998 + 18.6546 × k
-DIVCORE    0 + 494.399 × s + 32.5523 × s × v                0 + 500 × s + 33 × s × v               179.551 + 495.711 × s + 32.5523 × s × v
-H256       255.895 + 37.2495 × H(n)                         260 + 38 × H(n)                        446.863 + 37.2495 × H(n)
-H160       52.4085 + 39.3784 × H(n)                         53 + 40 × H(n)                         332.606 + 39.3784 × H(n)
-H1         184.019 + 23.8389 × H(n)                         190 + 24 × H(n)                        278.103 + 23.8389 × H(n)
-SIG        575045                                           500000                                 575045
-TWEAK      168387                                           170000                                 168387
-SELECT     2242.67 + 262.315 × k                            2300 + 270 × k                         2242.67 + 262.315 × k
-MULCORE    327.834 + 9.38286 × u + 106.782 × v + 28.2917 × u × v 330 + 10 × u + 110 × v + 29 × u × v    327.834 + 9.38286 × u + 115.152 × v + 28.2917 × u × v
+F          273.197                                          280                                    273.197
+PREP       160.593 + 0.000772508 × W(n)                     170 + 1 × W(n)/8                       160.593 + 0.000772508 × W(n)
+PRODUCE    657.779 + 6.3957 × n                             660 + 7 × W(n)                         657.779 + 6.3957 × n
+NORMALIZE  173.991                                          180                                    173.991
+READ       70.7166 + 0.88417 × W(n)                         71 + 1 × W(n)                          70.7166 + 0.88417 × W(n)
+ARITH      106.688 + 2.43622 × W(n)                         110 + 3 × W(n)                         106.688 + 2.43622 × W(n)
+BIT        80.9566 + 1.64187 × W(n)                         81 + 2 × W(n)                          80.9566 + 1.64187 × W(n)
+MOVE       156.599 + 16.7891 × k                            160 + 17 × k                           156.599 + 16.7891 × k
+DIVCORE    0 + 444.959 × s + 29.2971 × s × v                0 + 450 × s + 30 × s × v               161.596 + 446.14 × s + 29.2971 × s × v
+H256       230.306 + 33.5246 × H(n)                         240 + 34 × H(n)                        402.177 + 33.5246 × H(n)
+H160       47.1677 + 35.4405 × H(n)                         48 + 36 × H(n)                         299.345 + 35.4405 × H(n)
+H1         165.617 + 21.455 × H(n)                          170 + 22 × H(n)                        250.293 + 21.455 × H(n)
+SIG        517541                                           500000                                 517541
+TWEAK      151548                                           160000                                 151548
+SELECT     2018.4 + 236.083 × k                             2100 + 240 × k                         2018.4 + 236.083 × k
+MULCORE    295.05 + 8.44457 × u + 96.1042 × v + 25.4625 × u × v 300 + 9 × u + 97 × v + 26 × u × v      295.05 + 8.44457 × u + 103.637 × v + 25.4625 × u × v
 
 Quality gate of the machine fits (RMS factor <= 1.1, >= 95% within 1.25x, per machine, path and size decade): 1420 of 2412 bins fail, 26 with a fixture more than 1.25x above its fit
-Charge coverage, candidate schedule: 452 fixtures above the charge at the 0.9 target, 90 above the 1.0 limit
-  PRODUCE      74 fixtures; worst 2.32x at the target, 2.09x at the limit: PRODUCE/grow/135410 on Apple M4 Pro
-  READ        131 fixtures; worst 1.49x at the target, 1.34x at the limit: READ/trim/511 on Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz
-  BIT          68 fixtures; worst 1.23x at the target, 1.11x at the limit: BIT/invert/22 on Apple M1 Pro
-  NORMALIZE    28 fixtures; worst 1.23x at the target, 1.10x at the limit: NORMALIZE/aligned/3078660 on varop-calibration-ryzen99500x-3epoch
-  DIVCORE     107 fixtures; worst 1.16x at the target, 1.05x at the limit: DIVCORE/64/64/127/MOD/top-one on 12th Gen Intel(R) Core(TM) i5-12500
-  SIG          19 fixtures; worst 1.12x at the target, 1.01x at the limit: SIG/32 on varop-calibration-ryzen99500x-3epoch
-  ARITH        19 fixtures; worst 1.09x at the target, 0.98x at the limit: ARITH/add/513/equal/carry-chain on Apple M1 Pro
-  SELECT        5 fixtures; worst 1.03x at the target, 0.93x at the limit: SELECT/outputs/collated/128/256 on 12th Gen Intel(R) Core(TM) i5-12500
-  H1            1 fixtures; worst 1.01x at the target, 0.91x at the limit: H1/62 on 12th Gen Intel(R) Core(TM) i5-12500
+Charge coverage, candidate schedule: 270 of 49074 fixtures above the charge
+  PRODUCE      88 fixtures; worst 2.39x the charge: PRODUCE/grow/135410 on Apple M4 Pro
+  READ         39 fixtures; worst 1.36x the charge: READ/trim/511 on Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz
+  NORMALIZE    28 fixtures; worst 1.23x the charge: NORMALIZE/aligned/3078660 on varop-calibration-ryzen99500x-3epoch
+  BIT          11 fixtures; worst 1.18x the charge: BIT/invert/22 on Apple M1 Pro
+  DIVCORE      95 fixtures; worst 1.15x the charge: DIVCORE/64/64/127/MOD/top-one on 12th Gen Intel(R) Core(TM) i5-12500
+  SELECT        5 fixtures; worst 1.04x the charge: SELECT/outputs/collated/128/256 on 12th Gen Intel(R) Core(TM) i5-12500
+  SIG           4 fixtures; worst 1.01x the charge: SIG/32 on varop-calibration-ryzen99500x-3epoch
 Conditions: Apple M4 Pro: not recorded (reference measured once, load not sampled)
 Conditions: Apple M1 Pro: not recorded (reference measured once, load not sampled)
 Conditions: 12th Gen Intel(R) Core(TM) i5-12500: not recorded (reference measured once, load not sampled)

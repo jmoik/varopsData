@@ -42,7 +42,7 @@ calibrated here. Script evaluation, not block validation, is the scope.
 - Complete scripts: boundary grid, valid stack sizes, no immediate success;
   include setup and final checks. Record current varops separately from time.
 - Pilot: three epochs, median, 3 ms target batch. Normalize to the pinned local
-  pre-v2 reference and 90% target. Keep decimal coefficients.
+  pre-v2 reference. Keep decimal coefficients.
 - Fit affine COPY-lifetime using the existing balanced-decade, 100x underprediction
   squared-log objective. Fit numeric lifetime separately as a *composite*, not
   another additive price. No hard-envelope or new safety multiplier.

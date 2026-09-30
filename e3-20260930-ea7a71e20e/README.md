@@ -20,9 +20,11 @@ The 9950X and Ryzen 5 references are back at their earlier values (1.59–1.63 s
 slower references lowered those machines' normalized costs.
 
 `joint-calibration.json` and `fit.log` come from `fit_calibrations.py` over all six artifacts in the order above,
-with `--source-root` on the gsr repository.
+with `--source-root` on the gsr repository. They are refit with each machine normalized to its pre-v2 reference
+itself; the implemented prices came from the earlier fit that priced a full budget at 0.9× the reference
+(commit f343ea8), so the report marks them as differing from the candidate.
 
 `joint-calibration.json` also records diagnostics: the BIP 440 quality gate for every machine, path and size decade,
-and every fixture measured above the candidate charge, as ratios at the 0.9 target and at the 1.0 limit. The report
+and every fixture measured above the candidate charge, with the ratio of measurement to charge. The report
 shows them under Diagnostics. `reference-csv/` holds the recovered per-round reference samples and corrected
 exports; see its README.
