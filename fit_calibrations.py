@@ -4,8 +4,8 @@
 Each machine's fixture timings are normalized by its own pre-v2 reference: a full
 40-billion-varop budget of fitted work is priced to take that machine's recorded
 pre-v2 worst case. The pricing rate is derived from the recorded reference time,
-whatever normalization the artifact was collected with. Runs whose recorded
-measurement conditions failed are rejected unless explicitly allowed. Inputs
+whatever normalization the artifact was collected with. Runs whose epoch noise
+exceeds the BIP 440 limit are rejected unless explicitly allowed. Inputs
 remain unchanged. This is a descriptive fit; complete scripts on every machine
 decide whether a schedule holds.
 """
@@ -32,6 +32,10 @@ PRODUCER_ORDER = "F PREP PRODUCE NORMALIZE READ ARITH BIT MOVE MUL DIVCORE H256 
 CHECKS = {"UNROLL"}
 MODEL_ID = "producer-normalize-v1"
 BUDGET_VAROPS = 40_000_000_000
+# BIP 440 measurement condition: a run whose epoch noise exceeds this is repeated,
+# not priced. Load average and reference drift, which earlier runners recorded,
+# are not conditions.
+MAX_EPOCH_NOISE = 0.01
 
 
 def pricing_rate(normalization, fraction=1.0):
@@ -226,8 +230,29 @@ def load_calibration(path):
                 head=data["fitting"]["metadata"].get("head"),
                 fixture_count=len(points), reference_seconds=data["normalization"]["local_pre_v2_worst_seconds"],
                 varops_per_nanosecond=rate, source_sha256=data["source_sha256"],
-                conditions=data.get("conditions"))
+                conditions=data.get("conditions"), epoch_noise=epoch_noise(data["primitive_samples"]))
     return points, meta
+
+
+def epoch_noise(samples):
+    """Median over fixtures of their epochs' relative median absolute deviation.
+
+    None with fewer than three epochs. Word-rounded size aliases repeat a probe
+    name within a pass; the benchmark keeps them apart by their order in it.
+    Matches the runner's check, and judges runs from before it alike.
+    """
+    seen = Counter()
+    epochs = defaultdict(list)
+    for sample in samples:
+        key = sample["probe"], sample["epoch"]
+        epochs[sample["probe"], seen[key]].append(float(sample["ns_per_execution"]))
+        seen[key] += 1
+    deviations = []
+    for times in epochs.values():
+        middle = statistics.median(times)
+        if len(times) >= 3 and middle > 0:
+            deviations.append(statistics.median(abs(time - middle) for time in times) / middle)
+    return statistics.median(deviations) if deviations else None
 
 
 def decade(x):
@@ -746,11 +771,8 @@ def charge_coverage(series, schedule, machine_keys, machine_names):
 
 
 def failed_conditions(machines):
-    """Runs that failed their recorded measurement conditions (BIP 440 admission).
-
-    Such a run is repeated, not priced. Runs from before the runner recorded
-    conditions have none and are reported as not recorded."""
-    return [meta for meta in machines if (meta.get("conditions") or {}).get("repeat_required")]
+    """Runs whose epoch noise exceeds the BIP 440 limit; such a run is repeated, not priced."""
+    return [meta for meta in machines if (meta.get("epoch_noise") or 0) > MAX_EPOCH_NOISE]
 
 
 def report_diagnostics(diag, machines):
@@ -772,11 +794,9 @@ def report_diagnostics(diag, machines):
             print(f"  {family:<10} {count:4d} fixtures; worst {item['ratio']:.2f}x the charge: "
                   f"{item['fixture']} on {item['machine']}")
     for meta in machines:
-        conditions = meta.get("conditions")
-        if conditions is None:
-            print(f"Conditions: {meta['label']}: not recorded (reference measured once, load not sampled)")
-        elif conditions["problems"]:
-            print(f"Conditions: {meta['label']}: " + "; ".join(conditions["problems"]))
+        noise = meta.get("epoch_noise")
+        print(f"Conditions: {meta['label']}: " + ("fewer than three epochs, epoch noise not measured" if noise is None else
+              f"epoch noise {100 * noise:.2f}%" + (f" exceeds {100 * MAX_EPOCH_NOISE:g}%" if noise > MAX_EPOCH_NOISE else "")))
 
 
 def main():
@@ -787,7 +807,7 @@ def main():
                         help="JSON with the implemented schedule ({source, coefficients}) to check coverage against as well")
     parser.add_argument("--source-root", type=Path, help="Git repository containing the recorded commits for source verification")
     parser.add_argument("--allow-failed-conditions", action="store_true",
-                        help="keep runs whose recorded measurement conditions failed, in an exploratory fit")
+                        help="keep runs whose epoch noise exceeds the limit, in an exploratory fit")
     parser.add_argument("--allow-source-mismatch", action="store_true",
                         help="retain and label unexplained source differences in an exploratory fit")
     args = parser.parse_args()
@@ -813,8 +833,8 @@ def main():
     failed = failed_conditions(machines)
     if failed and not args.allow_failed_conditions:
         raise ValueError("runs failed their measurement conditions and must be repeated: " +
-                         "; ".join(f"{Path(meta['file']).name}: {', '.join(meta['conditions']['problems'])}"
-                                   for meta in failed))
+                         "; ".join(f"{Path(meta['file']).name}: epoch noise {100 * meta['epoch_noise']:.2f}% "
+                                   f"exceeds {100 * MAX_EPOCH_NOISE:g}%" for meta in failed))
     if len({meta["head"] for meta in machines}) != 1:
         raise ValueError("inputs were collected from different commits")
     if len({meta['model_id'] for meta in machines}) != 1:

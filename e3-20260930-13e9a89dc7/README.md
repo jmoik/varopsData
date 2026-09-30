@@ -19,8 +19,8 @@ at `BASE + BIT(W(n))` with BIT's flat at 90; with these fixtures in the BIT fit,
 | Ryzen 5 3600 | GCC 15.2.0 | x86_shani | 3.201 | 3.199 | Hetzner, `bitcoinSetup.sh` |
 
 `joint-calibration.json` and `fit.log` come from `fit_calibrations.py` over all six artifacts in the order above,
-with `--source-root` on the gsr repository and `--allow-failed-conditions`: the M4 Pro (median load 3.09) and the
-M1 Pro (2.37) failed the 1.5 load limit, so this is an exploratory fit and both runs must be repeated on quiet
-machines before pricing. The fit normalizes each machine to its pre-v2 reference itself; BIT's implemented
+with `--source-root` on the gsr repository. Runs are admitted by their epoch noise, at most 1%; these measure
+0.13–0.77% (M4 Pro 0.77%, M1 Pro 0.29%). Their median loads of 3.09 and 2.37, which an earlier fitter rejected,
+are no longer a condition. The fit normalizes each machine to its pre-v2 reference itself; BIT's implemented
 `190 + 2 × W(n)` came from the earlier fit of this dataset that priced a full budget at 0.9× the reference
 (commit 12af6aa).

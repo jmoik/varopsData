@@ -13,7 +13,7 @@ from pathlib import Path
 import tempfile
 
 from restyle_report import restyle
-from fit_calibrations import PER_WORD, check_source_snapshots, envelope_model, features, formulas, hash_span, independent_models, load_calibration, predict, rounded_candidate
+from fit_calibrations import MAX_EPOCH_NOISE, PER_WORD, check_source_snapshots, envelope_model, features, formulas, hash_span, failed_conditions, independent_models, load_calibration, predict, rounded_candidate
 
 
 # Sections: the BIP 440 primitive categories, then one section per later BIP. A
@@ -533,27 +533,29 @@ def diagnostics_html(joint, machines, dataset, same_schedule):
                          f'<td>{item["max_above_fit"]:.2f}×</td></tr>')
         parts.append('</tbody></table></div></details>')
 
-    recorded = [machine['meta'].get('conditions') is not None for machine in machines]
-    parts.append('<h3>Run conditions</h3><p>The runner measures the pre-v2 reference before and after the primitives '
-                 'and samples the one-minute load average during the run. A run whose median load exceeds 1.5 or whose '
-                 'reference moves by more than 5% fails its conditions, and the fitter rejects it unless an exploratory '
-                 'fit is requested. Both thresholds are provisional screening checks, not accuracy guarantees; Windows '
-                 'reports no load average.' +
-                 ('' if all(recorded) else ' Runs from before these checks show “not recorded”.') +
-                 ' The last column is the spread of the worst reference case over its rounds at the start of the run.</p>')
+    parts.append('<h3>Run conditions</h3><p>Each fixture is timed once per pass over all fixtures, each time as the '
+                 'average of a batch of repetitions, and priced at the median of these epochs. Epoch noise is the median '
+                 'over fixtures of how far a fixture&#39;s epochs typically lie from their median: the median absolute '
+                 f'deviation, relative to the median. A run whose epoch noise exceeds {100 * MAX_EPOCH_NOISE:g}% fails its '
+                 'conditions: the runner repeats it, and the fitter rejects it unless an exploratory fit is requested. '
+                 'The threshold is a provisional screening check, not an accuracy guarantee: a machine loaded evenly '
+                 'throughout can pass it. The one-minute load average is shown for information; an idle macOS desktop '
+                 'already reports 1.5–2, and Windows reports none. The last column is the spread of the worst reference '
+                 'case over its rounds at the start of the run.</p>')
     parts.append('<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Reference (s)</th>'
-                 '<th>Reference drift</th><th>Median load</th><th>Worst reference case: per-round range</th>'
+                 '<th>Epoch noise</th><th>Median load</th><th>Worst reference case: per-round range</th>'
                  '</tr></thead><tbody>')
     for machine in machines:
         meta = machine['meta']
         conditions = meta.get('conditions')
         spread = reference_spread(meta['file'])
-        drift = f'{100 * conditions["reference_drift"]:+.1f}%' if conditions else 'not recorded'
+        noise = meta['epoch_noise']
+        noise = 'not measured' if noise is None else f'{100 * noise:.2f}%' + (' (fails)' if noise > MAX_EPOCH_NOISE else '')
         load = conditions.get('median_one_minute_load') if conditions else None
         load = f'{load:.1f}' if load is not None else ('unavailable' if conditions else 'not recorded')
         rounds = (f'{esc(spread["case"])}, {spread["rounds"]} rounds: {spread["low"]:.3f}–{spread["high"]:.3f} s '
                   f'({100 * spread["spread"]:.1f}%)' if spread else 'not recorded')
-        parts.append(f'<tr><td>{esc(machine["label"])}</td><td>{meta["reference_seconds"]:.3f}</td><td>{drift}</td>'
+        parts.append(f'<tr><td>{esc(machine["label"])}</td><td>{meta["reference_seconds"]:.3f}</td><td>{noise}</td>'
                      f'<td>{load}</td><td>{rounds}</td></tr>')
     parts.append('</tbody></table></div>')
     if (dataset / 'reference-csv').exists():
@@ -592,7 +594,9 @@ def render(joint_path, output, source_root=None, title="Varops 0.4.0 · multi-ma
     machine_models = independent_models([Path(meta["file"]) for meta in joint["machines"]])
     for meta, model in zip(joint["machines"], machine_models):
         source = Path(meta["file"])
-        points, _ = load_calibration(source)
+        points, loaded = load_calibration(source)
+        # Joint fits from before the epoch noise condition do not record it.
+        meta.setdefault('epoch_noise', loaded['epoch_noise'])
         identity = (meta['cpu'] + ' ' + source.name).lower()
         key = next((key for key, token in [('m1', 'm1'), ('m4', 'm4'), ('r5', 'ryzen 5 3600'), ('ryzen', 'ryzen'), ('i7', 'i7-7700'), ('intel', 'intel')] if token in identity), None)
         if key is None or any(m['key'] == key for m in machines):
@@ -674,11 +678,12 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
     if quick:
         parts.append('<p class="warning"><strong>Quick runs</strong> (full: at least 5 epochs, 10/100 ms, 5 reference epochs). '
                      'Use these fits to check the pipeline and the direction of changes, not as prices. ' + esc('; '.join(quick)) + '.</p>')
-    failed = [machine for machine in machines if (machine['meta'].get('conditions') or {}).get('repeat_required')]
+    failed = failed_conditions([machine['meta'] for machine in machines])
     if failed:
+        labels = {id(machine['meta']): machine['label'] for machine in machines}
         parts.append('<p class="warning"><strong>Exploratory fit</strong>: these runs failed their measurement conditions '
                      'and must be repeated before pricing: ' + esc('; '.join(
-                         f"{machine['label']} ({', '.join(machine['meta']['conditions']['problems'])})" for machine in failed)) + '.</p>')
+                         f"{labels[id(meta)]} (epoch noise {100 * meta['epoch_noise']:.2f}%)" for meta in failed)) + '.</p>')
     parts.append('<h2 id="comparison">Implemented prices and candidate</h2><div class="table-wrap"><table><thead><tr>'
                  '<th>Primitive or check</th><th>Implemented charge</th><th>Candidate (rounded envelope) or check</th></tr></thead><tbody>')
     for section in SECTIONS:

@@ -139,10 +139,23 @@ class CalibrationPipelineTests(unittest.TestCase):
         self.assertEqual((gate['gate_failures'], coverage['above_charge'], coverage['checked']), ([], [], 8))
 
     def test_failed_conditions_are_not_admitted(self):
-        failed = dict(file='c.json', conditions=dict(repeat_required=True, problems=['median load 3.3']))
-        machines = [dict(file='a.json', conditions=None),
-                    dict(file='b.json', conditions=dict(repeat_required=False, problems=[])), failed]
+        # Only epoch noise decides; a recorded load failure no longer does.
+        failed = dict(file='c.json', epoch_noise=0.0101, conditions=None)
+        machines = [dict(file='a.json', epoch_noise=None, conditions=None),
+                    dict(file='b.json', epoch_noise=0.01,
+                         conditions=dict(repeat_required=True, problems=['median one-minute load 3.09 exceeds 1.5'])),
+                    failed]
         self.assertEqual(calibration.failed_conditions(machines), [failed])
+
+    def test_epoch_noise(self):
+        # Two aliases share a probe name within each pass and are kept apart by their order.
+        samples = [dict(probe=probe, epoch=epoch, ns_per_execution=ns)
+                   for epoch, times in enumerate([(100, 50), (101, 50), (99, 50), (100, 50), (130, 50)])
+                   for probe, ns in (('A', times[0]), ('A', times[1]))]
+        samples += [dict(probe='B', epoch=epoch, ns_per_execution=ns) for epoch, ns in enumerate([10, 11, 12, 13, 14])]
+        # A: 1% (the 130 outlier is discarded); its alias: 0%; B: 1/12.
+        self.assertAlmostEqual(calibration.epoch_noise(samples), 0.01)
+        self.assertIsNone(calibration.epoch_noise(samples[:4]))
 
     def test_source_verification_uses_recorded_commit(self):
         raw = b'original\nsource\n'

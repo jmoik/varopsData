@@ -27,6 +27,10 @@ Charge coverage, candidate schedule: 326 of 49074 fixtures above the charge
   PREP          1 fixtures; worst 1.01x the charge: PREP/18/spare on Apple M4 Pro
   H160          3 fixtures; worst 1.01x the charge: H160/513 on Apple M4 Pro
   SIG           1 fixtures; worst 1.00x the charge: SIG/32 on varop-calibration-ryzen99500x-3epoch
-Conditions: Apple M4 Pro: median one-minute load 3.09 exceeds 1.5
-Conditions: Apple M1 Pro: median one-minute load 2.37 exceeds 1.5
+Conditions: Apple M4 Pro: epoch noise 0.77%
+Conditions: Apple M1 Pro: epoch noise 0.29%
+Conditions: 12th Gen Intel(R) Core(TM) i5-12500: epoch noise 0.20%
+Conditions: varop-calibration-ryzen99500x-3epoch: epoch noise 0.26%
+Conditions: Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz: epoch noise 0.15%
+Conditions: AMD Ryzen 5 3600 6-Core Processor: epoch noise 0.13%
 Saved e3-20260930-13e9a89dc7/joint-calibration.json

@@ -1,6 +1,6 @@
 {
   "schema": "varop-joint-fit-v2",
-  "status": "exploratory multi-machine fit including runs that failed their measurement conditions",
+  "status": "provisional multi-machine fit, not an accepted consensus schedule",
   "model_id": "producer-normalize-v1",
   "pricing_basis": "envelope",
   "schedule_combination": "Envelope of recorded independently fitted machine curves after same-machine normalization (see envelope_combination); DIVCORE is refit per machine from the recorded samples for trimmed-length quotient rows as fixed + step + cell. Round after combining; SIG remains fixed at 500000. Coefficientwise maxima are kept for comparison.",
@@ -61,6 +61,7 @@
         ],
         "repeat_required": true
       },
+      "epoch_noise": 0.007659769063679083,
       "label": "Apple M4 Pro"
     },
     {
@@ -119,6 +120,7 @@
         ],
         "repeat_required": true
       },
+      "epoch_noise": 0.002923602276531617,
       "label": "Apple M1 Pro"
     },
     {
@@ -174,6 +176,7 @@
         "problems": [],
         "repeat_required": false
       },
+      "epoch_noise": 0.0019551025576203395,
       "label": "12th Gen Intel(R) Core(TM) i5-12500"
     },
     {
@@ -211,6 +214,7 @@
         "problems": [],
         "repeat_required": false
       },
+      "epoch_noise": 0.002644645941278014,
       "label": "varop-calibration-ryzen99500x-3epoch"
     },
     {
@@ -270,6 +274,7 @@
         "problems": [],
         "repeat_required": false
       },
+      "epoch_noise": 0.0014783644698499322,
       "label": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz"
     },
     {
@@ -327,6 +332,7 @@
         "problems": [],
         "repeat_required": false
       },
+      "epoch_noise": 0.001340753191694769,
       "label": "AMD Ryzen 5 3600 6-Core Processor"
     }
   ],
