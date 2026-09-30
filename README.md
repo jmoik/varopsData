@@ -2,19 +2,20 @@
 
 Calibration data and analysis for the BIP 440 varops cost model of Tapscript v2 (GSR).
 
-The report is [`0.4.0/joint-calibration.html`](0.4.0/joint-calibration.html). The measurement tool, the
-cost model and its method live on the `gsr` branch of [jmoik/bitcoin](https://github.com/jmoik/bitcoin/tree/gsr):
-`dev/varops/primitive-calibration/` (`run_calibration.py`, `costing-methodology.md`, `varops-primitives.md`)
-and `src/script/varops.h`.
+The report is [`0.4.0/joint-calibration.html`](0.4.0/joint-calibration.html). The measurement tool and the
+cost model live on the `gsr` branch of [jmoik/bitcoin](https://github.com/jmoik/bitcoin/tree/gsr):
+`dev/varops/primitive-calibration/run_calibration.py` and `src/script/varops.h`. The method is in
+[`methodology/`](methodology/).
 
 ## Contents
 
 | Path | |
 |---|---|
-| `e3-20260930-ea7a71e20e/` | Current dataset: six machines, 3 epochs, gsr `ea7a71e20e`. Per-machine artifacts, joint fit, fit log and a README with the run details. |
+| `e3-20260930-ea7a71e20e/` | Current dataset: six machines, 3 epochs, gsr `ea7a71e20e`. Per-machine artifacts, joint fit with diagnostics, fit log, recovered reference samples (`reference-csv/`) and a README with the run details. |
 | `fit_calibrations.py` | Fits each machine and takes the envelope of the machine fits as the pricing basis, then rounds it to the candidate schedule. |
 | `render_joint_calibration.py` | Builds the report from a joint fit; `restyle_report.py` applies the page style. |
 | `test_calibration_pipeline.py` | Tests for fitting, rounding and rendering. |
+| `methodology/` | The costing method (`costing-methodology.md`), the primitives and their fixtures (`varops-primitives.md`) and the storage accounting (`storage-accounting.md`, `storage-lifetimes.md`), moved from the `gsr` branch. |
 
 Datasets are named `e<epochs>-<date>-<gsr commit>`.
 
