@@ -2,8 +2,8 @@
 """Fit one provisional primitive schedule from multiple calibration JSON files.
 
 Each machine's fixture timings are normalized by its own pre-v2 reference: a full
-40-billion-varop budget of fitted work is priced to take that machine's recorded
-pre-v2 worst case. The pricing rate is derived from the recorded reference time,
+40-billion-varop budget of fitted work is priced to take TARGET_FRACTION of that
+machine's recorded pre-v2 worst case. The pricing rate is derived from the recorded reference time,
 whatever normalization the artifact was collected with. Runs whose epoch noise
 exceeds the BIP 440 limit are rejected unless explicitly allowed. Inputs
 remain unchanged. This is a descriptive fit; complete scripts on every machine
@@ -36,12 +36,16 @@ BUDGET_VAROPS = 40_000_000_000
 # not priced. Load average and reference drift, which earlier runners recorded,
 # are not conditions.
 MAX_EPOCH_NOISE = 0.01
+# Fitting target: a full budget of fitted work takes 0.9x each machine's pre-v2
+# reference, a margin for composition effects and machine variation the fixtures
+# do not capture. Complete scripts must stay below 1.0x on every machine.
+TARGET_FRACTION = 0.9
 
 
-def pricing_rate(normalization, fraction=1.0):
-    """Varops per nanosecond at which a full budget takes the recorded reference time.
+def pricing_rate(normalization, fraction=TARGET_FRACTION):
+    """Varops per nanosecond at which a full budget takes fraction of the recorded reference time.
 
-    fraction only checks artifacts that recorded their rate for a fraction of it."""
+    Other fractions only check the rate an artifact recorded when it was collected."""
     return BUDGET_VAROPS / (float(normalization["local_pre_v2_worst_seconds"]) * 1e9 * fraction)
 
 
@@ -750,8 +754,8 @@ def charge_coverage(series, schedule, machine_keys, machine_names):
     """Included fixtures measured above the charge of one schedule.
 
     ratio is measured / charged, with measurements normalized so that a full budget
-    takes the machine's pre-v2 reference; above 1, a full budget of that fixture alone
-    would take longer than the reference. A primitive fixture above its charge is a
+    takes TARGET_FRACTION of the machine's pre-v2 reference; above 1, a full budget of
+    that fixture alone would take longer than that. A primitive fixture above its charge is a
     diagnostic finding; only complete scripts establish a limit violation."""
     above, checked = [], 0
     for family, points in series.items():
@@ -870,7 +874,7 @@ def main():
                   pricing_basis="envelope",
                   schedule_combination="Envelope of recorded independently fitted machine curves after same-machine normalization (see envelope_combination); DIVCORE is refit per machine from the recorded samples for trimmed-length quotient rows as fixed + step + cell. Round after combining; SIG remains fixed at 500000. Coefficientwise maxima are kept for comparison.",
                   envelope_combination=ENVELOPE,
-                  method="Per-machine median of raw fixture epochs, normalized so that a full 40-billion-varop budget of fitted work takes the recorded local pre-v2 reference (rate derived from the recorded reference time, whatever normalization the artifact was collected with); equal path-group and size-decade weights; weighted squared log error with a 100× underprediction penalty; nonnegative predefined coefficients; no coefficient rounding. SIG diagnostic fits do not replace the fixed 500000 allowance.",
+                  method=f"Per-machine median of raw fixture epochs, normalized so that a full 40-billion-varop budget of fitted work takes {TARGET_FRACTION:g}× the recorded local pre-v2 reference (rate derived from the recorded reference time, whatever normalization the artifact was collected with); equal path-group and size-decade weights; weighted squared log error with a 100× underprediction penalty; nonnegative predefined coefficients; no coefficient rounding. SIG diagnostic fits do not replace the fixed 500000 allowance.",
                   machines=machines, source_check=source_check,
                   schedule_rounding=dict(coefficient="up to two significant figures, and at least to a whole varop", sig_policy=500000,
                                          rule="Ceiling each coefficient independently, flats and rates alike (rates per byte of W(n) or H(n) or per counted item), to two significant figures and at least to a whole varop; preserve zero/exact multiples; no refitting.",

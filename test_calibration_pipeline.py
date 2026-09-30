@@ -187,11 +187,13 @@ class CalibrationPipelineTests(unittest.TestCase):
             path.write_text(json.dumps(data))
             return calibration.machine_model(path)
 
-    def test_pricing_normalizes_to_the_reference(self):
-        # 40e9 varops over the 2 s reference: 20 varops per nanosecond.
+    def test_pricing_targets_a_fraction_of_the_reference(self):
+        # 40e9 varops over 0.9 × the 2 s reference.
+        self.assertEqual(calibration.TARGET_FRACTION, 0.9)
         points, meta = self.load(artifact())
-        self.assertAlmostEqual(meta['varops_per_nanosecond'], 40 / 2.0)
-        # An artifact that recorded its rate for 0.9 of the reference prices identically.
+        self.assertAlmostEqual(meta['varops_per_nanosecond'], 40 / (2.0 * 0.9))
+        # An artifact that recorded its rate for 0.9 of the reference, rather than
+        # for the reference itself, prices identically.
         collected = artifact()
         collected['normalization'].update(target_fraction_of_local_pre_v2_worst=0.9,
                                           varops_per_nanosecond=40 / (2.0 * 0.9))
@@ -208,7 +210,7 @@ class CalibrationPipelineTests(unittest.TestCase):
         self.assertEqual(meta['model_id'], calibration.MODEL_ID)
         by_name = {p['family']: p for p in points}
         self.assertEqual(by_name['PRODUCE']['x'], 6.5)
-        self.assertEqual(by_name['PRODUCE']['y'], 1010)
+        self.assertAlmostEqual(by_name['PRODUCE']['y'], 1010 / 0.9)
         self.assertEqual(by_name['NORMALIZE']['v'], 8)
         self.assertIn('borrow-chain', by_name['ARITH']['group'])
 

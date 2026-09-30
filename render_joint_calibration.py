@@ -13,7 +13,7 @@ from pathlib import Path
 import tempfile
 
 from restyle_report import restyle
-from fit_calibrations import MAX_EPOCH_NOISE, PER_WORD, check_source_snapshots, envelope_model, features, formulas, hash_span, failed_conditions, independent_models, load_calibration, predict, rounded_candidate
+from fit_calibrations import MAX_EPOCH_NOISE, PER_WORD, TARGET_FRACTION, check_source_snapshots, envelope_model, features, formulas, hash_span, failed_conditions, independent_models, load_calibration, predict, rounded_candidate
 
 
 # Sections: the BIP 440 primitive categories, then one section per later BIP. A
@@ -468,8 +468,8 @@ def diagnostics_html(joint, machines, dataset, same_schedule):
         parts.append(f'<h3>Fixtures above the charge · schedule: {esc(label)}</h3>'
                      f'<p>{len(above):,} of {coverage["checked"]:,} included machine-fixture medians of priced primitives '
                      'are above their charge. <strong>Measured ÷ charge</strong> uses the normalization of the fits, a full '
-                     'budget in the machine&#39;s pre-v2 reference time: above 1, a budget spent on the fixture alone would '
-                     'take longer than the reference.</p>')
+                     f'budget in {TARGET_FRACTION:g}× the machine&#39;s pre-v2 reference time: above 1, a budget spent on the '
+                     'fixture alone would take longer than that.</p>')
         worst = {}
         for item in above:
             worst.setdefault(item['family'], item)
