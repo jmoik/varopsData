@@ -124,7 +124,6 @@ NOTES = {
 RUN_NOTES = [
     'The Intel Core i7-7700 has no SHA extensions, so SHA256 runs in software (SSE4/AVX2). Its slowest pre-v2 case is a HASH256 script rather than CHECKSIGVERIFY, and SHA256 costs 37 varops per hashed byte on it, against 8–12 on the machines with SHA extensions. It alone sets the SHA256 byte rate.',
     'Prepared operands are cycled through a pool of 8 MB, the stack payload limit of one script. The size is a chosen measurement setting, not a proven bound on a script’s working set, which also includes retained capacity, temporaries and other evaluator memory; complete-script benchmarks cover those. With an earlier 64 MiB pool the flats of READ, ARITH, MUL and DIV on the AMD Ryzen 9 9950X (Windows, clang-cl) were far above the other machines (MUL 2,551, DIV 1,294); with the 8 MB pool they are in line with the others.',
-    'The Apple M4 Pro ran on a computer loaded by other work: over the 15 minutes logged, the 1-minute load average had a median of 3.3 and a peak of 7.4. Its worst pre-v2 reference case varied by 14.3% between rounds, against at most 0.3% on the other machines (see Diagnostics). Recheck it on a quiet machine.',
 ]
 
 def implemented_numbers(family):
@@ -436,18 +435,15 @@ def check_chart(key, points):
     return ''.join(pieces)
 
 
-def reference_spread(dataset, artifact):
-    """Per-round spread of the worst pre-v2 reference case, from a recovered reference CSV export."""
-    export = dataset / 'reference-csv' / (Path(artifact).name.removeprefix('varop-calibration-')
-                                          .removesuffix('.json').removesuffix('-3epoch') + '-reference.json')
-    if not export.exists():
+def reference_spread(artifact):
+    """Per-round spread of the worst pre-v2 reference case, from the artifact's summary row."""
+    reference = json.loads(Path(artifact).read_text())['reference']
+    row = next((row for row in reference['raw_rows'] if row['Record_Type'] == 'summary'
+                and row['Name'] == reference['worst_case'] and row['Wall_Min_Seconds']), None)
+    if row is None:
         return None
-    reference = json.loads(export.read_text())['reference']
-    row = next(row for row in reference['raw_rows'] if row['Record_Type'] == 'summary'
-               and row['Name'] == reference['worst_case'] and row['Wall_Min_Seconds'])
     low, high = float(row['Wall_Min_Seconds']), float(row['Wall_Max_Seconds'])
-    return dict(case=row['Opcode'], rounds=int(row['Samples']), low=low, high=high, spread=high / low - 1,
-                export=export.relative_to(dataset).as_posix())
+    return dict(case=row['Opcode'], rounds=int(row['Samples']), low=low, high=high, spread=high / low - 1)
 
 
 def diagnostics_html(joint, machines, dataset, same_schedule):
@@ -537,29 +533,33 @@ def diagnostics_html(joint, machines, dataset, same_schedule):
                          f'<td>{item["max_above_fit"]:.2f}×</td></tr>')
         parts.append('</tbody></table></div></details>')
 
-    parts.append('<h3>Run conditions</h3><p>The runner now measures the pre-v2 reference before and '
-                 'after the primitives and samples the one-minute load average during the run. A run whose median load '
-                 'exceeds 1.5 or whose reference moves by more than 5% fails its conditions, and the fitter rejects it '
-                 'unless an exploratory fit is requested. Both thresholds are provisional screening checks, not accuracy '
-                 'guarantees. These runs predate the checks and show “not recorded”; their within-run spread comes from '
-                 'the recovered reference samples.</p>')
+    recorded = [machine['meta'].get('conditions') is not None for machine in machines]
+    parts.append('<h3>Run conditions</h3><p>The runner measures the pre-v2 reference before and after the primitives '
+                 'and samples the one-minute load average during the run. A run whose median load exceeds 1.5 or whose '
+                 'reference moves by more than 5% fails its conditions, and the fitter rejects it unless an exploratory '
+                 'fit is requested. Both thresholds are provisional screening checks, not accuracy guarantees; Windows '
+                 'reports no load average.' +
+                 ('' if all(recorded) else ' Runs from before these checks show “not recorded”.') +
+                 ' The last column is the spread of the worst reference case over its rounds at the start of the run.</p>')
     parts.append('<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Reference (s)</th>'
                  '<th>Reference drift</th><th>Median load</th><th>Worst reference case: per-round range</th>'
                  '</tr></thead><tbody>')
     for machine in machines:
         meta = machine['meta']
         conditions = meta.get('conditions')
-        spread = reference_spread(dataset, meta['file'])
+        spread = reference_spread(meta['file'])
         drift = f'{100 * conditions["reference_drift"]:+.1f}%' if conditions else 'not recorded'
         load = conditions.get('median_one_minute_load') if conditions else None
         load = f'{load:.1f}' if load is not None else ('unavailable' if conditions else 'not recorded')
         rounds = (f'{esc(spread["case"])}, {spread["rounds"]} rounds: {spread["low"]:.3f}–{spread["high"]:.3f} s '
-                  f'({100 * spread["spread"]:.1f}%)' if spread else 'reference samples not recovered')
+                  f'({100 * spread["spread"]:.1f}%)' if spread else 'not recorded')
         parts.append(f'<tr><td>{esc(machine["label"])}</td><td>{meta["reference_seconds"]:.3f}</td><td>{drift}</td>'
                      f'<td>{load}</td><td>{rounds}</td></tr>')
-    parts.append('</tbody></table></div>'
-                 '<p>The recovered samples and their provenance are in <code>reference-csv/</code> of the dataset.</p>'
-                 '</div><!--/diagnostics-->')
+    parts.append('</tbody></table></div>')
+    if (dataset / 'reference-csv').exists():
+        parts.append('<p>Recovered per-round reference samples and their provenance are in <code>reference-csv/</code> '
+                     'of the dataset.</p>')
+    parts.append('</div><!--/diagnostics-->')
     return ''.join(parts)
 
 
