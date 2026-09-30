@@ -100,6 +100,46 @@ class CalibrationPipelineTests(unittest.TestCase):
                           (0.0012, 9.2, 10, 10.1, 99.1, 100, 100.1, 999.1, 1000, 1000.1, 9950.5, 10000, 10001)],
                          [1, 10, 10, 11, 100, 100, 110, 1000, 1000, 1100, 10000, 10000, 11000])
 
+    def test_candidate_charge_uses_pricing_units(self):
+        c = {'PRODUCE': [680, 7], 'PREP': [180, 1], 'H256': [280, 38], 'MOVE': [180, 23], 'SIG': [500000, 0],
+             'MULCORE': [340, 5, 110, 29], 'F': [310, 0]}
+        # WRITE is charged on W(n), PREPARE per word, hashes on the block span.
+        self.assertEqual(calibration.candidate_charge('PRODUCE', dict(x=9, group='g'), c), 680 + 7 * 16)
+        self.assertEqual(calibration.candidate_charge('PREP', dict(x=9, group='spare'), c), 180 + 2)
+        self.assertEqual(calibration.candidate_charge('H256', dict(x=56, group='g'), c), 280 + 38 * 128)
+        self.assertEqual(calibration.candidate_charge('MOVE', dict(x=3, group='g'), c), 180 + 69)
+        self.assertEqual(calibration.candidate_charge('SIG', dict(x=32, group='g'), c), 500000 + 280 + 38 * 128)
+        self.assertEqual(calibration.candidate_charge('F', dict(x=1, group='g'), c), 310)
+        mul = dict(x=4, c=4, v=8, group='v=2')
+        self.assertEqual(calibration.candidate_charge('MULCORE', mul, c), 340 + 5 * 4 + 110 * 2 + 29 * 8)
+
+    def test_diagnostics_flag_gate_failures_and_undercharges(self):
+        # One machine whose fit is exact except one fixture measured at twice its fit.
+        pts = [dict(family='MOVE', machine='m', group='g', x=x, c=1, v=x, y=100 + 10 * x, included=True,
+                    label=f'MOVE/{x}/g') for x in (1, 2, 3, 4, 5, 6, 7, 8, 9)]
+        pts[4]['y'] *= 2
+        gate = calibration.quality_gate({'MOVE': pts}, [{'MOVE': (100, 10)}], ['m'], ['M'])
+        self.assertEqual((gate['gate_bins'], gate['bins_by_machine'], len(gate['gate_failures'])), (1, {'M': 1}, 1))
+        failure = gate['gate_failures'][0]
+        self.assertAlmostEqual(failure['max_above_fit'], 2)
+        self.assertEqual(failure['max_below_fit'], 1)
+        # The one-sided RMS counts the fixture above the fit among all nine.
+        self.assertAlmostEqual(failure['rms_above_fit'], 2 ** (1 / 3))
+        coverage = calibration.charge_coverage({'MOVE': pts}, {'MOVE': [100, 10]}, ['m'], ['M'])
+        self.assertEqual(coverage['checked'], 9)
+        self.assertEqual([item['fixture'] for item in coverage['above_charge']], ['MOVE/5/g'])
+        self.assertAlmostEqual(coverage['above_charge'][0]['ratio_at_target'], 2)
+        self.assertAlmostEqual(coverage['above_charge'][0]['ratio_at_limit'], 1.8)
+        self.assertEqual(len(coverage['above_limit']), 1)
+        # A charge 1.9x the fit still covers the limit, not the target.
+        coverage = calibration.charge_coverage({'MOVE': pts}, {'MOVE': [190, 19]}, ['m'], ['M'])
+        self.assertEqual((len(coverage['above_charge']), coverage['above_limit']), (1, []))
+        # Excluded fixtures are neither gated nor flagged.
+        pts[4]['included'] = False
+        gate = calibration.quality_gate({'MOVE': pts}, [{'MOVE': (100, 10)}], ['m'], ['M'])
+        coverage = calibration.charge_coverage({'MOVE': pts}, {'MOVE': [100, 10]}, ['m'], ['M'])
+        self.assertEqual((gate['gate_failures'], coverage['above_charge'], coverage['checked']), ([], [], 8))
+
     def test_source_verification_uses_recorded_commit(self):
         raw = b'original\nsource\n'
         head = 'a' * 40

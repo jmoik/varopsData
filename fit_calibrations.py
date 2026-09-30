@@ -224,7 +224,8 @@ def load_calibration(path, target_fraction=TARGET_FRACTION):
                 head=data["fitting"]["metadata"].get("head"),
                 fixture_count=len(points), reference_seconds=data["normalization"]["local_pre_v2_worst_seconds"],
                 target_fraction=target_fraction, recorded_target_fraction=recorded_fraction,
-                varops_per_nanosecond=rate, source_sha256=data["source_sha256"])
+                varops_per_nanosecond=rate, source_sha256=data["source_sha256"],
+                conditions=data.get("conditions"))
     return points, meta
 
 
@@ -670,18 +671,117 @@ def fit_all(series, penalty):
     return fits
 
 
-def diagnostics(family, points, coeff, fits):
-    errors = [math.log(predict(family, p, coeff, fits) / p["y"]) for p in points]
-    ws = weights(points)
-    return dict(fixtures=len(points), rms_factor=math.exp(math.sqrt(sum(w * e * e for w, e in zip(ws, errors)))),
-                below_count=sum(e < -1e-12 for e in errors),
-                max_under_factor=max([1.0] + [math.exp(-e) for e in errors]))
+# BIP 440 Appendix A quality gate, checked within every size decade of every path.
+QUALITY_GATE = dict(max_rms_factor=1.10, within_factor=1.25, min_within_share=0.95)
+
+
+def candidate_charge(family, point, candidates):
+    """The rounded candidate's charge for one fixture, in the units varops.h charges it."""
+    coeff = candidates[family]
+    if family == "SIG":
+        a, b = candidates["H256"]
+        return coeff[0] + a + b * hash_span(64 + point["x"])
+    if family in CONSTANT:
+        return coeff[0]
+    if family in {"DIVCORE", "MULCORE"}:
+        return predict(family, point, coeff, {})
+    if family in PER_WORD:
+        return coeff[0] + coeff[1] * word(point["x"]) / 8
+    if family in WORD_PRICED:
+        return coeff[0] + coeff[1] * word(point["x"])
+    c, v = features(family, point["x"], point["group"])
+    return coeff[0] * c + coeff[1] * v
+
+
+def quality_gate(series, models, machine_keys, machine_names):
+    """Every machine fit against its own included fixtures, per path and size decade."""
+    gate_failures, bins = [], Counter()
+    for family, points in series.items():
+        if family in CHECKS or family not in models[0]:
+            continue
+        for index, (key, machine) in enumerate(zip(machine_keys, machine_names)):
+            groups = defaultdict(list)
+            for p in points:
+                if p["included"] and p["machine"] == key:
+                    groups[p["group"], decade(p["x"])].append(p)
+            for (group, size_decade), ps in sorted(groups.items()):
+                bins[machine] += 1
+                errors = [math.log(predict(family, p, models[index][family], models[index]) / p["y"]) for p in ps]
+                rms = math.exp(math.sqrt(sum(e * e for e in errors) / len(errors)))
+                within = sum(abs(e) <= math.log(QUALITY_GATE["within_factor"]) for e in errors) / len(errors)
+                if rms > QUALITY_GATE["max_rms_factor"] or within < QUALITY_GATE["min_within_share"]:
+                    # The one-sided figures count only fixtures above the fit, where it under-predicts.
+                    under = [min(e, 0.0) for e in errors]
+                    gate_failures.append(dict(machine=machine, family=family, group=group, decade=size_decade,
+                                              fixtures=len(ps), rms_factor=rms, within_share=within,
+                                              max_above_fit=max(1.0, math.exp(-min(errors))),
+                                              max_below_fit=max(1.0, math.exp(max(errors))),
+                                              rms_above_fit=math.exp(math.sqrt(sum(e * e for e in under) / len(under)))))
+    return dict(quality_gate=QUALITY_GATE, gate_bins=sum(bins.values()), bins_by_machine=dict(bins),
+                gate_failures=gate_failures)
+
+
+def charge_coverage(series, schedule, machine_keys, machine_names, target_fraction=TARGET_FRACTION):
+    """Included fixtures measured above the charge of one schedule.
+
+    ratio_at_target is measured / charged, with measurements normalized so that a full
+    budget takes the target fraction (0.9) of the machine's reference; above 1, a full
+    budget of that fixture exceeds the target. ratio_at_limit = ratio_at_target *
+    target_fraction; above 1, it would exceed the reference itself. A primitive fixture
+    above its charge is a diagnostic finding; only complete scripts establish a limit
+    violation."""
+    above, checked = [], 0
+    for family, points in series.items():
+        if family not in schedule:
+            continue
+        names = dict(zip(machine_keys, machine_names))
+        for p in points:
+            if not p["included"] or p["machine"] not in names:
+                continue
+            checked += 1
+            charge = candidate_charge(family, p, schedule)
+            if p["y"] > charge:
+                above.append(dict(machine=names[p["machine"]], family=family, fixture=p["label"],
+                                  measured_varops=p["y"], charged_varops=charge, ratio_at_target=p["y"] / charge,
+                                  ratio_at_limit=p["y"] / charge * target_fraction))
+    above.sort(key=lambda item: -item["ratio_at_target"])
+    return dict(target_fraction=target_fraction, checked=checked, above_charge=above,
+                above_limit=[item for item in above if item["ratio_at_limit"] > 1])
+
+
+def report_diagnostics(diag, machines):
+    """Print the quality gate, fixtures above each schedule's charge, and run conditions."""
+    gate = diag["quality_gate"]
+    print(f"\nQuality gate of the machine fits (RMS factor <= {gate['quality_gate']['max_rms_factor']}, "
+          f">= {100 * gate['quality_gate']['min_within_share']:g}% within {gate['quality_gate']['within_factor']}x, "
+          f"per machine, path and size decade): {len(gate['gate_failures'])} of {gate['gate_bins']} bins fail, "
+          f"{sum(item['max_above_fit'] > gate['quality_gate']['within_factor'] for item in gate['gate_failures'])} "
+          f"with a fixture more than {gate['quality_gate']['within_factor']}x above its fit")
+    for name, coverage in diag["charge_coverage"].items():
+        target = coverage["target_fraction"]
+        print(f"Charge coverage, {name} schedule: {len(coverage['above_charge'])} fixtures above the charge at the "
+              f"{target:g} target, {len(coverage['above_limit'])} above the 1.0 limit")
+        worst = {}
+        for item in coverage["above_charge"]:
+            worst.setdefault(item["family"], item)
+        for family, item in worst.items():
+            count = sum(other["family"] == family for other in coverage["above_charge"])
+            print(f"  {family:<10} {count:4d} fixtures; worst {item['ratio_at_target']:.2f}x at the target, "
+                  f"{item['ratio_at_limit']:.2f}x at the limit: {item['fixture']} on {item['machine']}")
+    for meta in machines:
+        conditions = meta.get("conditions")
+        if conditions is None:
+            print(f"Conditions: {meta['label']}: not recorded (reference measured once, load not sampled)")
+        elif conditions["problems"]:
+            print(f"Conditions: {meta['label']}: " + "; ".join(conditions["problems"]))
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("calibrations", type=Path, nargs="+", help="Per-machine varop-calibration JSON files")
     parser.add_argument("--output", type=Path, help="Combined JSON (default: beside the first input)")
+    parser.add_argument("--implemented", type=Path,
+                        help="JSON with the implemented schedule ({source, coefficients}) to check coverage against as well")
     parser.add_argument("--source-root", type=Path, help="Git repository containing the recorded commits for source verification")
     parser.add_argument("--target-fraction", type=float, default=TARGET_FRACTION,
                         help="fraction of each machine's pre-v2 reference that a full budget of fitted work may take (default: %(default)s)")
@@ -759,6 +859,20 @@ def main():
                                             notes=("SIG is a measured residual; 500000-varop sigops parity is a separate policy decision" if family == "SIG" else
                                                    "RELEASE capacity is diagnostic, not a consensus charge input" if family == "RELEASE" else ""))
         print(f"{family:<10} {formulas(family, envelope[family]):<48} {formulas(family, candidate, candidate=True):<38} {formulas(family, max_coeff[family])}")
+    candidates = {family: record["candidate_coefficients"] for family, record in result["primitives"].items()}
+    keys = [str(path) for path in paths]
+    for meta in machines:
+        meta["label"] = meta["cpu"] if meta["cpu"] not in {None, "", "Unknown"} else Path(meta["file"]).stem
+    labels = [meta["label"] for meta in machines]
+    schedules = {"candidate": candidates}
+    if args.implemented:
+        implemented = json.loads(args.implemented.read_text())
+        schedules[f"implemented ({implemented['source']})"] = implemented["coefficients"]
+    result["diagnostics"] = dict(
+        quality_gate=quality_gate(series, models, keys, labels),
+        charge_coverage={name: charge_coverage(series, schedule, keys, labels, args.target_fraction)
+                         for name, schedule in schedules.items()})
+    report_diagnostics(result["diagnostics"], machines)
     if output.exists():
         previous = json.loads(output.read_text())
         # Older fits recorded absolute paths; joining keeps those unchanged.

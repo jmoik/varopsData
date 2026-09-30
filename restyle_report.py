@@ -442,6 +442,8 @@ def restyle(src):
         lede = first.group(2)
         header = header[first.end():]
     header = re.sub(r'<nav class="nav".*?</nav>', '', header, flags=re.S)
+    diagnostics = re.search(r'<div id="diagnostics"><h2>(.*?)</h2>(.*?)</div><!--/diagnostics-->', header, re.S)
+    header = header.replace(diagnostics.group(0), '') if diagnostics else header
     legend = re.search(r'<div class="legend">(.*?)</div>', header, re.S)
     header = header.replace(legend.group(0), '') if legend else header
     header = re.sub(r'<table>(.*?)</table>',
@@ -469,6 +471,8 @@ def restyle(src):
                         f'<td class="basis"><code>{basis}</code></td></tr>')
 
     sidebar = ['<aside class="sidebar" aria-label="Primitives"><h4>Report</h4><a href="#overview"><span>Overview</span></a>']
+    if diagnostics:
+        sidebar.append('<a href="#diagnostics"><span>Diagnostics</span></a>')
     for cid, cname, prims in cats:
         sidebar.append(f'<h4>{cname}</h4>')
         sidebar += [f'<a href="#{pid}"><span class="p">{name}</span><span class="v">{html.escape(strip_tags(price))}</span></a>'
@@ -499,6 +503,8 @@ def restyle(src):
         '<div class="card"><div class="card-title">Legend</div><div class="legend-grid">', ''.join(legend_items), '</div></div>'
         if legend_items else '',
         f'<div class="card prose"><div class="card-title">Calibration notes</div>{header}</div>',
+        (f'<div class="card prose" id="diagnostics"><div class="card-title">{diagnostics.group(1)}</div>'
+         f'{diagnostics.group(2)}</div>') if diagnostics else '',
         '</header>', body, '</main></div>', SCRIPT, '</body></html>',
     ]
     doc = ''.join(out)

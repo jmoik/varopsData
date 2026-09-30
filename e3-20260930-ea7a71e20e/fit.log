@@ -15,4 +15,22 @@ SIG        575045                                           500000              
 TWEAK      168387                                           170000                                 168387
 SELECT     2242.67 + 262.315 × k                            2300 + 270 × k                         2242.67 + 262.315 × k
 MULCORE    327.834 + 9.38286 × u + 106.782 × v + 28.2917 × u × v 330 + 10 × u + 110 × v + 29 × u × v    327.834 + 9.38286 × u + 115.152 × v + 28.2917 × u × v
+
+Quality gate of the machine fits (RMS factor <= 1.1, >= 95% within 1.25x, per machine, path and size decade): 1420 of 2412 bins fail, 26 with a fixture more than 1.25x above its fit
+Charge coverage, candidate schedule: 452 fixtures above the charge at the 0.9 target, 90 above the 1.0 limit
+  PRODUCE      74 fixtures; worst 2.32x at the target, 2.09x at the limit: PRODUCE/grow/135410 on Apple M4 Pro
+  READ        131 fixtures; worst 1.49x at the target, 1.34x at the limit: READ/trim/511 on Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz
+  BIT          68 fixtures; worst 1.23x at the target, 1.11x at the limit: BIT/invert/22 on Apple M1 Pro
+  NORMALIZE    28 fixtures; worst 1.23x at the target, 1.10x at the limit: NORMALIZE/aligned/3078660 on varop-calibration-ryzen99500x-3epoch
+  DIVCORE     107 fixtures; worst 1.16x at the target, 1.05x at the limit: DIVCORE/64/64/127/MOD/top-one on 12th Gen Intel(R) Core(TM) i5-12500
+  SIG          19 fixtures; worst 1.12x at the target, 1.01x at the limit: SIG/32 on varop-calibration-ryzen99500x-3epoch
+  ARITH        19 fixtures; worst 1.09x at the target, 0.98x at the limit: ARITH/add/513/equal/carry-chain on Apple M1 Pro
+  SELECT        5 fixtures; worst 1.03x at the target, 0.93x at the limit: SELECT/outputs/collated/128/256 on 12th Gen Intel(R) Core(TM) i5-12500
+  H1            1 fixtures; worst 1.01x at the target, 0.91x at the limit: H1/62 on 12th Gen Intel(R) Core(TM) i5-12500
+Conditions: Apple M4 Pro: not recorded (reference measured once, load not sampled)
+Conditions: Apple M1 Pro: not recorded (reference measured once, load not sampled)
+Conditions: 12th Gen Intel(R) Core(TM) i5-12500: not recorded (reference measured once, load not sampled)
+Conditions: varop-calibration-ryzen99500x-3epoch: not recorded (reference measured once, load not sampled)
+Conditions: Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz: not recorded (reference measured once, load not sampled)
+Conditions: AMD Ryzen 5 3600 6-Core Processor: not recorded (reference measured once, load not sampled)
 Saved e3-20260930-ea7a71e20e/joint-calibration.json

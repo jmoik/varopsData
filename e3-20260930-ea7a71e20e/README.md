@@ -21,3 +21,8 @@ slower references lowered those machines' normalized costs.
 
 `joint-calibration.json` and `fit.log` come from `fit_calibrations.py` over all six artifacts in the order above,
 with `--source-root` on the gsr repository.
+
+`joint-calibration.json` also records diagnostics: the BIP 440 quality gate for every machine, path and size decade,
+and every fixture measured above the candidate charge, as ratios at the 0.9 target and at the 1.0 limit. The report
+shows them under Diagnostics. `reference-csv/` holds the recovered per-round reference samples and corrected
+exports; see its README.

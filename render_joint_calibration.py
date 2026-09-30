@@ -123,8 +123,8 @@ NOTES = {
 # Run conditions that qualify the measurements, shown in the header.
 RUN_NOTES = [
     'The Intel Core i7-7700 has no SHA extensions, so SHA256 runs in software (SSE4/AVX2). Its slowest pre-v2 case is a HASH256 script rather than CHECKSIGVERIFY, and SHA256 costs 37 varops per hashed byte on it, against 8–12 on the machines with SHA extensions. It alone sets the SHA256 byte rate.',
-    'Prepared operands come from a pool no larger than the 8 MB stack one script can hold. With the earlier 64 MiB pool the AMD Ryzen 9 9950X (Windows, clang-cl) timed operands already evicted to memory, which set the flats of READ, ARITH, MUL and DIV far above the other machines (MUL 2,551, DIV 1,294); with the smaller pool its flats are in line with the others.',
-    'The Apple M4 Pro ran while the computer was heavily loaded by other work (1-minute load average median 9.4, peak 24.9); its slowest pre-v2 case took 1.68 s against 1.58 s unloaded, and MUL 262144×32 lies 1.4× above the envelope. Recheck it on a quiet machine.',
+    'Prepared operands come from a pool no larger than the 8 MB stack one script can hold, which bounds a fixture’s working set by that of one script without assuming it stays in cache. With the earlier 64 MiB pool the flats of READ, ARITH, MUL and DIV on the AMD Ryzen 9 9950X (Windows, clang-cl) were far above the other machines (MUL 2,551, DIV 1,294), consistent with memory misses on a working set no script can hold; with the smaller pool its flats are in line with the others.',
+    'The Apple M4 Pro ran on a computer loaded by other work: over the 15 minutes logged, the 1-minute load average had a median of 3.3 and a peak of 7.4. Its worst pre-v2 reference case varied by 14.3% between rounds, against at most 0.3% on the other machines (see Diagnostics). Recheck it on a quiet machine.',
 ]
 
 def implemented_numbers(family):
@@ -436,6 +436,137 @@ def check_chart(key, points):
     return ''.join(pieces)
 
 
+def reference_spread(dataset, artifact):
+    """Per-round spread of the worst pre-v2 reference case, from a recovered reference CSV export."""
+    export = dataset / 'reference-csv' / (Path(artifact).name.removeprefix('varop-calibration-')
+                                          .removesuffix('.json').removesuffix('-3epoch') + '-reference.json')
+    if not export.exists():
+        return None
+    reference = json.loads(export.read_text())['reference']
+    row = next(row for row in reference['raw_rows'] if row['Record_Type'] == 'summary'
+               and row['Name'] == reference['worst_case'] and row['Wall_Min_Seconds'])
+    low, high = float(row['Wall_Min_Seconds']), float(row['Wall_Max_Seconds'])
+    return dict(case=row['Opcode'], rounds=int(row['Samples']), low=low, high=high, spread=high / low - 1,
+                export=export.relative_to(dataset).as_posix())
+
+
+def diagnostics_html(joint, machines, dataset, same_schedule):
+    """Quality gate, fixtures above the charge and run conditions, from the joint fit's diagnostics."""
+    diag = joint.get('diagnostics')
+    if not diag:
+        return ''
+    names = {machine['meta']['label']: machine['label'] for machine in machines}
+    gate = diag['quality_gate']
+    limits = gate['quality_gate']
+    within = limits['within_factor']
+    parts = ['<div id="diagnostics"><h2>Diagnostics</h2>',
+             '<p>These checks qualify the candidate; they do not change it. A primitive fixture measured above its charge '
+             'is a diagnostic finding. Whether a script can exceed its machine&#39;s pre-v2 reference is established by '
+             'complete-script benchmarks (<code>bench_varops</code>), so the primitive definitions stay as they are '
+             'while these cases are investigated.</p>']
+
+    for name, coverage in diag['charge_coverage'].items():
+        target = coverage['target_fraction']
+        label = ('candidate, identical to the implemented charges' if name == 'candidate' and same_schedule
+                 else name)
+        parts.append(f'<h3>Fixtures above the charge · schedule: {esc(label)}</h3>'
+                     f'<p>{len(coverage["above_charge"]):,} of {coverage["checked"]:,} included machine-fixture medians of priced primitives are above '
+                     f'the charge at the {target:g} target; {len(coverage["above_limit"])} are above it at the 1.0 limit. '
+                     f'<strong>Measured ÷ charge at the {target:g} target</strong> uses the normalization of the fits: '
+                     f'above 1, a budget spent on the fixture alone takes more than {target:g}× the machine&#39;s reference. '
+                     f'<strong>At the 1.0 limit</strong> the same measurement is normalized to the reference itself '
+                     f'(the first ratio × {target:g}): above 1, it would take longer than the reference.</p>')
+        worst = {}
+        for item in coverage['above_charge']:
+            worst.setdefault(item['family'], item)
+        parts.append('<div class="table-wrap"><table><thead><tr><th>Primitive</th><th>Fixtures above charge '
+                     f'({target:g} target)</th><th>Above 1.0 limit</th><th>Worst fixture</th><th>Machine</th>'
+                     f'<th>Measured ÷ charge, {target:g} target</th><th>Measured ÷ charge, 1.0 limit</th></tr></thead><tbody>')
+        for family, item in worst.items():
+            count = sum(other['family'] == family for other in coverage['above_charge'])
+            over = sum(other['family'] == family for other in coverage['above_limit'])
+            parts.append(f'<tr><td><a href="#{family}">{esc(DISPLAY.get(family, family))}</a></td><td>{count}</td>'
+                         f'<td>{over}</td><td><code>{esc(item["fixture"])}</code></td>'
+                         f'<td>{esc(names.get(item["machine"], item["machine"]))}</td>'
+                         f'<td>{item["ratio_at_target"]:.2f}×</td><td>{item["ratio_at_limit"]:.2f}×</td></tr>')
+        parts.append('</tbody></table></div>')
+        if coverage['above_limit']:
+            parts.append(f'<details><summary>All {len(coverage["above_limit"])} fixtures above the charge at the 1.0 '
+                         'limit</summary><div class="table-wrap"><table><thead><tr><th>Fixture</th><th>Machine</th>'
+                         f'<th>Measured varops ({target:g} target)</th><th>Charged varops</th>'
+                         f'<th>{target:g} target</th><th>1.0 limit</th></tr></thead><tbody>')
+            for item in coverage['above_limit']:
+                parts.append(f'<tr><td><code>{esc(item["fixture"])}</code></td>'
+                             f'<td>{esc(names.get(item["machine"], item["machine"]))}</td>'
+                             f'<td>{item["measured_varops"]:,.0f}</td><td>{item["charged_varops"]:,.0f}</td>'
+                             f'<td>{item["ratio_at_target"]:.2f}×</td><td>{item["ratio_at_limit"]:.2f}×</td></tr>')
+            parts.append('</tbody></table></div></details>')
+
+    failures = gate['gate_failures']
+    under = [item for item in failures if item['max_above_fit'] > within]
+    below = [item for item in failures if item not in under and item['max_below_fit'] > within]
+    one_sided = [item for item in failures if item['rms_above_fit'] > limits['max_rms_factor']]
+    parts.append(f'<h3>Quality gate of the machine fits</h3><p>BIP 440 Appendix A asks each machine&#39;s fit to meet, '
+                 f'within every path and size decade: an RMS factor of at most {limits["max_rms_factor"]:.2f} and at '
+                 f'least {100 * limits["min_within_share"]:g}% of fixtures within {within:g}× of the fit. '
+                 f'{len(failures):,} of {gate["gate_bins"]:,} bins fail. The gate counts both directions. In '
+                 f'{len(under)} failing bins a fixture lies more than {within:g}× above its own machine&#39;s fit, where '
+                 f'the fit under-predicts. Of the other {len(failures) - len(under):,}, {len(below):,} have a fixture more '
+                 f'than {within:g}× below the fit, where it over-predicts and the charge errs on the safe side, and '
+                 f'{len(failures) - len(under) - len(below)} fail on the RMS factor with every fixture within {within:g}× '
+                 f'of the fit. Counting only fixtures above the fit (<em>RMS above the fit</em>), {len(one_sided)} failing '
+                 f'bins exceed {limits["max_rms_factor"]:.2f}. Size decade <em>d</em> holds sizes 10<sup><em>d</em></sup> '
+                 'to 10<sup><em>d</em>+1</sup> − 1 (decade −1 is size 0).</p>')
+    parts.append('<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Bins</th><th>Failing</th>'
+                 f'<th>Fixture more than {within:g}× above the fit</th>'
+                 f'<th>RMS above the fit over {limits["max_rms_factor"]:.2f}</th></tr></thead><tbody>')
+    for machine in machines:
+        label = machine['meta']['label']
+        failing = [item for item in failures if item['machine'] == label]
+        parts.append(f'<tr><td>{esc(machine["label"])}</td><td>{gate["bins_by_machine"][label]}</td>'
+                     f'<td>{len(failing)}</td><td>{sum(item in under for item in failing)}</td>'
+                     f'<td>{sum(item in one_sided for item in failing)}</td></tr>')
+    parts.append('</tbody></table></div>')
+    if under:
+        parts.append(f'<details><summary>The {len(under)} bins with a fixture more than {within:g}× above the fit'
+                     '</summary><div class="table-wrap"><table><thead><tr><th>Primitive</th><th>Path</th><th>Decade</th>'
+                     '<th>Machine</th><th>Fixtures</th><th>RMS factor</th><th>RMS above the fit</th><th>Within</th>'
+                     '<th>Most above the fit</th>'
+                     '</tr></thead><tbody>')
+        for item in sorted(under, key=lambda item: -item['max_above_fit']):
+            parts.append(f'<tr><td><a href="#{item["family"]}">{esc(DISPLAY.get(item["family"], item["family"]))}</a></td>'
+                         f'<td><code>{esc(item["group"])}</code></td><td>{item["decade"]}</td>'
+                         f'<td>{esc(names.get(item["machine"], item["machine"]))}</td><td>{item["fixtures"]}</td>'
+                         f'<td>{item["rms_factor"]:.2f}</td><td>{item["rms_above_fit"]:.2f}</td>'
+                         f'<td>{100 * item["within_share"]:.0f}%</td>'
+                         f'<td>{item["max_above_fit"]:.2f}×</td></tr>')
+        parts.append('</tbody></table></div></details>')
+
+    parts.append('<h3>Run conditions</h3><p>The runner is being extended to measure the pre-v2 reference before and '
+                 'after the primitives and to sample the one-minute load average during the run; a run is to be repeated '
+                 'if its median load exceeds 1.5 or the reference moves by more than 5%. Both are provisional screening '
+                 'thresholds, not accuracy guarantees. These runs predate the checks and show “not recorded”; their '
+                 'within-run spread comes from the recovered reference samples.</p>')
+    parts.append('<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Reference (s)</th>'
+                 '<th>Reference drift</th><th>Median load</th><th>Worst reference case: per-round range</th>'
+                 '</tr></thead><tbody>')
+    for machine in machines:
+        meta = machine['meta']
+        conditions = meta.get('conditions')
+        spread = reference_spread(dataset, meta['file'])
+        drift = f'{100 * conditions["reference_drift"]:+.1f}%' if conditions else 'not recorded'
+        load = conditions.get('median_one_minute_load') if conditions else None
+        load = f'{load:.1f}' if load is not None else ('unavailable' if conditions else 'not recorded')
+        rounds = (f'{esc(spread["case"])}, {spread["rounds"]} rounds: {spread["low"]:.3f}–{spread["high"]:.3f} s '
+                  f'({100 * spread["spread"]:.1f}%)' if spread else 'reference samples not recovered')
+        parts.append(f'<tr><td>{esc(machine["label"])}</td><td>{meta["reference_seconds"]:.3f}</td><td>{drift}</td>'
+                     f'<td>{load}</td><td>{rounds}</td></tr>')
+    parts.append('</tbody></table></div>'
+                 '<p>The recovered samples and their provenance are in <code>reference-csv/</code> of the dataset.</p>'
+                 '</div><!--/diagnostics-->')
+    return ''.join(parts)
+
+
 def render(joint_path, output, source_root=None, title="Varops 0.4.0 · multi-machine calibration"):
     joint = json.loads(joint_path.read_text())
     audit_path = joint_path.with_name('source-verification.json')
@@ -566,6 +697,8 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
                          if candidate is not None else 'Awaiting calibration')
                 parts.append(f'<tr><td>{name}</td><td><code>{esc(implemented)}</code></td><td>{shown}</td></tr>')
     parts.append('</tbody></table></div>')
+    same_schedule = all(cost_comparison(joint, family)[2] for family in CURRENT_COSTS)
+    parts.append(diagnostics_html(joint, machines, joint_path.parent, same_schedule))
     parts.append('<nav class="nav" aria-label="Sections">')
     for section in SECTIONS:
         parts.append(f'<a href="#{section["slug"]}">{esc(section["title"].split(" · ")[0])}</a>')
