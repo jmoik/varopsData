@@ -10,6 +10,7 @@ Inputs remain unchanged. This is a descriptive fit, not consensus validation.
 
 import argparse
 from collections import Counter, defaultdict
+from concurrent.futures import ProcessPoolExecutor
 import hashlib
 import itertools
 import json
@@ -431,37 +432,58 @@ def maximum_coefficients(models):
             for f in first}
 
 
-def machine_model(path, target_fraction=TARGET_FRACTION):
+# machine_model's refits in three independent parts, slowest first, so a process
+# pool can run every machine's parts at once. They merge in the order below.
+REFIT_PARTS = ('MULCORE', 'DIVCORE', 'other')
+FIT_PROCESSES = 12
+
+
+def refit_part(path, target_fraction, part):
+    """One part of machine_model's refits from the recorded samples."""
+    points, _ = load_calibration(Path(path), target_fraction)
+
+    def included(family):
+        return [p for p in points if p['family'] == family and p['included']]
+
+    if part == 'DIVCORE':
+        return {'DIVCORE': tuple(fit_divcore(included('DIVCORE'), 100))}
+    if part == 'MULCORE':
+        # Recorded MULCORE fits had no per-row term.
+        mul = included('MULCORE')
+        return {'MULCORE': tuple(fit_mulcore(mul, 100))} if mul else {}
+    model = {}
+    # Recorded hash fits used message bytes; refit on the padded hash-block span.
+    for family in ('H256', 'H160', 'H1'):
+        model[family] = tuple(fit(included(family), 'affine', 100))
+    # Recorded PRODUCE fits included the shrink fixtures that loading now skips.
+    model['PRODUCE'] = tuple(fit(included('PRODUCE'), 'affine', 100))
+    # NORMALIZE is flat: conversion hands the buffer over in place, whatever its
+    # size. Recorded fits were affine and included the offset-span diagnostic.
+    model['NORMALIZE'] = tuple(fit(included('NORMALIZE'), 'constant', 100))
+    # Recorded PREP fits were per word; PREP is fitted and priced per byte of W(n).
+    model['PREP'] = tuple(fit(included('PREP'), 'affine', 100))
+    # Byte reversal belongs to the covenant opcodes; the recorded BIT fit included it.
+    model['BIT'] = tuple(fit(included('BIT'), 'affine', 100))
+    return model
+
+
+def machine_model(path, target_fraction=TARGET_FRACTION, refits=None):
     """Recorded 100x machine fit in varops, with DIVCORE refit from the recorded samples.
 
     Recorded fits are in nanoseconds and are converted at the pricing rate for
     target_fraction. Recorded DIVCORE fits use the superseded quotient-step count;
     the same fitter reproduces them exactly from the samples when given that count.
+    refits maps each of REFIT_PARTS to its refit_part result, when computed elsewhere.
     """
     data = json.loads(Path(path).read_text())
     rate = pricing_rate(data['normalization'], target_fraction)
     model = {f: tuple(record['under_penalty_100_fit'][k] * rate
                       for k in ('a_ns', 'b_ns', 'c_ns') if k in record['under_penalty_100_fit'])
              for f, record in data['fitting']['fits'].items()}
-    points, _ = load_calibration(Path(path), target_fraction)
-    model['DIVCORE'] = tuple(fit_divcore(
-        [p for p in points if p['family'] == 'DIVCORE' and p['included']], 100))
-    # Recorded MULCORE fits had no per-row term.
-    mul = [p for p in points if p['family'] == 'MULCORE' and p['included']]
-    if mul:
-        model['MULCORE'] = tuple(fit_mulcore(mul, 100))
-    # Recorded hash fits used message bytes; refit on the padded hash-block span.
-    for family in ('H256', 'H160', 'H1'):
-        model[family] = tuple(fit([p for p in points if p['family'] == family and p['included']], 'affine', 100))
-    # Recorded PRODUCE fits included the shrink fixtures that loading now skips.
-    model['PRODUCE'] = tuple(fit([p for p in points if p['family'] == 'PRODUCE' and p['included']], 'affine', 100))
-    # NORMALIZE is flat: conversion hands the buffer over in place, whatever its
-    # size. Recorded fits were affine and included the offset-span diagnostic.
-    model['NORMALIZE'] = tuple(fit([p for p in points if p['family'] == 'NORMALIZE' and p['included']], 'constant', 100))
-    # Recorded PREP fits were per word; PREP is fitted and priced per byte of W(n).
-    model['PREP'] = tuple(fit([p for p in points if p['family'] == 'PREP' and p['included']], 'affine', 100))
-    # Byte reversal belongs to the covenant opcodes; the recorded BIT fit included it.
-    model['BIT'] = tuple(fit([p for p in points if p['family'] == 'BIT' and p['included']], 'affine', 100))
+    if refits is None:
+        refits = {part: refit_part(path, target_fraction, part) for part in REFIT_PARTS}
+    for part in ('DIVCORE', 'MULCORE', 'other'):
+        model.update(refits[part])
     for family in CHECKS:
         model.pop(family, None)
     return model
@@ -567,7 +589,14 @@ def independent_models(paths, target_fraction=TARGET_FRACTION):
     DIVCORE is fixed + step + cell on every machine. Maxima over mixed bases
     (e.g. adding a fixed + cell fit) would charge the per-row work twice.
     """
-    return [machine_model(path, target_fraction=target_fraction) for path in paths]
+    tasks = [(index, part) for part in REFIT_PARTS for index in range(len(paths))]
+    refits = [{} for _ in paths]
+    with ProcessPoolExecutor(max_workers=min(len(tasks), FIT_PROCESSES, os.cpu_count() or 1)) as pool:
+        results = pool.map(refit_part, [paths[index] for index, _ in tasks],
+                           itertools.repeat(target_fraction), [part for _, part in tasks])
+        for (index, part), result in zip(tasks, results):
+            refits[index][part] = result
+    return [machine_model(path, target_fraction, refits[index]) for index, path in enumerate(paths)]
 
 
 # Size-dependent rates are priced per byte of the padded length the operation processes:

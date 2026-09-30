@@ -13,7 +13,7 @@ from pathlib import Path
 import tempfile
 
 from restyle_report import restyle
-from fit_calibrations import PER_WORD, check_source_snapshots, envelope_model, features, formulas, hash_span, independent_models, load_calibration, machine_model, predict, rounded_candidate
+from fit_calibrations import PER_WORD, check_source_snapshots, envelope_model, features, formulas, hash_span, independent_models, load_calibration, predict, rounded_candidate
 
 
 # Sections: the BIP 440 primitive categories, then one section per later BIP. A
@@ -459,12 +459,14 @@ def render(joint_path, output, source_root=None, title="Varops 0.4.0 · multi-ma
         raise ValueError("this report renders the producer-normalize-v1 model only")
     target = joint.get("target_fraction", 1.0)
     machines = []
-    for index, meta in enumerate(joint["machines"]):
+    for meta in joint["machines"]:
         source = Path(meta["file"])
         if hashlib.sha256(source.read_bytes()).hexdigest() != meta["sha256"]:
             raise ValueError(f"input changed since the joint fit: {source}")
+    machine_models = independent_models([Path(meta["file"]) for meta in joint["machines"]], target)
+    for meta, model in zip(joint["machines"], machine_models):
+        source = Path(meta["file"])
         points, _ = load_calibration(source, target)
-        model = machine_model(source, target_fraction=target)
         identity = (meta['cpu'] + ' ' + source.name).lower()
         key = next((key for key, token in [('m1', 'm1'), ('m4', 'm4'), ('r5', 'ryzen 5 3600'), ('ryzen', 'ryzen'), ('i7', 'i7-7700'), ('intel', 'intel')] if token in identity), None)
         if key is None or any(m['key'] == key for m in machines):
@@ -476,7 +478,6 @@ def render(joint_path, output, source_root=None, title="Varops 0.4.0 · multi-ma
     joint_model = {family: tuple(record["envelope_coefficients"])
                    for family, record in joint["primitives"].items()}
     models = {machine["key"]: machine["model"] for machine in machines}
-    machine_models = independent_models([machine['meta']['file'] for machine in machines], target)
     series = defaultdict(list)
     for machine in machines:
         for point in machine["points"]:
@@ -685,7 +686,7 @@ window.addEventListener('hashchange',showCategory);showCategory();
     finally:
         if pending is not None:
             pending.unlink(missing_ok=True)
-    print(f"Saved {os.path.relpath(output)}")
+    print(f"Saved {output}")
 
 
 def main():
