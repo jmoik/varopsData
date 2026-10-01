@@ -50,10 +50,8 @@ Put the artifacts in a new folder under `data/`, then fit, render and test (Pyth
 |---|---|
 | `data/2026-10-01-full-runs-one-deduction/` | Current dataset: full runs on six machines after the one-deduction-per-opcode change; the prices come from its fit. |
 | `data/2026-10-01-full-runs/` | Full runs on five machines (no M4 Pro), before that change. |
-| `data/2026-09-30-short-runs/` | Earlier 3-epoch runs on six machines. |
-| `data/2026-09-30-short-runs-byterev-fixtures/` | The same, after OP_BYTEREV's fixtures were corrected. |
 | `report/joint-calibration.html` | The report, rendered from the current dataset. |
 | `src/` | Fitting (`fit_calibrations.py`), the report (`render_joint_calibration.py`, `restyle_report.py`) and tests. |
 | `METHODOLOGY.md` | The full method. |
 
-Each folder in `data/` holds one artifact per machine with every raw sample, the joint fit, the fit log, a source audit and a README with the run details.
+Earlier datasets, such as the 3-epoch runs of 2026-09-30, remain in the Git history (last in `0f5c9fa`). Each folder in `data/` holds one artifact per machine with every raw sample, the joint fit, the fit log, a source audit and a README with the run details.
