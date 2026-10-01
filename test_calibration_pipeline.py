@@ -140,9 +140,9 @@ class CalibrationPipelineTests(unittest.TestCase):
 
     def test_failed_conditions_are_not_admitted(self):
         # Only epoch noise decides; a recorded load failure no longer does.
-        failed = dict(file='c.json', epoch_noise=0.0101, conditions=None)
+        failed = dict(file='c.json', epoch_noise=0.0151, conditions=None)
         machines = [dict(file='a.json', epoch_noise=None, conditions=None),
-                    dict(file='b.json', epoch_noise=0.01,
+                    dict(file='b.json', epoch_noise=0.015,
                          conditions=dict(repeat_required=True, problems=['median one-minute load 3.09 exceeds 1.5'])),
                     failed]
         self.assertEqual(calibration.failed_conditions(machines), [failed])

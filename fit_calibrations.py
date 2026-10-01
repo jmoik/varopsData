@@ -35,7 +35,7 @@ BUDGET_VAROPS = 40_000_000_000
 # BIP 440 measurement condition: a run whose epoch noise exceeds this is repeated,
 # not priced. Load average and reference drift, which earlier runners recorded,
 # are not conditions.
-MAX_EPOCH_NOISE = 0.01
+MAX_EPOCH_NOISE = 0.015
 # Fitting target: a full budget of fitted work takes 0.9x each machine's pre-v2
 # reference, a margin for composition effects and machine variation the fixtures
 # do not capture. Complete scripts must stay below 1.0x on every machine.

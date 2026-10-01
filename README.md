@@ -11,8 +11,9 @@ cost model live on the `gsr` branch of [jmoik/bitcoin](https://github.com/jmoik/
 
 | Path | |
 |---|---|
-| `e3-20260930-13e9a89dc7/` | Current dataset: six machines, 3 epochs, gsr `13e9a89dc7`, with OP_BYTEREV's complete work in the BIT fit. Per-machine artifacts, joint fit, fit log and a README with the run details. |
-| `e3-20260930-ea7a71e20e/` | Previous dataset: six machines, 3 epochs, gsr `ea7a71e20e`; its candidates are implemented at gsr `c46da31e5a`. Per-machine artifacts, joint fit with diagnostics, fit log, recovered reference samples (`reference-csv/`) and a README with the run details. |
+| `e7-20261001-e60ac7e070/` | Current dataset: full runs (7 epochs) on five machines at gsr `e60ac7e070`; the M4 Pro is missing (see its README). Per-machine artifacts, joint fit, fit log and a README with the run details. |
+| `e3-20260930-13e9a89dc7/` | Previous dataset: six machines, 3 epochs, gsr `13e9a89dc7`, with OP_BYTEREV's complete work in the BIT fit. Per-machine artifacts, joint fit, fit log and a README with the run details. |
+| `e3-20260930-ea7a71e20e/` | Earlier dataset: six machines, 3 epochs, gsr `ea7a71e20e`; its candidates are implemented at gsr `c46da31e5a`. Per-machine artifacts, joint fit with diagnostics, fit log, recovered reference samples (`reference-csv/`) and a README with the run details. |
 | `fit_calibrations.py` | Fits each machine and takes the envelope of the machine fits as the pricing basis, then rounds it to the candidate schedule. |
 | `render_joint_calibration.py` | Builds the report from a joint fit; `restyle_report.py` applies the page style. |
 | `test_calibration_pipeline.py` | Tests for fitting, rounding and rendering. |
