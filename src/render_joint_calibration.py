@@ -43,14 +43,14 @@ SECTIONS = [
          groups=[("Unrolling", ("UNROLL",))]),
 ]
 # Prices implemented in src/script/varops.h, compared against the joint candidate.
-CURRENT_COSTS = {'F': '310', 'PREP': '180 + W(n)/8', 'PRODUCE': '740 + 8 × W(n)', 'NORMALIZE': '200',
+CURRENT_COSTS = {'F': '310', 'PREP': '180 + W(n)', 'PRODUCE': '740 + 8 × W(n)', 'NORMALIZE': '200',
                  'READ': '79 + W(n)', 'ARITH': '120 + 3 × W(n)', 'BIT': '190 + 2 × W(n)', 'MOVE': '180 + 19 × k',
                  'MULCORE': '330 + 10 × u + 110 × v + 29 × u × v', 'DIVCORE': '500 × s + 33 × s × v',
                  'H256': '260 + 38 × H(n)', 'H160': '53 + 40 × H(n)',
                  'H1': '190 + 24 × H(n)', 'SIG': '500000', 'TWEAK': '170000',
                  'SELECT': '2300 + 270 × k'}
 BASE, WRITE, SHA256, BIT, SIGCHECK = 310, (740, 8), (260, 38), (190, 2), 500_000
-PREPARE, READ = (180, 1), (79, 1)  # PREPARE per 64-bit word, READ per byte of W(n)
+PREPARE, READ = (180, 1), (79, 1)  # per byte of W(n)
 
 
 def unroll_charge(units, length, base=BASE, write=WRITE, prepare=PREPARE, read=READ, padded=True):
@@ -60,7 +60,7 @@ def unroll_charge(units, length, base=BASE, write=WRITE, prepare=PREPARE, read=R
     def write_cost(n):
         return write[0] + write[1] * span(n)
     return (units * base + write_cost(length) + 4 * base + write_cost(0) + write_cost(8) +
-            prepare[0] + prepare[1] + read[0] + read[1] * 8)
+            prepare[0] + prepare[1] * 8 + read[0] + read[1] * 8)
 
 # Opcodes charged from existing primitives. Each measured fixture is divided by
 # its implemented charge; a ratio above 1 means the charge does not cover it.
