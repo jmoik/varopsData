@@ -673,20 +673,25 @@ def rounded_candidate(family, coeff):
     return [round_flat(coeff[0])] + [round_coefficient(v) for v in coeff[1:]]
 
 
+def terms(*pairs):
+    """Sum of coefficient × variable terms as BIP 440 writes them: zero terms are left out,
+    and a coefficient of one is not written."""
+    shown = [f"{c:.6g}" if not v else v if c == 1 else f"{c:.6g} × {v}" for c, v in pairs if c != 0]
+    return " + ".join(shown) or "0"
+
+
 def formulas(family, coeff, candidate=False):
     """Formula text; candidates are charged on W(n) where the fit is per byte of n."""
     if family in CONSTANT:
         return f"{coeff[0]:.6g}"
     if family == "MUL":
-        return f"u × ({coeff[0]:.6g} + {coeff[1]:.6g} × v)"
+        return f"u × ({terms((coeff[0], ''), (coeff[1], 'v'))})"
     if family == "MULCORE" and len(coeff) == 4:
-        return f"{coeff[0]:.6g} + {coeff[1]:.6g} × u + {coeff[2]:.6g} × v + {coeff[3]:.6g} × u × v"
+        return terms((coeff[0], ''), (coeff[1], 'u'), (coeff[2], 'v'), (coeff[3], 'u × v'))
     if family == "MULCORE":
-        return f"{coeff[0]:.6g} + {coeff[1]:.6g} × u + {coeff[2]:.6g} × u × v"
+        return terms((coeff[0], ''), (coeff[1], 'u'), (coeff[2], 'u × v'))
     if family == "DIVCORE":
-        if coeff[1] == 0:
-            return f"{coeff[0]:.6g} + {coeff[2]:.6g} × s × v"
-        return f"{coeff[0]:.6g} + {coeff[1]:.6g} × s + {coeff[2]:.6g} × s × v"
+        return terms((coeff[0], ''), (coeff[1], 's'), (coeff[2], 's × v'))
     if candidate and family in PER_WORD:
         variable = "W(n)/8"
     elif candidate and family in WORD_PRICED:
@@ -694,7 +699,7 @@ def formulas(family, coeff, candidate=False):
     else:
         variable = ("W(n)" if family in {"PREP", "READ", "ARITH", "BIT", "OUTPUT", "NORMALIZE"} else "k" if family in {"MOVE", "SELECT"}
                     else "H(n)" if family in {"H256", "H160", "H1"} else "n")
-    return f"{coeff[0]:.6g} + {coeff[1]:.6g} × {variable}"
+    return terms((coeff[0], ''), (coeff[1], variable))
 
 
 def fit_all(series, penalty):

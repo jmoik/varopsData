@@ -41,8 +41,8 @@ SECTIONS = [
          groups=[("Unrolling", ("UNROLL",))]),
 ]
 # Prices implemented in src/script/varops.h, compared against the joint candidate.
-CURRENT_COSTS = {'F': '310', 'PREP': '180 + 1 × W(n)/8', 'PRODUCE': '740 + 8 × W(n)', 'NORMALIZE': '200',
-                 'READ': '79 + 1 × W(n)', 'ARITH': '120 + 3 × W(n)', 'BIT': '190 + 2 × W(n)', 'MOVE': '180 + 19 × k',
+CURRENT_COSTS = {'F': '310', 'PREP': '180 + W(n)/8', 'PRODUCE': '740 + 8 × W(n)', 'NORMALIZE': '200',
+                 'READ': '79 + W(n)', 'ARITH': '120 + 3 × W(n)', 'BIT': '190 + 2 × W(n)', 'MOVE': '180 + 19 × k',
                  'MULCORE': '330 + 10 × u + 110 × v + 29 × u × v', 'DIVCORE': '500 × s + 33 × s × v',
                  'H256': '260 + 38 × H(n)', 'H160': '53 + 40 × H(n)',
                  'H1': '190 + 24 × H(n)', 'SIG': '500000', 'TWEAK': '170000',
@@ -126,21 +126,13 @@ RUN_NOTES = [
     'Prepared operands are cycled through a pool of 8 MB, the stack payload limit of one script. The size is a chosen measurement setting, not a proven bound on a script’s working set, which also includes retained capacity, temporaries and other evaluator memory; complete-script benchmarks cover those. With an earlier 64 MiB pool the flats of READ, ARITH, MUL and DIV on the AMD Ryzen 9 9950X (Windows, clang-cl) were far above the other machines (MUL 2,551, DIV 1,294); with the 8 MB pool they are in line with the others.',
 ]
 
-def implemented_numbers(family):
-    return [int(n) for n in re.findall(r'(?<![A-Za-z(/])\d+', CURRENT_COSTS[family])]
-
-
-def candidate_numbers(record):
-    return [c for c in record['candidate_coefficients'] if c]
-
-
 def cost_comparison(joint, family):
     """Implemented price and rounded joint candidate of a priced primitive; no candidate before calibration."""
     record = joint['primitives'].get(family)
     if record is None:
         return CURRENT_COSTS[family], None, True
-    return (CURRENT_COSTS[family], formulas(family, record['candidate_coefficients'], candidate=True),
-            implemented_numbers(family) == candidate_numbers(record))
+    candidate = formulas(family, record['candidate_coefficients'], candidate=True)
+    return CURRENT_COSTS[family], candidate, CURRENT_COSTS[family] == candidate
 
 
 def check_points(key, series):
@@ -773,7 +765,7 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
             out.append(f'<tr><td>{esc(machine["label"])}</td><td><code>{esc(formulas(family, models[machine["key"]][family]))}</code></td></tr>')
         out.append(f'<tr><td>Envelope (pricing basis)</td><td><code>{esc(formulas(family, env_model[family]))}</code></td></tr></tbody></table></div>')
         if family == "SIG":
-            out.append('<p class="muted">SIG is the fitted verification residual; the plotted total includes fitted hash work. The 500,000-varop sigops-parity charge is a separate policy decision and covers fixed transaction-message preparation; there is no separate SIGHASH primitive.</p>')
+            out.append('<p class="muted">x is the message length: OP_CHECKSIGFROMSTACK verifies a message of any length, and the BIP 340 challenge hash over R || P || message is charged as SHA256(64 + n) on top of the flat SIGCHECK. Both curves therefore rise with the message; SIG itself is flat. The envelope is the fitted verification residual plus the fitted hash work; the rounded candidate is 500,000 + SHA256(64 + n). The 500,000-varop sigops-parity charge is a separate policy decision and covers fixed transaction-message preparation; there is no separate SIGHASH primitive.</p>')
         out.append('</details></article>')
         return out
 

@@ -78,7 +78,8 @@ class CalibrationPipelineTests(unittest.TestCase):
         # PREP's rate is priced per 64-bit word: 0.0301 per byte of W(n) is 0.241 per word, charged as 1.
         self.assertEqual(calibration.rounded_candidate('PREP', [241.381, .0301]), [250, 1])
         self.assertEqual(calibration.rounded_candidate('PREP', [241.381, 1.3]), [250, 11])
-        self.assertEqual(calibration.formulas('PREP', [250, 1], candidate=True), '250 + 1 × W(n)/8')
+        self.assertEqual(calibration.formulas('PREP', [250, 1], candidate=True), '250 + W(n)/8')
+        self.assertEqual(calibration.formulas('DIVCORE', [0, 500, 33], candidate=True), '500 × s + 33 × s × v')
         self.assertEqual(calibration.rounded_candidate('DIVCORE', [3977.26, 0, 158.884]), [4000, 0, 160])
         self.assertEqual(calibration.rounded_candidate('MUL', [186.117, 13.1377]), [190, 14])
         # Byte rates are charged per byte of W(n) >= n: 6.40246 per byte of n is charged as 7 × W(n).

@@ -405,7 +405,7 @@
         200,
         1
       ],
-      "candidate_formula": "200 + 1 \u00d7 W(n)/8",
+      "candidate_formula": "200 + W(n)/8",
       "maximum_coefficients": [
         162.98536410374228,
         0.0010472045329164305
@@ -465,7 +465,7 @@
         90,
         1
       ],
-      "candidate_formula": "90 + 1 \u00d7 W(n)",
+      "candidate_formula": "90 + W(n)",
       "maximum_coefficients": [
         80.57720263298184,
         0.9543308249108007
@@ -547,7 +547,7 @@
         500,
         33
       ],
-      "candidate_formula": "0 + 500 \u00d7 s + 33 \u00d7 s \u00d7 v",
+      "candidate_formula": "500 \u00d7 s + 33 \u00d7 s \u00d7 v",
       "maximum_coefficients": [
         157.86460931778092,
         496.0069516988579,

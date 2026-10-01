@@ -177,7 +177,7 @@ article{scroll-margin-top:72px}
 .price{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
 .price-label{font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
 .price-val{font:650 20px ui-monospace,"SF Mono",Menlo,monospace;color:var(--text);background:var(--surface-2);border:1px solid var(--border);padding:4px 12px;border-radius:9px;white-space:nowrap}
-.price-val .u{font:500 12px system-ui;color:var(--muted);margin-left:6px}
+.price-val .u{font:500 12px system-ui;color:var(--muted)}
 .rounding{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;font-size:13px;color:var(--muted);margin:0 0 10px}
 .rounding .chip{font-family:ui-monospace,monospace;font-size:12px}
 .note{font-size:14px;color:var(--text-2)}
@@ -393,7 +393,7 @@ def restyle(src):
         parts = ['<div class="art-head"><div>',
                  f'<div class="eyebrow">{cat_of.get(pid, "")}</div><h3><a href="#{pid}">{name}</a></h3></div>',
                  '<div class="price"><span class="price-label">Rounded candidate</span>',
-                 f'<code class="price-val">{formula}<span class="u">varops</span></code></div></div>',
+                 f'<code class="price-val">{formula} <span class="u">varops</span></code></div></div>',
                  '<div class="rounding"><span>Unrounded → rounded (fixed, then variable)</span>',
                  ''.join(f'<span class="chip">{p}</span>' for p in pieces), '</div>']
         rest = rest.replace(W_NOTE, '').strip()
