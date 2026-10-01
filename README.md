@@ -47,9 +47,9 @@ Put the artifacts in a new folder under `data/`, then fit, render and test (Pyth
 
 | Path | |
 |---|---|
-| `data/2026-10-01-full-runs/` | Current dataset: full runs on five machines. |
-| `data/2026-09-30-short-runs/` | 3-epoch runs on six machines; the implemented prices come from its fit. |
-| `data/2026-09-30-short-runs-byterev-fixtures/` | The same, after OP_BYTEREV's fixtures were corrected; the source of BIT's price. |
+| `data/2026-10-01-full-runs/` | Current dataset: full runs on five machines; the prices come from its fit. |
+| `data/2026-09-30-short-runs/` | Earlier 3-epoch runs on six machines. |
+| `data/2026-09-30-short-runs-byterev-fixtures/` | The same, after OP_BYTEREV's fixtures were corrected. |
 | `report/joint-calibration.html` | The report, rendered from the current dataset. |
 | `src/` | Fitting (`fit_calibrations.py`), the report (`render_joint_calibration.py`, `restyle_report.py`) and tests. |
 | `METHODOLOGY.md` | The full method. |

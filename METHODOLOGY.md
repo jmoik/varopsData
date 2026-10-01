@@ -277,7 +277,7 @@ Earlier models used primitives that producer-normalize-v1 replaced; older datase
 
 ### Current prices
 
-The implementation and BIP draft price every primitive from the six-machine (M4 Pro, M1 Pro, i5-12500, Ryzen 9 9950X, i7-7700, Ryzen 5 3600), three-epoch envelope of [`2026-09-30-short-runs`](data/2026-09-30-short-runs/), measured with the 8 MB fixture pool and normalized to 0.9 times each reference. SHA256 is fitted on Core SHA256 only. BIT is the exception: a `bench_varops` screening found OP_BYTEREV of values up to 33 bytes above 1.0 times the reference on the i5-12500 and i7-7700, because its pop and push were outside the BIT fixtures. The `BIT/byterev` fixtures now time its complete work, and BIT is priced `190 + 2 W(n)` from [`2026-09-30-short-runs-byterev-fixtures`](data/2026-09-30-short-runs-byterev-fixtures/). OP_TX_SELECT is priced from the same envelope. Historical raw artifacts remain unchanged.
+The implementation (gsr `f86a69bb9d`) and BIP draft price every primitive, OP_TX_SELECT included, from the five-machine (M1 Pro, i5-12500, Ryzen 9 9950X, i7-7700, Ryzen 5 3600) full-run envelope of [`2026-10-01-full-runs`](data/2026-10-01-full-runs/), measured with the 8 MB fixture pool and normalized to 0.9 times each reference. SHA256 is fitted on Core SHA256 only. The `BIT/byterev` fixtures time OP_BYTEREV's complete work (pop, reverse, push), since a `bench_varops` screening of an earlier schedule found short OP_BYTEREV values above 1.0 times the reference on the i5-12500 and i7-7700 when only the reversal was measured. The previous prices came from the three-epoch datasets of 2026-09-30. Historical raw artifacts remain unchanged.
 
 ### Open items
 
