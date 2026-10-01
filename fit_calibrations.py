@@ -651,14 +651,26 @@ def round_coefficient(value):
     return ceil_to(value, max(1, 10 ** (math.floor(math.log10(value)) - 1)))
 
 
+def round_flat(value):
+    """Flats round up in coarser steps than rates: to a multiple of 10 below 100 and of 50
+    from 100, and never to more than two significant figures. A flat is the intercept of a
+    fit, which moves most between runs; coarse steps keep it from changing on every refit."""
+    if value <= 0:
+        return 0
+    return max(round_coefficient(value), ceil_to(value, 10 if value < 100 else 50))
+
+
 def rounded_candidate(family, coeff):
-    """Schedule adoption, not refitting: each coefficient rounded up on its own with
-    round_coefficient; SIG stays at its fixed allowance."""
+    """Schedule adoption, not refitting: each coefficient rounded up on its own, the flat
+    with round_flat and rates with round_coefficient; SIG stays at its fixed allowance."""
     if family == 'SIG':
         return [500000, 0]
     if family in PER_WORD:
         coeff = [coeff[0], 8 * coeff[1]]
-    return [round_coefficient(v) for v in coeff]
+    if family == 'MUL':
+        # u × (a + b × v) has no flat.
+        return [round_coefficient(v) for v in coeff]
+    return [round_flat(coeff[0])] + [round_coefficient(v) for v in coeff[1:]]
 
 
 def formulas(family, coeff, candidate=False):
@@ -876,8 +888,8 @@ def main():
                   envelope_combination=ENVELOPE,
                   method=f"Per-machine median of raw fixture epochs, normalized so that a full 40-billion-varop budget of fitted work takes {TARGET_FRACTION:g}× the recorded local pre-v2 reference (rate derived from the recorded reference time, whatever normalization the artifact was collected with); equal path-group and size-decade weights; weighted squared log error with a 100× underprediction penalty; nonnegative predefined coefficients; no coefficient rounding. SIG diagnostic fits do not replace the fixed 500000 allowance.",
                   machines=machines, source_check=source_check,
-                  schedule_rounding=dict(coefficient="up to two significant figures, and at least to a whole varop", sig_policy=500000,
-                                         rule="Ceiling each coefficient independently, flats and rates alike (rates per byte of W(n) or H(n) or per counted item), to two significant figures and at least to a whole varop; preserve zero/exact multiples; no refitting.",
+                  schedule_rounding=dict(coefficient="flats to a multiple of 10 below 100 and of 50 from 100, and to no more than two significant figures; rates to two significant figures, and at least to a whole varop", sig_policy=500000,
+                                         rule="Ceiling each coefficient independently: flats to a multiple of 10 below 100 and of 50 from 100, never to more than two significant figures; rates (per byte of W(n) or H(n) or per counted item) to two significant figures and at least to a whole varop; preserve zero/exact multiples; no refitting.",
                                          status="Installed as provisional research candidate; source discrepancy and multi-machine script confirmation remain open."),
                   primitives={})
     print("Primitive  Envelope (varops, unrounded)                   Rounded candidate                      Maximum coefficients (unrounded)")

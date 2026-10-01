@@ -84,13 +84,15 @@ class CalibrationPipelineTests(unittest.TestCase):
         # Byte rates are charged per byte of W(n) >= n: 6.40246 per byte of n is charged as 7 × W(n).
         self.assertEqual(calibration.rounded_candidate('PRODUCE', [2120.63, 6.40246]), [2200, 7])
         self.assertEqual(calibration.formulas('PRODUCE', [2200, 7], candidate=True), '2200 + 7 × W(n)')
-        # Flats and rates alike round to two significant figures.
+        # Rates round to two significant figures; flats to multiples of 10 below 100 and of 50
+        # from 100, but never to more than two significant figures.
         self.assertEqual(calibration.rounded_candidate('SELECT', [3454.87, 1643.3]), [3500, 1700])
-        self.assertEqual(calibration.rounded_candidate('MULCORE', [338.305, 4.32306, 109.887, 28.2557]), [340, 5, 110, 29])
+        self.assertEqual(calibration.rounded_candidate('MULCORE', [338.305, 4.32306, 109.887, 28.2557]), [350, 5, 110, 29])
+        self.assertEqual(calibration.rounded_candidate('READ', [80.6, 1.01]), [90, 2])
         self.assertEqual(calibration.rounded_candidate('TWEAK', [168855, 0]), [170000, 0])
         self.assertEqual(calibration.formulas('H256', [192, 39], candidate=True), '192 + 39 × H(n)')
-        self.assertEqual(calibration.rounded_candidate('NORMALIZE', [187.2, 0]), [190, 0])
-        self.assertEqual(calibration.formulas('NORMALIZE', [190, 0], candidate=True), '190')
+        self.assertEqual(calibration.rounded_candidate('NORMALIZE', [187.2, 0]), [200, 0])
+        self.assertEqual(calibration.formulas('NORMALIZE', [200, 0], candidate=True), '200')
         # Zero stays zero and exact multiples keep their value.
         self.assertEqual(calibration.rounded_candidate('F', [300, 0]), [300, 0])
         self.assertEqual(calibration.rounded_candidate('DIVCORE', [1000, 100, 10]), [1000, 100, 10])
@@ -99,6 +101,9 @@ class CalibrationPipelineTests(unittest.TestCase):
         self.assertEqual([calibration.round_coefficient(v) for v in
                           (0.0012, 9.2, 10, 10.1, 99.1, 100, 100.1, 999.1, 1000, 1000.1, 9950.5, 10000, 10001)],
                          [1, 10, 10, 11, 100, 100, 110, 1000, 1000, 1100, 10000, 10000, 11000])
+        self.assertEqual([calibration.round_flat(v) for v in
+                          (0, 0.2, 10, 53.7, 99.1, 100, 100.1, 142.2, 950.1, 1000, 1712.1, 9950.5, 168100.2)],
+                         [0, 10, 10, 60, 100, 100, 150, 150, 1000, 1000, 1800, 10000, 170000])
 
     def test_candidate_charge_uses_pricing_units(self):
         c = {'PRODUCE': [680, 7], 'PREP': [180, 1], 'H256': [280, 38], 'MOVE': [180, 23], 'SIG': [500000, 0],

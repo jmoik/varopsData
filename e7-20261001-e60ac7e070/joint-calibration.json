@@ -370,9 +370,9 @@
     "note": "Compared with each recorded Git commit, accepting LF or CRLF. Unmatched hashes require the original source bytes for review."
   },
   "schedule_rounding": {
-    "coefficient": "up to two significant figures, and at least to a whole varop",
+    "coefficient": "flats to a multiple of 10 below 100 and of 50 from 100, and to no more than two significant figures; rates to two significant figures, and at least to a whole varop",
     "sig_policy": 500000,
-    "rule": "Ceiling each coefficient independently, flats and rates alike (rates per byte of W(n) or H(n) or per counted item), to two significant figures and at least to a whole varop; preserve zero/exact multiples; no refitting.",
+    "rule": "Ceiling each coefficient independently: flats to a multiple of 10 below 100 and of 50 from 100, never to more than two significant figures; rates (per byte of W(n) or H(n) or per counted item) to two significant figures and at least to a whole varop; preserve zero/exact multiples; no refitting.",
     "status": "Installed as provisional research candidate; source discrepancy and multi-machine script confirmation remain open."
   },
   "primitives": {
@@ -382,16 +382,16 @@
         0.0
       ],
       "candidate_coefficients": [
-        310,
+        350,
         0
       ],
-      "candidate_formula": "310",
+      "candidate_formula": "350",
       "maximum_coefficients": [
         303.62861294398385,
         0.0
       ],
       "maximum_candidate_coefficients": [
-        310,
+        350,
         0
       ],
       "notes": ""
@@ -402,16 +402,16 @@
         0.0010472045329164305
       ],
       "candidate_coefficients": [
-        170,
+        200,
         1
       ],
-      "candidate_formula": "170 + 1 \u00d7 W(n)/8",
+      "candidate_formula": "200 + 1 \u00d7 W(n)/8",
       "maximum_coefficients": [
         162.98536410374228,
         0.0010472045329164305
       ],
       "maximum_candidate_coefficients": [
-        170,
+        200,
         1
       ],
       "notes": ""
@@ -422,16 +422,16 @@
         7.128508529666747
       ],
       "candidate_coefficients": [
-        730,
+        750,
         8
       ],
-      "candidate_formula": "730 + 8 \u00d7 W(n)",
+      "candidate_formula": "750 + 8 \u00d7 W(n)",
       "maximum_coefficients": [
         728.232768665149,
         7.128508529666747
       ],
       "maximum_candidate_coefficients": [
-        730,
+        750,
         8
       ],
       "notes": ""
@@ -462,16 +462,16 @@
         0.9543308249108007
       ],
       "candidate_coefficients": [
-        81,
+        90,
         1
       ],
-      "candidate_formula": "81 + 1 \u00d7 W(n)",
+      "candidate_formula": "90 + 1 \u00d7 W(n)",
       "maximum_coefficients": [
         80.57720263298184,
         0.9543308249108007
       ],
       "maximum_candidate_coefficients": [
-        81,
+        90,
         1
       ],
       "notes": ""
@@ -482,16 +482,16 @@
         2.6874554045715686
       ],
       "candidate_coefficients": [
-        130,
+        150,
         3
       ],
-      "candidate_formula": "130 + 3 \u00d7 W(n)",
+      "candidate_formula": "150 + 3 \u00d7 W(n)",
       "maximum_coefficients": [
         126.15105988840659,
         2.6874554045715686
       ],
       "maximum_candidate_coefficients": [
-        130,
+        150,
         3
       ],
       "notes": ""
@@ -522,16 +522,16 @@
         21.270493237581434
       ],
       "candidate_coefficients": [
-        110,
+        150,
         22
       ],
-      "candidate_formula": "110 + 22 \u00d7 k",
+      "candidate_formula": "150 + 22 \u00d7 k",
       "maximum_coefficients": [
         100.72109646461523,
         21.270493237581434
       ],
       "maximum_candidate_coefficients": [
-        110,
+        150,
         22
       ],
       "notes": ""
@@ -554,7 +554,7 @@
         32.573713204088826
       ],
       "maximum_candidate_coefficients": [
-        160,
+        200,
         500,
         33
       ],
@@ -566,10 +566,10 @@
         37.25070334752019
       ],
       "candidate_coefficients": [
-        270,
+        300,
         38
       ],
-      "candidate_formula": "270 + 38 \u00d7 H(n)",
+      "candidate_formula": "300 + 38 \u00d7 H(n)",
       "maximum_coefficients": [
         448.12310293171487,
         37.25070334752019
@@ -586,10 +586,10 @@
         39.33013627236356
       ],
       "candidate_coefficients": [
-        54,
+        60,
         40
       ],
-      "candidate_formula": "54 + 40 \u00d7 H(n)",
+      "candidate_formula": "60 + 40 \u00d7 H(n)",
       "maximum_coefficients": [
         346.20223366088777,
         39.33013627236355
@@ -615,7 +615,7 @@
         23.705326184851653
       ],
       "maximum_candidate_coefficients": [
-        310,
+        350,
         24
       ],
       "notes": ""
@@ -688,12 +688,12 @@
         28.18365320893264
       ],
       "candidate_coefficients": [
-        370,
+        400,
         6,
         120,
         29
       ],
-      "candidate_formula": "370 + 6 \u00d7 u + 120 \u00d7 v + 29 \u00d7 u \u00d7 v",
+      "candidate_formula": "400 + 6 \u00d7 u + 120 \u00d7 v + 29 \u00d7 u \u00d7 v",
       "maximum_coefficients": [
         364.7668076462843,
         5.2753920216851,
@@ -701,7 +701,7 @@
         28.18365320893264
       ],
       "maximum_candidate_coefficients": [
-        370,
+        400,
         6,
         130,
         29
@@ -15280,176 +15280,168 @@
             "family": "PRODUCE",
             "fixture": "PRODUCE/grow/86666",
             "measured_varops": 1238180.7045074254,
-            "charged_varops": 520730.0,
-            "ratio": 2.3777787039491205
+            "charged_varops": 520750.0,
+            "ratio": 2.3776873826354783
           },
           {
             "machine": "Apple M1 Pro",
             "family": "PRODUCE",
             "fixture": "PRODUCE/grow/86650",
             "measured_varops": 1047029.2515937915,
-            "charged_varops": 520666.0,
-            "ratio": 2.0109422385824915
+            "charged_varops": 520686.0,
+            "ratio": 2.010864996550304
           },
           {
             "machine": "Apple M1 Pro",
             "family": "PRODUCE",
             "fixture": "PRODUCE/grow/86659",
             "measured_varops": 1046520.2471826959,
-            "charged_varops": 520730.0,
-            "ratio": 2.0097176025631245
+            "charged_varops": 520750.0,
+            "ratio": 2.0096404170575055
           },
           {
             "machine": "Apple M1 Pro",
             "family": "PRODUCE",
             "fixture": "PRODUCE/grow/86642",
             "measured_varops": 983512.326050303,
-            "charged_varops": 520602.0,
-            "ratio": 1.8891827654336766
+            "charged_varops": 520622.0,
+            "ratio": 1.889110191367831
           },
           {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/16385",
             "measured_varops": 215331.57578074018,
-            "charged_varops": 131866.0,
-            "ratio": 1.6329575158171188
+            "charged_varops": 131886.0,
+            "ratio": 1.6327098841479777
           },
           {
             "machine": "Apple M1 Pro",
             "family": "PRODUCE",
             "fixture": "PRODUCE/grow/135410",
             "measured_varops": 1320529.1737842986,
-            "charged_varops": 813210.0,
-            "ratio": 1.6238476823751535
+            "charged_varops": 813230.0,
+            "ratio": 1.6238077466206344
           },
           {
             "machine": "Apple M1 Pro",
             "family": "PRODUCE",
             "fixture": "PRODUCE/grow/86657",
             "measured_varops": 788962.1380595242,
-            "charged_varops": 520666.0,
-            "ratio": 1.5152941387751921
+            "charged_varops": 520686.0,
+            "ratio": 1.5152359350155837
           },
           {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/18175",
             "measured_varops": 214722.37390418642,
-            "charged_varops": 146138.0,
-            "ratio": 1.4693123890034516
+            "charged_varops": 146158.0,
+            "ratio": 1.4691113309171335
           },
           {
             "machine": "Apple M1 Pro",
             "family": "PRODUCE",
             "fixture": "PRODUCE/grow/135403",
             "measured_varops": 1154527.291172955,
-            "charged_varops": 813146.0,
-            "ratio": 1.4198277937454713
+            "charged_varops": 813166.0,
+            "ratio": 1.4197928727627016
           },
           {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/16384",
             "measured_varops": 186501.42978202002,
-            "charged_varops": 131802.0,
-            "ratio": 1.4150121377674088
+            "charged_varops": 131822.0,
+            "ratio": 1.4147974524891143
           },
           {
             "machine": "Apple M1 Pro",
             "family": "PRODUCE",
             "fixture": "PRODUCE/grow/65544",
             "measured_varops": 545930.4603000714,
-            "charged_varops": 394010.0,
-            "ratio": 1.385575138448444
-          },
-          {
-            "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
-            "family": "READ",
-            "fixture": "READ/trim/511",
-            "measured_varops": 812.5001408128709,
-            "charged_varops": 593,
-            "ratio": 1.3701520081161398
+            "charged_varops": 394030.0,
+            "ratio": 1.3855048100400258
           },
           {
             "machine": "Apple M1 Pro",
             "family": "PRODUCE",
             "fixture": "PRODUCE/grow/65552",
             "measured_varops": 533225.7456227981,
-            "charged_varops": 394074.0,
-            "ratio": 1.3531106990636228
+            "charged_varops": 394094.0,
+            "ratio": 1.3530420296243995
+          },
+          {
+            "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
+            "family": "READ",
+            "fixture": "READ/trim/511",
+            "measured_varops": 812.5001408128709,
+            "charged_varops": 602,
+            "ratio": 1.349668007994802
           },
           {
             "machine": "Apple M1 Pro",
             "family": "PRODUCE",
             "fixture": "PRODUCE/grow/135418",
             "measured_varops": 1095086.6999717078,
-            "charged_varops": 813274.0,
-            "ratio": 1.3465163032037268
+            "charged_varops": 813294.0,
+            "ratio": 1.3464831905457408
           },
           {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/22718",
             "measured_varops": 244480.56586588468,
-            "charged_varops": 182490.0,
-            "ratio": 1.3396929468238516
-          },
-          {
-            "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
-            "family": "READ",
-            "fixture": "READ/trim/257",
-            "measured_varops": 460.26047085395555,
-            "charged_varops": 345,
-            "ratio": 1.3340883213158132
+            "charged_varops": 182510.0,
+            "ratio": 1.3395461392026995
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/16385",
             "measured_varops": 174737.881350944,
-            "charged_varops": 131866.0,
-            "ratio": 1.3251170229698632
+            "charged_varops": 131886.0,
+            "ratio": 1.3249160741166157
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
             "family": "READ",
-            "fixture": "READ/trim/513",
-            "measured_varops": 783.7145385915701,
-            "charged_varops": 601,
-            "ratio": 1.3040175350941265
+            "fixture": "READ/trim/257",
+            "measured_varops": 460.26047085395555,
+            "charged_varops": 354,
+            "ratio": 1.3001708216213435
           },
           {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/32769",
             "measured_varops": 340225.30675278476,
-            "charged_varops": 262938.0,
-            "ratio": 1.2939373797350888
+            "charged_varops": 262958.0,
+            "ratio": 1.2938389657389573
           },
           {
             "machine": "varop-calibration-ryzen99500x-full",
             "family": "READ",
             "fixture": "READ/trim/1562",
             "measured_varops": 2132.0310442216205,
-            "charged_varops": 1649,
-            "ratio": 1.2929236168718135
+            "charged_varops": 1658,
+            "ratio": 1.2859053342711824
+          },
+          {
+            "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
+            "family": "READ",
+            "fixture": "READ/trim/513",
+            "measured_varops": 783.7145385915701,
+            "charged_varops": 610,
+            "ratio": 1.284777932117328
           },
           {
             "machine": "varop-calibration-ryzen99500x-full",
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/16385",
             "measured_varops": 169050.05568961246,
-            "charged_varops": 131866.0,
-            "ratio": 1.2819836477151991
-          },
-          {
-            "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
-            "family": "READ",
-            "fixture": "READ/trim/1023",
-            "measured_varops": 1401.1250297772906,
-            "charged_varops": 1105,
-            "ratio": 1.267986452287141
+            "charged_varops": 131886.0,
+            "ratio": 1.281789239870892
           },
           {
             "machine": "varop-calibration-ryzen99500x-full",
@@ -15462,18 +15454,10 @@
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
             "family": "READ",
-            "fixture": "READ/trim/519",
-            "measured_varops": 756.7293702210538,
-            "charged_varops": 601,
-            "ratio": 1.259117088554166
-          },
-          {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
             "fixture": "READ/trim/1023",
-            "measured_varops": 1387.0193798782377,
-            "charged_varops": 1105,
-            "ratio": 1.2552211582608486
+            "measured_varops": 1401.1250297772906,
+            "charged_varops": 1114,
+            "ratio": 1.2577423965684835
           },
           {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
@@ -15484,20 +15468,20 @@
             "ratio": 1.25477659340076
           },
           {
-            "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
-            "family": "READ",
-            "fixture": "READ/trim/255",
-            "measured_varops": 422.82135296154155,
-            "charged_varops": 337,
-            "ratio": 1.254662768431874
-          },
-          {
             "machine": "varop-calibration-ryzen99500x-full",
             "family": "NORMALIZE",
             "fixture": "NORMALIZE/aligned/1048575",
             "measured_varops": 250.158143452426,
             "charged_varops": 200,
             "ratio": 1.25079071726213
+          },
+          {
+            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
+            "family": "READ",
+            "fixture": "READ/trim/1023",
+            "measured_varops": 1387.0193798782377,
+            "charged_varops": 1114,
+            "ratio": 1.245080233283876
           },
           {
             "machine": "varop-calibration-ryzen99500x-full",
@@ -15508,52 +15492,44 @@
             "ratio": 1.2439703520934873
           },
           {
+            "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
+            "family": "READ",
+            "fixture": "READ/trim/519",
+            "measured_varops": 756.7293702210538,
+            "charged_varops": 610,
+            "ratio": 1.2405399511820554
+          },
+          {
             "machine": "varop-calibration-ryzen99500x-full",
             "family": "READ",
             "fixture": "READ/trim/1250",
             "measured_varops": 1653.1616016380267,
-            "charged_varops": 1337,
-            "ratio": 1.23647090623637
-          },
-          {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
-            "fixture": "READ/trim/511",
-            "measured_varops": 730.743368183724,
-            "charged_varops": 593,
-            "ratio": 1.2322822397701922
+            "charged_varops": 1346,
+            "ratio": 1.2282032701619812
           },
           {
             "machine": "Apple M1 Pro",
             "family": "PRODUCE",
             "fixture": "PRODUCE/grow/135402",
             "measured_varops": 997870.0889609928,
-            "charged_varops": 813146.0,
-            "ratio": 1.2271721055763574
+            "charged_varops": 813166.0,
+            "ratio": 1.2271419230034122
           },
           {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/28397",
             "measured_varops": 279588.7189166468,
-            "charged_varops": 227930.0,
-            "ratio": 1.2266429119319386
+            "charged_varops": 227950.0,
+            "ratio": 1.226535288074783
           },
           {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
+            "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
             "family": "READ",
-            "fixture": "READ/trim/1025",
-            "measured_varops": 1364.577385250053,
-            "charged_varops": 1113,
-            "ratio": 1.2260353865678824
-          },
-          {
-            "machine": "varop-calibration-ryzen99500x-full",
-            "family": "READ",
-            "fixture": "READ/trim/2047",
-            "measured_varops": 2596.0967302313825,
-            "charged_varops": 2129,
-            "ratio": 1.219397242945694
+            "fixture": "READ/trim/255",
+            "measured_varops": 422.82135296154155,
+            "charged_varops": 346,
+            "ratio": 1.222027031680756
           },
           {
             "machine": "varop-calibration-ryzen99500x-full",
@@ -15572,20 +15548,28 @@
             "ratio": 1.2191312640455125
           },
           {
-            "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
+            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "READ",
             "fixture": "READ/trim/1025",
-            "measured_varops": 1353.8442184715213,
-            "charged_varops": 1113,
-            "ratio": 1.2163919303427864
+            "measured_varops": 1364.577385250053,
+            "charged_varops": 1122,
+            "ratio": 1.2162008781194769
+          },
+          {
+            "machine": "varop-calibration-ryzen99500x-full",
+            "family": "READ",
+            "fixture": "READ/trim/2047",
+            "measured_varops": 2596.0967302313825,
+            "charged_varops": 2138,
+            "ratio": 1.2142641394908245
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "READ",
-            "fixture": "READ/trim/640",
-            "measured_varops": 873.2884426354186,
-            "charged_varops": 721,
-            "ratio": 1.2112183670394157
+            "fixture": "READ/trim/511",
+            "measured_varops": 730.743368183724,
+            "charged_varops": 602,
+            "ratio": 1.2138594155875815
           },
           {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
@@ -15597,19 +15581,19 @@
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
-            "family": "READ",
-            "fixture": "READ/trim/264",
-            "measured_varops": 417.54130846476863,
-            "charged_varops": 345,
-            "ratio": 1.2102646622167206
-          },
-          {
-            "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/18175",
             "measured_varops": 176519.23798315148,
-            "charged_varops": 146138.0,
-            "ratio": 1.2078941684103484
+            "charged_varops": 146158.0,
+            "ratio": 1.2077288823270125
+          },
+          {
+            "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
+            "family": "READ",
+            "fixture": "READ/trim/1025",
+            "measured_varops": 1353.8442184715213,
+            "charged_varops": 1122,
+            "ratio": 1.2066347758213203
           },
           {
             "machine": "varop-calibration-ryzen99500x-full",
@@ -15628,6 +15612,14 @@
             "ratio": 1.1983010321027432
           },
           {
+            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
+            "family": "READ",
+            "fixture": "READ/trim/640",
+            "measured_varops": 873.2884426354186,
+            "charged_varops": 730,
+            "ratio": 1.1962855378567379
+          },
+          {
             "machine": "Apple M1 Pro",
             "family": "BIT",
             "fixture": "BIT/byterev/15",
@@ -15640,48 +15632,40 @@
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/35496",
             "measured_varops": 339848.36721728445,
-            "charged_varops": 284698.0,
-            "ratio": 1.1937153306917663
+            "charged_varops": 284718.0,
+            "ratio": 1.1936314782250663
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
             "family": "READ",
             "fixture": "READ/trim/1250",
             "measured_varops": 1593.1912390904624,
-            "charged_varops": 1337,
-            "ratio": 1.1916164839868828
-          },
-          {
-            "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
-            "family": "READ",
-            "fixture": "READ/trim/521",
-            "measured_varops": 721.2078042670884,
-            "charged_varops": 609,
-            "ratio": 1.184249268090457
+            "charged_varops": 1346,
+            "ratio": 1.1836487660404624
           },
           {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/32768",
             "measured_varops": 310552.89065935113,
-            "charged_varops": 262874.0,
-            "ratio": 1.1813754523435225
+            "charged_varops": 262894.0,
+            "ratio": 1.1812855776828346
+          },
+          {
+            "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
+            "family": "READ",
+            "fixture": "READ/trim/264",
+            "measured_varops": 417.54130846476863,
+            "charged_varops": 354,
+            "ratio": 1.1794952216518888
           },
           {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/32767",
             "measured_varops": 309916.7351380827,
-            "charged_varops": 262874.0,
-            "ratio": 1.1789554506648916
-          },
-          {
-            "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
-            "family": "READ",
-            "fixture": "READ/trim/1",
-            "measured_varops": 104.29961891752373,
-            "charged_varops": 89,
-            "ratio": 1.1719058305339745
+            "charged_varops": 262894.0,
+            "ratio": 1.1788657601089516
           },
           {
             "machine": "varop-calibration-ryzen99500x-full",
@@ -15700,6 +15684,14 @@
             "ratio": 1.1680802307599738
           },
           {
+            "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
+            "family": "READ",
+            "fixture": "READ/trim/521",
+            "measured_varops": 721.2078042670884,
+            "charged_varops": 618,
+            "ratio": 1.167002919526033
+          },
+          {
             "machine": "varop-calibration-ryzen99500x-full",
             "family": "BIT",
             "fixture": "BIT/byterev/7",
@@ -15716,36 +15708,28 @@
             "ratio": 1.1662647834814044
           },
           {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
-            "fixture": "READ/trim/800",
-            "measured_varops": 1024.8071311357148,
-            "charged_varops": 881,
-            "ratio": 1.16323170389979
+            "machine": "varop-calibration-ryzen99500x-full",
+            "family": "PRODUCE",
+            "fixture": "PRODUCE/fresh-pages/18175",
+            "measured_varops": 169018.7539464907,
+            "charged_varops": 146158.0,
+            "ratio": 1.156411239524971
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
             "family": "READ",
             "fixture": "READ/trim/1562",
             "measured_varops": 1909.8226239762487,
-            "charged_varops": 1649,
-            "ratio": 1.1581701782754692
-          },
-          {
-            "machine": "varop-calibration-ryzen99500x-full",
-            "family": "PRODUCE",
-            "fixture": "PRODUCE/fresh-pages/18175",
-            "measured_varops": 169018.7539464907,
-            "charged_varops": 146138.0,
-            "ratio": 1.1565695024325686
+            "charged_varops": 1658,
+            "ratio": 1.1518833678988232
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "READ",
-            "fixture": "READ/trim/255",
-            "measured_varops": 388.7299724687841,
-            "charged_varops": 337,
-            "ratio": 1.1535014019845227
+            "fixture": "READ/trim/800",
+            "measured_varops": 1024.8071311357148,
+            "charged_varops": 890,
+            "ratio": 1.1514686866693424
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -15760,8 +15744,8 @@
             "family": "PRODUCE",
             "fixture": "PRODUCE/grow/169268",
             "measured_varops": 1169369.311278427,
-            "charged_varops": 1016346.0,
-            "ratio": 1.1505622212105198
+            "charged_varops": 1016366.0,
+            "ratio": 1.1505395805039003
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -15780,20 +15764,12 @@
             "ratio": 1.147673382866281
           },
           {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
-            "fixture": "READ/trim/513",
-            "measured_varops": 688.1642749822836,
-            "charged_varops": 601,
-            "ratio": 1.1450320715179427
-          },
-          {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/16384",
             "measured_varops": 150795.87399056277,
-            "charged_varops": 131802.0,
-            "ratio": 1.1441091484997403
+            "charged_varops": 131822.0,
+            "ratio": 1.143935564553434
           },
           {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
@@ -15812,84 +15788,52 @@
             "ratio": 1.1423171453189378
           },
           {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
-            "fixture": "READ/trim/1",
-            "measured_varops": 101.6395007682107,
-            "charged_varops": 89,
-            "ratio": 1.1420168625641651
-          },
-          {
             "machine": "varop-calibration-ryzen99500x-full",
             "family": "READ",
             "fixture": "READ/trim/14540",
             "measured_varops": 16696.014252730543,
-            "charged_varops": 14625,
-            "ratio": 1.1416078121525157
-          },
-          {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
-            "fixture": "READ/compare/416",
-            "measured_varops": 566.5105853184654,
-            "charged_varops": 497,
-            "ratio": 1.139860332632727
+            "charged_varops": 14634,
+            "ratio": 1.1409057163270837
           },
           {
             "machine": "Apple M1 Pro",
             "family": "ARITH",
             "fixture": "ARITH/add/596/equal/carry-chain",
             "measured_varops": 16450.017576959803,
-            "charged_varops": 14434,
-            "ratio": 1.1396714408313566
-          },
-          {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
-            "fixture": "READ/trim/1250",
-            "measured_varops": 1522.5490106627433,
-            "charged_varops": 1337,
-            "ratio": 1.1387801126871677
+            "charged_varops": 14454,
+            "ratio": 1.1380944774429087
           },
           {
             "machine": "Apple M1 Pro",
             "family": "PRODUCE",
             "fixture": "PRODUCE/grow/86674",
             "measured_varops": 590774.5725798437,
-            "charged_varops": 520794.0,
-            "ratio": 1.1343728471907197
-          },
-          {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
-            "fixture": "READ/compare/392",
-            "measured_varops": 536.4650663202943,
-            "charged_varops": 473,
-            "ratio": 1.1341756158991423
+            "charged_varops": 520814.0,
+            "ratio": 1.1343292856563834
           },
           {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/44370",
             "measured_varops": 403021.3474257158,
-            "charged_varops": 355738.0,
-            "ratio": 1.1329162120035414
+            "charged_varops": 355758.0,
+            "ratio": 1.1328525217302656
           },
           {
-            "machine": "Apple M1 Pro",
+            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "READ",
-            "fixture": "READ/trim/1952",
-            "measured_varops": 2298.7395172366946,
-            "charged_varops": 2033,
-            "ratio": 1.1307129942138192
+            "fixture": "READ/trim/1250",
+            "measured_varops": 1522.5490106627433,
+            "charged_varops": 1346,
+            "ratio": 1.1311656839990663
           },
           {
-            "machine": "varop-calibration-ryzen99500x-full",
+            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "READ",
-            "fixture": "READ/trim/1025",
-            "measured_varops": 1255.9800523718166,
-            "charged_varops": 1113,
-            "ratio": 1.1284636589144803
+            "fixture": "READ/trim/513",
+            "measured_varops": 688.1642749822836,
+            "charged_varops": 610,
+            "ratio": 1.1281381557086616
           },
           {
             "machine": "varop-calibration-ryzen99500x-full",
@@ -15908,6 +15852,14 @@
             "ratio": 1.125876471736121
           },
           {
+            "machine": "Apple M1 Pro",
+            "family": "READ",
+            "fixture": "READ/trim/1952",
+            "measured_varops": 2298.7395172366946,
+            "charged_varops": 2042,
+            "ratio": 1.1257294403705653
+          },
+          {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
             "family": "BIT",
             "fixture": "BIT/byterev/12",
@@ -15924,12 +15876,20 @@
             "ratio": 1.1237368500714116
           },
           {
+            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
+            "family": "READ",
+            "fixture": "READ/trim/255",
+            "measured_varops": 388.7299724687841,
+            "charged_varops": 346,
+            "ratio": 1.1234970302566014
+          },
+          {
             "machine": "varop-calibration-ryzen99500x-full",
             "family": "SIG",
             "fixture": "SIG/32",
             "measured_varops": 567090.6632537391,
-            "charged_varops": 505134,
-            "ratio": 1.1226539160969944
+            "charged_varops": 505164,
+            "ratio": 1.122587245436609
           },
           {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
@@ -15950,34 +15910,26 @@
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "READ",
-            "fixture": "READ/compare/384",
-            "measured_varops": 521.5029878637413,
-            "charged_varops": 465,
-            "ratio": 1.121511801857508
+            "fixture": "READ/compare/416",
+            "measured_varops": 566.5105853184654,
+            "charged_varops": 506,
+            "ratio": 1.1195861369930145
+          },
+          {
+            "machine": "varop-calibration-ryzen99500x-full",
+            "family": "READ",
+            "fixture": "READ/trim/1025",
+            "measured_varops": 1255.9800523718166,
+            "charged_varops": 1122,
+            "ratio": 1.1194118113830807
           },
           {
             "machine": "varop-calibration-ryzen99500x-full",
             "family": "READ",
             "fixture": "READ/trim/2049",
             "measured_varops": 2396.092643892332,
-            "charged_varops": 2137,
-            "ratio": 1.1212412933515825
-          },
-          {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
-            "fixture": "READ/compare/400",
-            "measured_varops": 538.0348976035527,
-            "charged_varops": 481,
-            "ratio": 1.1185756706934569
-          },
-          {
-            "machine": "Apple M1 Pro",
-            "family": "READ",
-            "fixture": "READ/trim/1023",
-            "measured_varops": 1235.087652044803,
-            "charged_varops": 1105,
-            "ratio": 1.1177263819409982
+            "charged_varops": 2146,
+            "ratio": 1.1165389766506673
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -16016,8 +15968,8 @@
             "family": "SIG",
             "fixture": "SIG/64",
             "measured_varops": 565537.5163008289,
-            "charged_varops": 507566,
-            "ratio": 1.1142147352281848
+            "charged_varops": 507596,
+            "ratio": 1.114148882774547
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -16036,12 +15988,20 @@
             "ratio": 1.1134217046761177
           },
           {
+            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
+            "family": "READ",
+            "fixture": "READ/compare/392",
+            "measured_varops": 536.4650663202943,
+            "charged_varops": 482,
+            "ratio": 1.112998062905175
+          },
+          {
             "machine": "varop-calibration-ryzen99500x-full",
             "family": "SIG",
             "fixture": "SIG/0",
             "measured_varops": 561933.7277080178,
-            "charged_varops": 505134,
-            "ratio": 1.112444871475723
+            "charged_varops": 505164,
+            "ratio": 1.1123788070963445
           },
           {
             "machine": "varop-calibration-ryzen99500x-full",
@@ -16053,27 +16013,11 @@
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
-            "fixture": "READ/compare/408",
-            "measured_varops": 543.756589691668,
-            "charged_varops": 489,
-            "ratio": 1.1119766660361308
-          },
-          {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "DIVCORE",
             "fixture": "DIVCORE/128/128/127/MOD/top-one",
             "measured_varops": 10504.21870519719,
             "charged_varops": 9448,
             "ratio": 1.1117928350124038
-          },
-          {
-            "machine": "Apple M1 Pro",
-            "family": "READ",
-            "fixture": "READ/trim/4765",
-            "measured_varops": 5390.754069913618,
-            "charged_varops": 4849,
-            "ratio": 1.1117249061484054
           },
           {
             "machine": "varop-calibration-ryzen99500x-full",
@@ -16085,14 +16029,6 @@
           },
           {
             "machine": "varop-calibration-ryzen99500x-full",
-            "family": "SIG",
-            "fixture": "SIG/128",
-            "measured_varops": 566309.6970384273,
-            "charged_varops": 509998,
-            "ratio": 1.1104155252342702
-          },
-          {
-            "machine": "varop-calibration-ryzen99500x-full",
             "family": "BIT",
             "fixture": "BIT/byterev/30",
             "measured_varops": 237.62361075218857,
@@ -16100,12 +16036,20 @@
             "ratio": 1.1103907044494792
           },
           {
+            "machine": "varop-calibration-ryzen99500x-full",
+            "family": "SIG",
+            "fixture": "SIG/128",
+            "measured_varops": 566309.6970384273,
+            "charged_varops": 510028,
+            "ratio": 1.1103502102598826
+          },
+          {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/22718",
             "measured_varops": 202602.86107187913,
-            "charged_varops": 182490.0,
-            "ratio": 1.1102134970238322
+            "charged_varops": 182510.0,
+            "ratio": 1.110091836457614
           },
           {
             "machine": "varop-calibration-ryzen99500x-full",
@@ -16116,6 +16060,14 @@
             "ratio": 1.1099400198086462
           },
           {
+            "machine": "Apple M1 Pro",
+            "family": "READ",
+            "fixture": "READ/trim/4765",
+            "measured_varops": 5390.754069913618,
+            "charged_varops": 4858,
+            "ratio": 1.1096653087512593
+          },
+          {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "BIT",
             "fixture": "BIT/byterev/15",
@@ -16124,28 +16076,20 @@
             "ratio": 1.1091863696818638
           },
           {
+            "machine": "Apple M1 Pro",
+            "family": "READ",
+            "fixture": "READ/trim/1023",
+            "measured_varops": 1235.087652044803,
+            "charged_varops": 1114,
+            "ratio": 1.1086962765213673
+          },
+          {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "DIVCORE",
             "fixture": "DIVCORE/128/128/17/MOD/top-clear",
             "measured_varops": 10471.687635554725,
             "charged_varops": 9448,
             "ratio": 1.108349665067181
-          },
-          {
-            "machine": "Apple M1 Pro",
-            "family": "READ",
-            "fixture": "READ/trim/2047",
-            "measured_varops": 2358.9737826720334,
-            "charged_varops": 2129,
-            "ratio": 1.1080196254917958
-          },
-          {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
-            "fixture": "READ/trim/1000",
-            "measured_varops": 1195.7770759978819,
-            "charged_varops": 1081,
-            "ratio": 1.1061767585549322
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
@@ -16172,12 +16116,12 @@
             "ratio": 1.1039319569146686
           },
           {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
+            "machine": "Apple M1 Pro",
             "family": "READ",
-            "fixture": "READ/trim/1024",
-            "measured_varops": 1219.3578909868359,
-            "charged_varops": 1105,
-            "ratio": 1.103491304060485
+            "fixture": "READ/trim/2047",
+            "measured_varops": 2358.9737826720334,
+            "charged_varops": 2138,
+            "ratio": 1.1033553707539914
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -16190,10 +16134,10 @@
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "READ",
-            "fixture": "READ/compare/432",
-            "measured_varops": 564.4076476661412,
-            "charged_varops": 513,
-            "ratio": 1.1002098395051485
+            "fixture": "READ/compare/384",
+            "measured_varops": 521.5029878637413,
+            "charged_varops": 474,
+            "ratio": 1.1002172739741378
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -16208,24 +16152,16 @@
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/65544",
             "measured_varops": 577476.5680229443,
-            "charged_varops": 525082.0,
-            "ratio": 1.0997835919398193
+            "charged_varops": 525102.0,
+            "ratio": 1.099741703560345
           },
           {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/65552",
             "measured_varops": 577541.9651104974,
-            "charged_varops": 525146.0,
-            "ratio": 1.0997740916059484
-          },
-          {
-            "machine": "AMD Ryzen 5 3600 6-Core Processor",
-            "family": "READ",
-            "fixture": "READ/trim/432",
-            "measured_varops": 563.8263260585429,
-            "charged_varops": 513,
-            "ratio": 1.0990766589835144
+            "charged_varops": 525166.0,
+            "ratio": 1.0997322086930559
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -16248,8 +16184,16 @@
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/65537",
             "measured_varops": 576591.4889431081,
-            "charged_varops": 525082.0,
-            "ratio": 1.0980979903007686
+            "charged_varops": 525102.0,
+            "ratio": 1.0980561661222166
+          },
+          {
+            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
+            "family": "READ",
+            "fixture": "READ/compare/400",
+            "measured_varops": 538.0348976035527,
+            "charged_varops": 490,
+            "ratio": 1.0980304032725565
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -16261,22 +16205,6 @@
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
-            "family": "READ",
-            "fixture": "READ/trim/2047",
-            "measured_varops": 2336.494464862433,
-            "charged_varops": 2129,
-            "ratio": 1.0974609980565677
-          },
-          {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
-            "fixture": "READ/trim/519",
-            "measured_varops": 659.4842361633748,
-            "charged_varops": 601,
-            "ratio": 1.0973115410372294
-          },
-          {
-            "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
             "family": "DIVCORE",
             "fixture": "DIVCORE/256/256/17/MOD/top-one",
             "measured_varops": 19635.89306458398,
@@ -16285,19 +16213,27 @@
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
+            "family": "READ",
+            "fixture": "READ/trim/1000",
+            "measured_varops": 1195.7770759978819,
+            "charged_varops": 1090,
+            "ratio": 1.0970431889888825
+          },
+          {
+            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "SIG",
             "fixture": "SIG/32",
             "measured_varops": 553920.5529342815,
-            "charged_varops": 505134,
-            "ratio": 1.0965814079715115
+            "charged_varops": 505164,
+            "ratio": 1.0965162856701616
           },
           {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/55462",
             "measured_varops": 487265.16809264343,
-            "charged_varops": 444442.0,
-            "ratio": 1.0963526581480676
+            "charged_varops": 444462.0,
+            "ratio": 1.0963033242271407
           },
           {
             "machine": "Apple M1 Pro",
@@ -16308,20 +16244,12 @@
             "ratio": 1.096290270762286
           },
           {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
-            "fixture": "READ/trim/257",
-            "measured_varops": 378.1310104749444,
-            "charged_varops": 345,
-            "ratio": 1.0960319144201287
-          },
-          {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/32769",
             "measured_varops": 288025.7755708254,
-            "charged_varops": 262938.0,
-            "ratio": 1.0954132745013097
+            "charged_varops": 262958.0,
+            "ratio": 1.0953299598066055
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -16342,18 +16270,18 @@
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "READ",
-            "fixture": "READ/compare/440",
-            "measured_varops": 570.2092142384486,
-            "charged_varops": 521,
-            "ratio": 1.0944514668684233
+            "fixture": "READ/trim/1024",
+            "measured_varops": 1219.3578909868359,
+            "charged_varops": 1114,
+            "ratio": 1.0945762037583804
           },
           {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
             "family": "SIG",
             "fixture": "SIG/32",
             "measured_varops": 552682.0463348822,
-            "charged_varops": 505134,
-            "ratio": 1.0941295702425142
+            "charged_varops": 505164,
+            "ratio": 1.0940645935476045
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -16364,12 +16292,20 @@
             "ratio": 1.0939659682537453
           },
           {
+            "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
+            "family": "READ",
+            "fixture": "READ/trim/2047",
+            "measured_varops": 2336.494464862433,
+            "charged_varops": 2138,
+            "ratio": 1.092841190300483
+          },
+          {
             "machine": "varop-calibration-ryzen99500x-full",
             "family": "READ",
             "fixture": "READ/compare/1261024",
             "measured_varops": 1377351.8311385,
-            "charged_varops": 1261105,
-            "ratio": 1.0921785506666772
+            "charged_varops": 1261114,
+            "ratio": 1.0921707562825407
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
@@ -16382,18 +16318,18 @@
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "READ",
-            "fixture": "READ/compare/424",
-            "measured_varops": 551.2074899453193,
-            "charged_varops": 505,
-            "ratio": 1.0914999800897411
+            "fixture": "READ/compare/408",
+            "measured_varops": 543.756589691668,
+            "charged_varops": 498,
+            "ratio": 1.0918807021921044
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "SIG",
             "fixture": "SIG/0",
             "measured_varops": 551258.07733951,
-            "charged_varops": 505134,
-            "ratio": 1.0913105776675298
+            "charged_varops": 505164,
+            "ratio": 1.0912457683831587
           },
           {
             "machine": "varop-calibration-ryzen99500x-full",
@@ -16404,28 +16340,12 @@
             "ratio": 1.090399117581498
           },
           {
-            "machine": "Apple M1 Pro",
-            "family": "ARITH",
-            "fixture": "ARITH/sub/1024/equal/carry-chain",
-            "measured_varops": 26908.517872765427,
-            "charged_varops": 24706,
-            "ratio": 1.0891491084257034
-          },
-          {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
             "family": "SIG",
             "fixture": "SIG/0",
             "measured_varops": 550149.7631720336,
-            "charged_varops": 505134,
-            "ratio": 1.0891164783444267
-          },
-          {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
-            "fixture": "READ/trim/521",
-            "measured_varops": 662.8691836627188,
-            "charged_varops": 609,
-            "ratio": 1.0884551455873872
+            "charged_varops": 505164,
+            "ratio": 1.0890517993602742
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
@@ -16436,28 +16356,28 @@
             "ratio": 1.0884153671270729
           },
           {
-            "machine": "varop-calibration-ryzen99500x-full",
-            "family": "READ",
-            "fixture": "READ/trim/3050",
-            "measured_varops": 3412.0464458089564,
-            "charged_varops": 3137,
-            "ratio": 1.0876781784536043
+            "machine": "Apple M1 Pro",
+            "family": "ARITH",
+            "fixture": "ARITH/sub/1024/equal/carry-chain",
+            "measured_varops": 26908.517872765427,
+            "charged_varops": 24726,
+            "ratio": 1.0882681336554811
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "SIG",
             "fixture": "SIG/64",
             "measured_varops": 551861.7929451613,
-            "charged_varops": 507566,
-            "ratio": 1.0872710011016524
+            "charged_varops": 507596,
+            "ratio": 1.0872067410798378
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "SIG",
             "fixture": "SIG/128",
             "measured_varops": 554410.0569472522,
-            "charged_varops": 509998,
-            "ratio": 1.0870828061036557
+            "charged_varops": 510028,
+            "ratio": 1.0870188635668085
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -16480,8 +16400,8 @@
             "family": "SIG",
             "fixture": "SIG/128",
             "measured_varops": 554173.9776521636,
-            "charged_varops": 509998,
-            "ratio": 1.086619903709747
+            "charged_varops": 510028,
+            "ratio": 1.0865559884009577
           },
           {
             "machine": "varop-calibration-ryzen99500x-full",
@@ -16509,19 +16429,19 @@
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
-            "fixture": "READ/compare/376",
-            "measured_varops": 496.1365756833158,
-            "charged_varops": 457,
-            "ratio": 1.0856380211888748
-          },
-          {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "DIVCORE",
             "fixture": "DIVCORE/256/256/127/MOD/top-clear",
             "measured_varops": 19426.65868610045,
             "charged_varops": 17896,
             "ratio": 1.0855307714629219
+          },
+          {
+            "machine": "varop-calibration-ryzen99500x-full",
+            "family": "READ",
+            "fixture": "READ/trim/3050",
+            "measured_varops": 3412.0464458089564,
+            "charged_varops": 3146,
+            "ratio": 1.0845665752730314
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -16536,8 +16456,8 @@
             "family": "SIG",
             "fixture": "SIG/64",
             "measured_varops": 550382.1948315373,
-            "charged_varops": 507566,
-            "ratio": 1.0843559159430247
+            "charged_varops": 507596,
+            "ratio": 1.0842918282089247
           },
           {
             "machine": "Apple M1 Pro",
@@ -16550,26 +16470,18 @@
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "READ",
-            "fixture": "READ/compare/448",
-            "measured_varops": 573.1422449871642,
-            "charged_varops": 529,
-            "ratio": 1.0834446975182688
-          },
-          {
-            "machine": "Apple M1 Pro",
-            "family": "READ",
-            "fixture": "READ/trim/2048",
-            "measured_varops": 2304.365981872057,
-            "charged_varops": 2129,
-            "ratio": 1.0823701183053345
+            "fixture": "READ/compare/432",
+            "measured_varops": 564.4076476661412,
+            "charged_varops": 522,
+            "ratio": 1.0812407043412666
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "READ",
-            "fixture": "READ/compare/464",
-            "measured_varops": 589.5917996687404,
-            "charged_varops": 545,
-            "ratio": 1.0818198159059456
+            "fixture": "READ/trim/519",
+            "measured_varops": 659.4842361633748,
+            "charged_varops": 610,
+            "ratio": 1.0811216986284833
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -16580,6 +16492,22 @@
             "ratio": 1.0806002629314668
           },
           {
+            "machine": "AMD Ryzen 5 3600 6-Core Processor",
+            "family": "READ",
+            "fixture": "READ/trim/432",
+            "measured_varops": 563.8263260585429,
+            "charged_varops": 522,
+            "ratio": 1.0801270614148333
+          },
+          {
+            "machine": "Apple M1 Pro",
+            "family": "READ",
+            "fixture": "READ/trim/2048",
+            "measured_varops": 2304.365981872057,
+            "charged_varops": 2138,
+            "ratio": 1.077813836235761
+          },
+          {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
             "family": "BIT",
             "fixture": "BIT/byterev/30",
@@ -16588,36 +16516,20 @@
             "ratio": 1.0773386069456798
           },
           {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
-            "fixture": "READ/compare/456",
-            "measured_varops": 577.9776279696333,
-            "charged_varops": 537,
-            "ratio": 1.0763084319732463
-          },
-          {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
-            "fixture": "READ/trim/1562",
-            "measured_varops": 1774.8058888724731,
-            "charged_varops": 1649,
-            "ratio": 1.0762922309717848
-          },
-          {
             "machine": "varop-calibration-ryzen99500x-full",
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/16384",
             "measured_varops": 141844.6390543841,
-            "charged_varops": 131802.0,
-            "ratio": 1.0761948912336998
+            "charged_varops": 131822.0,
+            "ratio": 1.0760316112210717
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "READ",
-            "fixture": "READ/compare/472",
-            "measured_varops": 594.8503995901601,
-            "charged_varops": 553,
-            "ratio": 1.0756788419351901
+            "fixture": "READ/compare/440",
+            "measured_varops": 570.2092142384486,
+            "charged_varops": 530,
+            "ratio": 1.075866441959337
           },
           {
             "machine": "varop-calibration-ryzen99500x-full",
@@ -16632,24 +16544,8 @@
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/22718",
             "measured_varops": 195879.5243971214,
-            "charged_varops": 182490.0,
-            "ratio": 1.0733712773144906
-          },
-          {
-            "machine": "Apple M1 Pro",
-            "family": "ARITH",
-            "fixture": "ARITH/sub/1024/equal/borrow-chain",
-            "measured_varops": 26514.392163097473,
-            "charged_varops": 24706,
-            "ratio": 1.0731964770945306
-          },
-          {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
-            "fixture": "READ/compare/480",
-            "measured_varops": 601.8125873405451,
-            "charged_varops": 561,
-            "ratio": 1.0727497100544476
+            "charged_varops": 182510.0,
+            "ratio": 1.0732536540305813
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -16660,20 +16556,28 @@
             "ratio": 1.072727448147171
           },
           {
-            "machine": "AMD Ryzen 5 3600 6-Core Processor",
+            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "READ",
-            "fixture": "READ/trim/513",
-            "measured_varops": 644.6036958136793,
-            "charged_varops": 601,
-            "ratio": 1.0725519065119458
+            "fixture": "READ/trim/521",
+            "measured_varops": 662.8691836627188,
+            "charged_varops": 618,
+            "ratio": 1.0726038570594156
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "READ",
-            "fixture": "READ/compare/488",
-            "measured_varops": 609.4651356663097,
-            "charged_varops": 569,
-            "ratio": 1.0711162313994897
+            "fixture": "READ/compare/424",
+            "measured_varops": 551.2074899453193,
+            "charged_varops": 514,
+            "ratio": 1.0723881127340842
+          },
+          {
+            "machine": "Apple M1 Pro",
+            "family": "ARITH",
+            "fixture": "ARITH/sub/1024/equal/borrow-chain",
+            "measured_varops": 26514.392163097473,
+            "charged_varops": 24726,
+            "ratio": 1.0723284058520373
           },
           {
             "machine": "varop-calibration-ryzen99500x-full",
@@ -16684,36 +16588,20 @@
             "ratio": 1.0709151191890012
           },
           {
-            "machine": "Apple M1 Pro",
+            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "READ",
-            "fixture": "READ/trim/1025",
-            "measured_varops": 1191.3941611741877,
-            "charged_varops": 1113,
-            "ratio": 1.0704350055473384
+            "fixture": "READ/trim/1562",
+            "measured_varops": 1774.8058888724731,
+            "charged_varops": 1658,
+            "ratio": 1.0704498726613227
           },
           {
-            "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
+            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "READ",
-            "fixture": "READ/trim/127",
-            "measured_varops": 223.66469113991914,
-            "charged_varops": 209,
-            "ratio": 1.0701659863154025
-          },
-          {
-            "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
-            "family": "READ",
-            "fixture": "READ/trim/2049",
-            "measured_varops": 2285.0958256110353,
-            "charged_varops": 2137,
-            "ratio": 1.0693008074922954
-          },
-          {
-            "machine": "Apple M1 Pro",
-            "family": "ARITH",
-            "fixture": "ARITH/add/513/equal/carry-chain",
-            "measured_varops": 13303.775775412556,
-            "charged_varops": 12442,
-            "ratio": 1.0692634444150906
+            "fixture": "READ/trim/257",
+            "measured_varops": 378.1310104749444,
+            "charged_varops": 354,
+            "ratio": 1.068166696256905
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
@@ -16732,20 +16620,12 @@
             "ratio": 1.0679633959707773
           },
           {
-            "machine": "AMD Ryzen 5 3600 6-Core Processor",
-            "family": "READ",
-            "fixture": "READ/trim/521",
-            "measured_varops": 650.1055459967712,
-            "charged_varops": 609,
-            "ratio": 1.0674967914561104
-          },
-          {
-            "machine": "AMD Ryzen 5 3600 6-Core Processor",
-            "family": "READ",
-            "fixture": "READ/trim/519",
-            "measured_varops": 641.5619071058248,
-            "charged_varops": 601,
-            "ratio": 1.0674906940196753
+            "machine": "Apple M1 Pro",
+            "family": "ARITH",
+            "fixture": "ARITH/add/513/equal/carry-chain",
+            "measured_varops": 13303.775775412556,
+            "charged_varops": 12462,
+            "ratio": 1.0675474061476935
           },
           {
             "machine": "varop-calibration-ryzen99500x-full",
@@ -16764,6 +16644,14 @@
             "ratio": 1.0658912199277282
           },
           {
+            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
+            "family": "READ",
+            "fixture": "READ/compare/448",
+            "measured_varops": 573.1422449871642,
+            "charged_varops": 538,
+            "ratio": 1.0653201579687066
+          },
+          {
             "machine": "varop-calibration-ryzen99500x-full",
             "family": "BIT",
             "fixture": "BIT/byterev/21",
@@ -16772,12 +16660,44 @@
             "ratio": 1.0652742290917032
           },
           {
+            "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
+            "family": "READ",
+            "fixture": "READ/trim/2049",
+            "measured_varops": 2285.0958256110353,
+            "charged_varops": 2146,
+            "ratio": 1.064816321347174
+          },
+          {
+            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
+            "family": "READ",
+            "fixture": "READ/compare/376",
+            "measured_varops": 496.1365756833158,
+            "charged_varops": 466,
+            "ratio": 1.064670763268918
+          },
+          {
+            "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
+            "family": "READ",
+            "fixture": "READ/trim/1",
+            "measured_varops": 104.29961891752373,
+            "charged_varops": 98,
+            "ratio": 1.0642818256890176
+          },
+          {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "DIVCORE",
             "fixture": "DIVCORE/1024/1024/17/MOD/top-clear",
             "measured_varops": 72990.52303106526,
             "charged_varops": 68584,
             "ratio": 1.064250015033612
+          },
+          {
+            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
+            "family": "READ",
+            "fixture": "READ/compare/464",
+            "measured_varops": 589.5917996687404,
+            "charged_varops": 554,
+            "ratio": 1.064245125755849
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
@@ -16812,20 +16732,36 @@
             "ratio": 1.0624007637075032
           },
           {
+            "machine": "Apple M1 Pro",
+            "family": "READ",
+            "fixture": "READ/trim/1025",
+            "measured_varops": 1191.3941611741877,
+            "charged_varops": 1122,
+            "ratio": 1.0618486284974935
+          },
+          {
+            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
+            "family": "READ",
+            "fixture": "READ/compare/456",
+            "measured_varops": 577.9776279696333,
+            "charged_varops": 546,
+            "ratio": 1.0585670841934676
+          },
+          {
+            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
+            "family": "READ",
+            "fixture": "READ/compare/472",
+            "measured_varops": 594.8503995901601,
+            "charged_varops": 562,
+            "ratio": 1.0584526683098934
+          },
+          {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
             "family": "BIT",
             "fixture": "BIT/byterev/8",
             "measured_varops": 175.58665481079086,
             "charged_varops": 166,
             "ratio": 1.0577509325951258
-          },
-          {
-            "machine": "varop-calibration-ryzen99500x-full",
-            "family": "READ",
-            "fixture": "READ/trim/511",
-            "measured_varops": 627.1245623876486,
-            "charged_varops": 593,
-            "ratio": 1.0575456364041291
           },
           {
             "machine": "varop-calibration-ryzen99500x-full",
@@ -16836,14 +16772,6 @@
             "ratio": 1.057469558687285
           },
           {
-            "machine": "Apple M1 Pro",
-            "family": "READ",
-            "fixture": "READ/trim/513",
-            "measured_varops": 635.467921931816,
-            "charged_varops": 601,
-            "ratio": 1.0573509516336372
-          },
-          {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
             "family": "DIVCORE",
             "fixture": "DIVCORE/32/32/17/MOD/top-one",
@@ -16852,28 +16780,36 @@
             "ratio": 1.0570290667978175
           },
           {
+            "machine": "AMD Ryzen 5 3600 6-Core Processor",
+            "family": "READ",
+            "fixture": "READ/trim/513",
+            "measured_varops": 644.6036958136793,
+            "charged_varops": 610,
+            "ratio": 1.0567273701863595
+          },
+          {
             "machine": "varop-calibration-ryzen99500x-full",
             "family": "SIG",
             "fixture": "SIG/1024",
             "measured_varops": 574462.2833474269,
-            "charged_varops": 544046,
-            "ratio": 1.0559075580877848
+            "charged_varops": 544076,
+            "ratio": 1.0558493360255312
+          },
+          {
+            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
+            "family": "READ",
+            "fixture": "READ/compare/480",
+            "measured_varops": 601.8125873405451,
+            "charged_varops": 570,
+            "ratio": 1.0558115567377984
           },
           {
             "machine": "Apple M1 Pro",
             "family": "ARITH",
             "fixture": "ARITH/add/1024/equal/borrow-chain",
             "measured_varops": 26085.544499135383,
-            "charged_varops": 24706,
-            "ratio": 1.0558384400200511
-          },
-          {
-            "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
-            "family": "READ",
-            "fixture": "READ/trim/280",
-            "measured_varops": 380.94988732361145,
-            "charged_varops": 361,
-            "ratio": 1.0552628457717768
+            "charged_varops": 24726,
+            "ratio": 1.054984409089031
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -16882,6 +16818,14 @@
             "measured_varops": 3282.179149105522,
             "charged_varops": 3112,
             "ratio": 1.0546848165506175
+          },
+          {
+            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
+            "family": "READ",
+            "fixture": "READ/compare/488",
+            "measured_varops": 609.4651356663097,
+            "charged_varops": 578,
+            "ratio": 1.0544379509797746
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -16900,12 +16844,20 @@
             "ratio": 1.0531631217668007
           },
           {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
+            "machine": "AMD Ryzen 5 3600 6-Core Processor",
             "family": "READ",
-            "fixture": "READ/compare/512",
-            "measured_varops": 623.9223218135038,
-            "charged_varops": 593,
-            "ratio": 1.0521455679822997
+            "fixture": "READ/trim/521",
+            "measured_varops": 650.1055459967712,
+            "charged_varops": 618,
+            "ratio": 1.0519507216776234
+          },
+          {
+            "machine": "AMD Ryzen 5 3600 6-Core Processor",
+            "family": "READ",
+            "fixture": "READ/trim/519",
+            "measured_varops": 641.5619071058248,
+            "charged_varops": 610,
+            "ratio": 1.0517408313210244
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -16949,19 +16901,19 @@
           },
           {
             "machine": "varop-calibration-ryzen99500x-full",
-            "family": "PRODUCE",
-            "fixture": "PRODUCE/fresh-pages/32769",
-            "measured_varops": 276039.6241388376,
-            "charged_varops": 262938.0,
-            "ratio": 1.0498278078438172
-          },
-          {
-            "machine": "varop-calibration-ryzen99500x-full",
             "family": "BIT",
             "fixture": "BIT/byterev/28",
             "measured_varops": 224.6484516733622,
             "charged_varops": 214,
             "ratio": 1.0497591199689822
+          },
+          {
+            "machine": "varop-calibration-ryzen99500x-full",
+            "family": "PRODUCE",
+            "fixture": "PRODUCE/fresh-pages/32769",
+            "measured_varops": 276039.6241388376,
+            "charged_varops": 262958.0,
+            "ratio": 1.0497479602782103
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
@@ -16970,14 +16922,6 @@
             "measured_varops": 8221.924718623937,
             "charged_varops": 7836,
             "ratio": 1.0492502193241369
-          },
-          {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
-            "fixture": "READ/compare/504",
-            "measured_varops": 613.8052410338723,
-            "charged_varops": 585,
-            "ratio": 1.0492397282630297
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
@@ -17012,20 +16956,12 @@
             "ratio": 1.0474769623830011
           },
           {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
-            "fixture": "READ/compare/496",
-            "measured_varops": 603.5704545458547,
-            "charged_varops": 577,
-            "ratio": 1.0460493146375298
-          },
-          {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/86674",
             "measured_varops": 725539.8046863344,
-            "charged_varops": 694170.0,
-            "ratio": 1.0451903779857015
+            "charged_varops": 694190.0,
+            "ratio": 1.0451602654695897
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
@@ -17040,16 +16976,8 @@
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/65536",
             "measured_varops": 548360.487827913,
-            "charged_varops": 525018.0,
-            "ratio": 1.0444603572218725
-          },
-          {
-            "machine": "AMD Ryzen 5 3600 6-Core Processor",
-            "family": "PRODUCE",
-            "fixture": "PRODUCE/fresh-pages/65528",
-            "measured_varops": 548028.581143654,
-            "charged_varops": 524954.0,
-            "ratio": 1.043955434464075
+            "charged_varops": 525038.0,
+            "ratio": 1.0444205711356378
           },
           {
             "machine": "Apple M1 Pro",
@@ -17058,6 +16986,14 @@
             "measured_varops": 173.29589769660078,
             "charged_varops": 166,
             "ratio": 1.043951190943378
+          },
+          {
+            "machine": "AMD Ryzen 5 3600 6-Core Processor",
+            "family": "PRODUCE",
+            "fixture": "PRODUCE/fresh-pages/65528",
+            "measured_varops": 548028.581143654,
+            "charged_varops": 524974.0,
+            "ratio": 1.043915662763592
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -17072,8 +17008,8 @@
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/16385",
             "measured_varops": 137639.77444155214,
-            "charged_varops": 131866.0,
-            "ratio": 1.0437851640419225
+            "charged_varops": 131886.0,
+            "ratio": 1.0436268780731248
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -17088,8 +17024,8 @@
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/86658",
             "measured_varops": 724209.9092176628,
-            "charged_varops": 694042.0,
-            "ratio": 1.0434669792572535
+            "charged_varops": 694062.0,
+            "ratio": 1.0434369108489772
           },
           {
             "machine": "varop-calibration-ryzen99500x-full",
@@ -17104,16 +17040,8 @@
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/65520",
             "measured_varops": 547655.0441960592,
-            "charged_varops": 524890.0,
-            "ratio": 1.043371076217987
-          },
-          {
-            "machine": "AMD Ryzen 5 3600 6-Core Processor",
-            "family": "PRODUCE",
-            "fixture": "PRODUCE/fresh-pages/86666",
-            "measured_varops": 724159.8911966879,
-            "charged_varops": 694106.0,
-            "ratio": 1.0432987053802847
+            "charged_varops": 524910.0,
+            "ratio": 1.0433313219333966
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -17126,10 +17054,18 @@
           {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
             "family": "PRODUCE",
+            "fixture": "PRODUCE/fresh-pages/86666",
+            "measured_varops": 724159.8911966879,
+            "charged_varops": 694126.0,
+            "ratio": 1.0432686445928951
+          },
+          {
+            "machine": "AMD Ryzen 5 3600 6-Core Processor",
+            "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/65535",
             "measured_varops": 547716.6242870188,
-            "charged_varops": 525018.0,
-            "ratio": 1.0432339925241016
+            "charged_varops": 525038.0,
+            "ratio": 1.0431942531531408
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -17144,16 +17080,16 @@
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/86650",
             "measured_varops": 723820.1372034794,
-            "charged_varops": 693978.0,
-            "ratio": 1.0430015608614098
+            "charged_varops": 693998.0,
+            "ratio": 1.0429715030929188
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
             "family": "READ",
             "fixture": "READ/compare/4000000",
             "measured_varops": 4170565.0633868445,
-            "charged_varops": 4000081,
-            "ratio": 1.0426201527886172
+            "charged_varops": 4000090,
+            "ratio": 1.0426178069460548
           },
           {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
@@ -17173,27 +17109,35 @@
           },
           {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
-            "family": "READ",
-            "fixture": "READ/trim/520",
-            "measured_varops": 626.1704562440814,
-            "charged_varops": 601,
-            "ratio": 1.0418809588087876
-          },
-          {
-            "machine": "AMD Ryzen 5 3600 6-Core Processor",
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/86657",
             "measured_varops": 723060.0035822731,
-            "charged_varops": 694042.0,
-            "ratio": 1.0418101549794871
+            "charged_varops": 694062.0,
+            "ratio": 1.0417801343140427
+          },
+          {
+            "machine": "Apple M1 Pro",
+            "family": "READ",
+            "fixture": "READ/trim/513",
+            "measured_varops": 635.467921931816,
+            "charged_varops": 610,
+            "ratio": 1.0417506916915016
+          },
+          {
+            "machine": "varop-calibration-ryzen99500x-full",
+            "family": "READ",
+            "fixture": "READ/trim/511",
+            "measured_varops": 627.1245623876486,
+            "charged_varops": 602,
+            "ratio": 1.0417351534678547
           },
           {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/86659",
             "measured_varops": 722928.0092692246,
-            "charged_varops": 694042.0,
-            "ratio": 1.04161997295441
+            "charged_varops": 694062.0,
+            "ratio": 1.041589957769226
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -17212,22 +17156,6 @@
             "ratio": 1.0408091793547978
           },
           {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
-            "fixture": "READ/trim/256",
-            "measured_varops": 350.6724107947994,
-            "charged_varops": 337,
-            "ratio": 1.0405709519133515
-          },
-          {
-            "machine": "Apple M1 Pro",
-            "family": "READ",
-            "fixture": "READ/trim/2440",
-            "measured_varops": 2623.0746472289075,
-            "charged_varops": 2521,
-            "ratio": 1.0404897450332835
-          },
-          {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
             "family": "DIVCORE",
             "fixture": "DIVCORE/3/3/17/MOD/top-one",
@@ -17236,28 +17164,20 @@
             "ratio": 1.0403656558067291
           },
           {
-            "machine": "varop-calibration-ryzen99500x-full",
-            "family": "READ",
-            "fixture": "READ/trim/2440",
-            "measured_varops": 2622.223435915899,
-            "charged_varops": 2521,
-            "ratio": 1.040152096753629
-          },
-          {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/69327",
             "measured_varops": 577641.7836897237,
-            "charged_varops": 555354.0,
-            "ratio": 1.0401325707381666
+            "charged_varops": 555374.0,
+            "ratio": 1.040095113724668
           },
           {
             "machine": "Apple M1 Pro",
             "family": "SIG",
             "fixture": "SIG/32",
             "measured_varops": 525373.2781340234,
-            "charged_varops": 505134,
-            "ratio": 1.0400671468046567
+            "charged_varops": 505164,
+            "ratio": 1.0400053806962164
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -17272,16 +17192,8 @@
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/86642",
             "measured_varops": 721398.7101953771,
-            "charged_varops": 693914.0,
-            "ratio": 1.0396082370371216
-          },
-          {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
-            "fixture": "READ/compare/528",
-            "measured_varops": 632.9310495669969,
-            "charged_varops": 609,
-            "ratio": 1.0392956478932625
+            "charged_varops": 693934.0,
+            "ratio": 1.0395782742960817
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -17328,16 +17240,16 @@
             "family": "SIG",
             "fixture": "SIG/1024",
             "measured_varops": 564918.0035881791,
-            "charged_varops": 544046,
-            "ratio": 1.0383644096053994
+            "charged_varops": 544076,
+            "ratio": 1.0383071548610472
           },
           {
-            "machine": "Apple M1 Pro",
-            "family": "SIG",
-            "fixture": "SIG/0",
-            "measured_varops": 523893.1117289429,
-            "charged_varops": 505134,
-            "ratio": 1.0371369017507095
+            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
+            "family": "READ",
+            "fixture": "READ/trim/1",
+            "measured_varops": 101.6395007682107,
+            "charged_varops": 98,
+            "ratio": 1.0371377629409255
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -17348,12 +17260,44 @@
             "ratio": 1.0371208839622468
           },
           {
+            "machine": "Apple M1 Pro",
+            "family": "SIG",
+            "fixture": "SIG/0",
+            "measured_varops": 523893.1117289429,
+            "charged_varops": 505164,
+            "ratio": 1.0370753096597203
+          },
+          {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
             "family": "BIT",
             "fixture": "BIT/byterev/11",
             "measured_varops": 188.70992102255946,
             "charged_varops": 182,
             "ratio": 1.0368676979261509
+          },
+          {
+            "machine": "Apple M1 Pro",
+            "family": "READ",
+            "fixture": "READ/trim/2440",
+            "measured_varops": 2623.0746472289075,
+            "charged_varops": 2530,
+            "ratio": 1.0367883981141928
+          },
+          {
+            "machine": "varop-calibration-ryzen99500x-full",
+            "family": "READ",
+            "fixture": "READ/trim/2440",
+            "measured_varops": 2622.223435915899,
+            "charged_varops": 2530,
+            "ratio": 1.0364519509549006
+          },
+          {
+            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
+            "family": "READ",
+            "fixture": "READ/compare/512",
+            "measured_varops": 623.9223218135038,
+            "charged_varops": 602,
+            "ratio": 1.0364158169659532
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -17392,8 +17336,8 @@
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/28397",
             "measured_varops": 236078.70028935545,
-            "charged_varops": 227930.0,
-            "ratio": 1.035750889700151
+            "charged_varops": 227950.0,
+            "ratio": 1.035660014430162
           },
           {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
@@ -17410,14 +17354,6 @@
             "measured_varops": 188.43751749796053,
             "charged_varops": 182,
             "ratio": 1.0353709752635194
-          },
-          {
-            "machine": "varop-calibration-ryzen99500x-full",
-            "family": "READ",
-            "fixture": "READ/trim/519",
-            "measured_varops": 622.0009371564635,
-            "charged_varops": 601,
-            "ratio": 1.0349433230556797
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
@@ -17460,6 +17396,14 @@
             "ratio": 1.033342996060317
           },
           {
+            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
+            "family": "READ",
+            "fixture": "READ/compare/504",
+            "measured_varops": 613.8052410338723,
+            "charged_varops": 594,
+            "ratio": 1.0333421566226808
+          },
+          {
             "machine": "varop-calibration-ryzen99500x-full",
             "family": "NORMALIZE",
             "fixture": "NORMALIZE/aligned/2097151",
@@ -17472,16 +17416,8 @@
             "family": "SIG",
             "fixture": "SIG/64",
             "measured_varops": 524209.51347630686,
-            "charged_varops": 507566,
-            "ratio": 1.0327908360219298
-          },
-          {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
-            "fixture": "READ/trim/400",
-            "measured_varops": 496.6475387995518,
-            "charged_varops": 481,
-            "ratio": 1.0325312656955339
+            "charged_varops": 507596,
+            "ratio": 1.0327297958934012
           },
           {
             "machine": "Apple M1 Pro",
@@ -17496,32 +17432,16 @@
             "family": "SIG",
             "fixture": "SIG/128",
             "measured_varops": 526554.3220216652,
-            "charged_varops": 509998,
-            "ratio": 1.032463503820927
+            "charged_varops": 510028,
+            "ratio": 1.0324027740078292
           },
           {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
             "family": "SIG",
             "fixture": "SIG/1024",
             "measured_varops": 561705.4232326661,
-            "charged_varops": 544046,
-            "ratio": 1.032459430328807
-          },
-          {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
-            "fixture": "READ/compare/520",
-            "measured_varops": 620.4592878833114,
-            "charged_varops": 601,
-            "ratio": 1.0323781828341287
-          },
-          {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
-            "fixture": "READ/trim/272",
-            "measured_varops": 364.3156469466154,
-            "charged_varops": 353,
-            "ratio": 1.032055657072565
+            "charged_varops": 544076,
+            "ratio": 1.0324025011812066
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -17548,6 +17468,14 @@
             "ratio": 1.0313368328341377
           },
           {
+            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
+            "family": "READ",
+            "fixture": "READ/compare/496",
+            "measured_varops": 603.5704545458547,
+            "charged_varops": 586,
+            "ratio": 1.0299837108291034
+          },
+          {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
             "family": "DIVCORE",
             "fixture": "DIVCORE/2/2/17/DIV/top-clear",
@@ -17564,20 +17492,20 @@
             "ratio": 1.0297548431755819
           },
           {
-            "machine": "Apple M1 Pro",
-            "family": "READ",
-            "fixture": "READ/equal-bytes/3",
-            "measured_varops": 91.64633734381974,
-            "charged_varops": 89,
-            "ratio": 1.0297341274586487
-          },
-          {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
             "family": "DIVCORE",
             "fixture": "DIVCORE/1025/1024/127/MOD/top-clear",
             "measured_varops": 105932.25342969937,
             "charged_varops": 102876,
             "ratio": 1.0297081285207372
+          },
+          {
+            "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
+            "family": "READ",
+            "fixture": "READ/trim/280",
+            "measured_varops": 380.94988732361145,
+            "charged_varops": 370,
+            "ratio": 1.0295942900638146
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -17612,14 +17540,6 @@
             "ratio": 1.028392113209185
           },
           {
-            "machine": "Apple M1 Pro",
-            "family": "ARITH",
-            "fixture": "ARITH/add/1024/equal/carry-chain",
-            "measured_varops": 25403.26928476284,
-            "charged_varops": 24706,
-            "ratio": 1.028222669989591
-          },
-          {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
             "family": "BIT",
             "fixture": "BIT/byterev/24",
@@ -17642,6 +17562,14 @@
             "measured_varops": 105702.74025679138,
             "charged_varops": 102876,
             "ratio": 1.0274771594617926
+          },
+          {
+            "machine": "Apple M1 Pro",
+            "family": "ARITH",
+            "fixture": "ARITH/add/1024/equal/carry-chain",
+            "measured_varops": 25403.26928476284,
+            "charged_varops": 24726,
+            "ratio": 1.0273909764928755
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
@@ -17676,6 +17604,14 @@
             "ratio": 1.0268764495287017
           },
           {
+            "machine": "AMD Ryzen 5 3600 6-Core Processor",
+            "family": "READ",
+            "fixture": "READ/trim/520",
+            "measured_varops": 626.1704562440814,
+            "charged_varops": 610,
+            "ratio": 1.0265089446624285
+          },
+          {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
             "family": "DIVCORE",
             "fixture": "DIVCORE/3/3/17/MOD/top-clear",
@@ -17690,6 +17626,14 @@
             "measured_varops": 219.61933941627,
             "charged_varops": 214,
             "ratio": 1.026258595403131
+          },
+          {
+            "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
+            "family": "READ",
+            "fixture": "READ/trim/127",
+            "measured_varops": 223.66469113991914,
+            "charged_varops": 218,
+            "ratio": 1.0259848217427483
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
@@ -17732,14 +17676,6 @@
             "ratio": 1.0256690413719294
           },
           {
-            "machine": "Apple M1 Pro",
-            "family": "ARITH",
-            "fixture": "ARITH/sub/513/equal/carry-chain",
-            "measured_varops": 12755.391468403172,
-            "charged_varops": 12442,
-            "ratio": 1.025188190676995
-          },
-          {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "DIVCORE",
             "fixture": "DIVCORE/129/128/127/MOD/top-one",
@@ -17756,20 +17692,20 @@
             "ratio": 1.024776009461105
           },
           {
-            "machine": "Apple M1 Pro",
-            "family": "ARITH",
-            "fixture": "ARITH/add/477/equal/carry-chain",
-            "measured_varops": 11852.240681812284,
-            "charged_varops": 11578,
-            "ratio": 1.0236863604951014
-          },
-          {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "READ",
-            "fixture": "READ/trim/288",
-            "measured_varops": 377.70945026271204,
-            "charged_varops": 369,
-            "ratio": 1.023602846240412
+            "fixture": "READ/compare/528",
+            "measured_varops": 632.9310495669969,
+            "charged_varops": 618,
+            "ratio": 1.0241602743802538
+          },
+          {
+            "machine": "Apple M1 Pro",
+            "family": "ARITH",
+            "fixture": "ARITH/sub/513/equal/carry-chain",
+            "measured_varops": 12755.391468403172,
+            "charged_varops": 12462,
+            "ratio": 1.0235428878513217
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -17802,14 +17738,6 @@
             "measured_varops": 55231584.22982499,
             "charged_varops": 54001800,
             "ratio": 1.0227730229330316
-          },
-          {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
-            "fixture": "READ/trim/280",
-            "measured_varops": 369.21296247252354,
-            "charged_varops": 361,
-            "ratio": 1.022750588566547
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -17852,20 +17780,20 @@
             "ratio": 1.0222500246000077
           },
           {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
-            "fixture": "READ/trim/296",
-            "measured_varops": 385.3439808994266,
-            "charged_varops": 377,
-            "ratio": 1.022132575330044
-          },
-          {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
             "family": "READ",
             "fixture": "READ/compare/3848328",
             "measured_varops": 3933431.9669042155,
-            "charged_varops": 3848409,
-            "ratio": 1.0220930173752882
+            "charged_varops": 3848418,
+            "ratio": 1.0220906270847439
+          },
+          {
+            "machine": "Apple M1 Pro",
+            "family": "ARITH",
+            "fixture": "ARITH/add/477/equal/carry-chain",
+            "measured_varops": 11852.240681812284,
+            "charged_varops": 11598,
+            "ratio": 1.0219210796527232
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -17900,14 +17828,6 @@
             "ratio": 1.021542602599184
           },
           {
-            "machine": "Apple M1 Pro",
-            "family": "READ",
-            "fixture": "READ/trim/2049",
-            "measured_varops": 2182.417626916178,
-            "charged_varops": 2137,
-            "ratio": 1.0212529840506215
-          },
-          {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
             "family": "DIVCORE",
             "fixture": "DIVCORE/8/8/127/MOD/top-one",
@@ -17924,20 +17844,12 @@
             "ratio": 1.0208478050314516
           },
           {
-            "machine": "Apple M1 Pro",
-            "family": "ARITH",
-            "fixture": "ARITH/sub/513/equal/borrow-chain",
-            "measured_varops": 12698.928970957524,
-            "charged_varops": 12442,
-            "ratio": 1.0206501342997527
-          },
-          {
-            "machine": "Apple M1 Pro",
+            "machine": "varop-calibration-ryzen99500x-full",
             "family": "READ",
-            "fixture": "READ/trim/1250",
-            "measured_varops": 1363.5691235794307,
-            "charged_varops": 1337,
-            "ratio": 1.0198721941506588
+            "fixture": "READ/trim/519",
+            "measured_varops": 622.0009371564635,
+            "charged_varops": 610,
+            "ratio": 1.0196736674696123
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -17952,24 +17864,24 @@
             "family": "READ",
             "fixture": "READ/compare/1576280",
             "measured_varops": 1606924.9913797483,
-            "charged_varops": 1576361,
-            "ratio": 1.0193889542939392
+            "charged_varops": 1576370,
+            "ratio": 1.0193831342766917
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/35496",
             "measured_varops": 290141.5586687887,
-            "charged_varops": 284698.0,
-            "ratio": 1.019120466841315
+            "charged_varops": 284718.0,
+            "ratio": 1.01904887878107
           },
           {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
-            "fixture": "READ/trim/264",
-            "measured_varops": 351.48710198592,
-            "charged_varops": 345,
-            "ratio": 1.018803194162087
+            "machine": "Apple M1 Pro",
+            "family": "ARITH",
+            "fixture": "ARITH/sub/513/equal/borrow-chain",
+            "measured_varops": 12698.928970957524,
+            "charged_varops": 12462,
+            "ratio": 1.0190121145046962
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -17982,18 +17894,10 @@
           {
             "machine": "varop-calibration-ryzen99500x-full",
             "family": "READ",
-            "fixture": "READ/trim/448",
-            "measured_varops": 538.5536878475345,
-            "charged_varops": 529,
-            "ratio": 1.0180599014131089
-          },
-          {
-            "machine": "varop-calibration-ryzen99500x-full",
-            "family": "READ",
             "fixture": "READ/compare/1970344",
             "measured_varops": 2005966.8231759816,
-            "charged_varops": 1970425,
-            "ratio": 1.0180376432373632
+            "charged_varops": 1970434,
+            "ratio": 1.018032993328364
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -18006,18 +17910,10 @@
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "READ",
-            "fixture": "READ/trim/240",
-            "measured_varops": 326.5868577320407,
-            "charged_varops": 321,
-            "ratio": 1.0174045412213106
-          },
-          {
-            "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
-            "family": "READ",
-            "fixture": "READ/compare/296",
-            "measured_varops": 383.4310953956807,
-            "charged_varops": 377,
-            "ratio": 1.0170586084766067
+            "fixture": "READ/compare/520",
+            "measured_varops": 620.4592878833114,
+            "charged_varops": 610,
+            "ratio": 1.017146373579199
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -18036,20 +17932,20 @@
             "ratio": 1.0170012692298867
           },
           {
+            "machine": "Apple M1 Pro",
+            "family": "READ",
+            "fixture": "READ/trim/2049",
+            "measured_varops": 2182.417626916178,
+            "charged_varops": 2146,
+            "ratio": 1.016970003222823
+          },
+          {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "NORMALIZE",
             "fixture": "NORMALIZE/aligned/131073",
             "measured_varops": 203.20862562143702,
             "charged_varops": 200,
             "ratio": 1.0160431281071851
-          },
-          {
-            "machine": "Apple M1 Pro",
-            "family": "ARITH",
-            "fixture": "ARITH/sub/596/equal/borrow-chain",
-            "measured_varops": 14664.345320709073,
-            "charged_varops": 14434,
-            "ratio": 1.0159585229810915
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
@@ -18086,10 +17982,10 @@
           {
             "machine": "Apple M1 Pro",
             "family": "ARITH",
-            "fixture": "ARITH/sub/931/equal/borrow-chain",
-            "measured_varops": 22805.143013933834,
-            "charged_varops": 22474,
-            "ratio": 1.014734493812131
+            "fixture": "ARITH/sub/596/equal/borrow-chain",
+            "measured_varops": 14664.345320709073,
+            "charged_varops": 14454,
+            "ratio": 1.0145527411587847
           },
           {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
@@ -18124,12 +18020,44 @@
             "ratio": 1.014138047241984
           },
           {
+            "machine": "Apple M1 Pro",
+            "family": "ARITH",
+            "fixture": "ARITH/sub/931/equal/borrow-chain",
+            "measured_varops": 22805.143013933834,
+            "charged_varops": 22494,
+            "ratio": 1.0138322670015931
+          },
+          {
+            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
+            "family": "READ",
+            "fixture": "READ/trim/400",
+            "measured_varops": 496.6475387995518,
+            "charged_varops": 490,
+            "ratio": 1.013566405713371
+          },
+          {
+            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
+            "family": "READ",
+            "fixture": "READ/trim/256",
+            "measured_varops": 350.6724107947994,
+            "charged_varops": 346,
+            "ratio": 1.0135040774416169
+          },
+          {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "NORMALIZE",
             "fixture": "NORMALIZE/aligned/211581",
             "measured_varops": 202.63710136187672,
             "charged_varops": 200,
             "ratio": 1.0131855068093836
+          },
+          {
+            "machine": "Apple M1 Pro",
+            "family": "READ",
+            "fixture": "READ/trim/1250",
+            "measured_varops": 1363.5691235794307,
+            "charged_varops": 1346,
+            "ratio": 1.0130528406979424
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -18146,14 +18074,6 @@
             "measured_varops": 232.8372806113082,
             "charged_varops": 230,
             "ratio": 1.0123360026578616
-          },
-          {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
-            "fixture": "READ/trim/320",
-            "measured_varops": 405.8975241128284,
-            "charged_varops": 401,
-            "ratio": 1.0122132770893477
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
@@ -18188,14 +18108,6 @@
             "ratio": 1.0106453989891155
           },
           {
-            "machine": "Apple M1 Pro",
-            "family": "ARITH",
-            "fixture": "ARITH/sub/931/equal/carry-chain",
-            "measured_varops": 22704.879396400363,
-            "charged_varops": 22474,
-            "ratio": 1.0102731777342868
-          },
-          {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "NORMALIZE",
             "fixture": "NORMALIZE/aligned/169236",
@@ -18220,28 +18132,20 @@
             "ratio": 1.0093753450789817
           },
           {
+            "machine": "Apple M1 Pro",
+            "family": "ARITH",
+            "fixture": "ARITH/sub/931/equal/carry-chain",
+            "measured_varops": 22704.879396400363,
+            "charged_varops": 22494,
+            "ratio": 1.0093749175958195
+          },
+          {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
             "family": "BIT",
             "fixture": "BIT/byterev/61",
             "measured_varops": 280.58716994261914,
             "charged_varops": 278,
             "ratio": 1.0093063667000688
-          },
-          {
-            "machine": "varop-calibration-ryzen99500x-full",
-            "family": "READ",
-            "fixture": "READ/trim/1952",
-            "measured_varops": 2051.787970420459,
-            "charged_varops": 2033,
-            "ratio": 1.0092415004527588
-          },
-          {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
-            "fixture": "READ/trim/312",
-            "measured_varops": 396.53762150312906,
-            "charged_varops": 393,
-            "ratio": 1.0090015814328983
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
@@ -18252,28 +18156,20 @@
             "ratio": 1.0087403181239147
           },
           {
-            "machine": "Apple M1 Pro",
-            "family": "READ",
-            "fixture": "READ/trim/16385",
-            "measured_varops": 16614.238285468316,
-            "charged_varops": 16473,
-            "ratio": 1.0085739261499616
-          },
-          {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
-            "fixture": "READ/trim/2047",
-            "measured_varops": 2146.9994995082084,
-            "charged_varops": 2129,
-            "ratio": 1.0084544384726202
-          },
-          {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "NORMALIZE",
             "fixture": "NORMALIZE/aligned/524287",
             "measured_varops": 201.62105823376953,
             "charged_varops": 200,
             "ratio": 1.0081052911688477
+          },
+          {
+            "machine": "Apple M1 Pro",
+            "family": "READ",
+            "fixture": "READ/trim/16385",
+            "measured_varops": 16614.238285468316,
+            "charged_varops": 16482,
+            "ratio": 1.0080231941189368
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -18308,20 +18204,12 @@
             "ratio": 1.0075772322252545
           },
           {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "READ",
-            "fixture": "READ/trim/127",
-            "measured_varops": 210.58238804762533,
-            "charged_varops": 209,
-            "ratio": 1.007571234677633
-          },
-          {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/108322",
             "measured_varops": 873796.1455579475,
-            "charged_varops": 867354.0,
-            "ratio": 1.0074273544111718
+            "charged_varops": 867374.0,
+            "ratio": 1.007404125046344
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -18342,18 +18230,18 @@
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "READ",
-            "fixture": "READ/trim/304",
-            "measured_varops": 387.41446836665466,
-            "charged_varops": 385,
-            "ratio": 1.0062713464068953
+            "fixture": "READ/trim/272",
+            "measured_varops": 364.3156469466154,
+            "charged_varops": 362,
+            "ratio": 1.0063968147696558
           },
           {
             "machine": "Apple M1 Pro",
             "family": "PRODUCE",
             "fixture": "PRODUCE/grow/86658",
             "measured_varops": 523955.8610524913,
-            "charged_varops": 520730.0,
-            "ratio": 1.0061948822854287
+            "charged_varops": 520750.0,
+            "ratio": 1.0061562382188982
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -18404,6 +18292,14 @@
             "ratio": 1.004930156393513
           },
           {
+            "machine": "varop-calibration-ryzen99500x-full",
+            "family": "READ",
+            "fixture": "READ/trim/1952",
+            "measured_varops": 2051.787970420459,
+            "charged_varops": 2042,
+            "ratio": 1.004793325377306
+          },
+          {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
             "family": "DIVCORE",
             "fixture": "DIVCORE/36/4/127/MOD/top-clear",
@@ -18420,12 +18316,12 @@
             "ratio": 1.0042951294384457
           },
           {
-            "machine": "Apple M1 Pro",
-            "family": "ARITH",
-            "fixture": "ARITH/sub/512/equal/carry-chain",
-            "measured_varops": 12469.310121488279,
-            "charged_varops": 12418,
-            "ratio": 1.0041319150820003
+            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
+            "family": "READ",
+            "fixture": "READ/trim/2047",
+            "measured_varops": 2146.9994995082084,
+            "charged_varops": 2138,
+            "ratio": 1.0042093075342415
           },
           {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
@@ -18464,16 +18360,16 @@
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/32768",
             "measured_varops": 263651.4893733273,
-            "charged_varops": 262874.0,
-            "ratio": 1.0029576503318216
+            "charged_varops": 262894.0,
+            "ratio": 1.0028813490354564
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
             "family": "PRODUCE",
             "fixture": "PRODUCE/fresh-pages/32767",
             "measured_varops": 263628.76606725424,
-            "charged_varops": 262874.0,
-            "ratio": 1.0028712085153124
+            "charged_varops": 262894.0,
+            "ratio": 1.0027949137951198
           },
           {
             "machine": "varop-calibration-ryzen99500x-full",
@@ -18490,6 +18386,14 @@
             "measured_varops": 1801.893564133384,
             "charged_varops": 1797,
             "ratio": 1.002723185383074
+          },
+          {
+            "machine": "Apple M1 Pro",
+            "family": "ARITH",
+            "fixture": "ARITH/sub/512/equal/carry-chain",
+            "measured_varops": 12469.310121488279,
+            "charged_varops": 12438,
+            "ratio": 1.0025172955047659
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -18556,22 +18460,6 @@
             "ratio": 1.0018221748260456
           },
           {
-            "machine": "AMD Ryzen 5 3600 6-Core Processor",
-            "family": "READ",
-            "fixture": "READ/trim/255",
-            "measured_varops": 337.591348718192,
-            "charged_varops": 337,
-            "ratio": 1.0017547439708963
-          },
-          {
-            "machine": "Apple M1 Pro",
-            "family": "READ",
-            "fixture": "READ/compare/88",
-            "measured_varops": 169.27996207703546,
-            "charged_varops": 169,
-            "ratio": 1.001656580337488
-          },
-          {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
             "family": "DIVCORE",
             "fixture": "DIVCORE/1026/2/17/MOD/top-clear",
@@ -18604,20 +18492,12 @@
             "ratio": 1.0013880877188759
           },
           {
-            "machine": "Apple M1 Pro",
-            "family": "ARITH",
-            "fixture": "ARITH/sub/596/equal/carry-chain",
-            "measured_varops": 14452.040793922568,
-            "charged_varops": 14434,
-            "ratio": 1.0012498818014803
-          },
-          {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
+            "machine": "varop-calibration-ryzen99500x-full",
             "family": "READ",
-            "fixture": "READ/trim/336",
-            "measured_varops": 417.4750518146902,
-            "charged_varops": 417,
-            "ratio": 1.0011392129848686
+            "fixture": "READ/trim/448",
+            "measured_varops": 538.5536878475345,
+            "charged_varops": 538,
+            "ratio": 1.0010291595679082
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
@@ -18642,14 +18522,6 @@
             "measured_varops": 26868.111157605148,
             "charged_varops": 26844,
             "ratio": 1.000898195410712
-          },
-          {
-            "machine": "Apple M1 Pro",
-            "family": "ARITH",
-            "fixture": "ARITH/add/513/equal/borrow-chain",
-            "measured_varops": 12452.547163921969,
-            "charged_varops": 12442,
-            "ratio": 1.0008477064717867
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
