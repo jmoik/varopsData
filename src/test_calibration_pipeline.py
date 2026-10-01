@@ -17,7 +17,7 @@ def artifact():
               'READ/zero/16', 'ARITH/sub/2/equal/borrow-chain', 'BIT/invert/16',
               'MOVE/8/empty', 'MULCORE/2/1/ones', 'DIVCORE/9/2/div/normalized',
               'H256/core/32', 'H160/32', 'H1/32', 'SIG/32', 'TWEAK',
-              'SELECT/weight-scan/collated/128/131', 'UNROLL/push-520/15296/3999904']
+              'SELECT/weight-scan/collated/128/131', 'UNROLL/push-520/15296/3999908/36744848']
     rate = 20.0
     return dict(schema='varop-calibration-v1', model_id=calibration.MODEL_ID,
                 normalization=dict(varops_per_nanosecond=rate,
@@ -78,7 +78,6 @@ class CalibrationPipelineTests(unittest.TestCase):
         self.assertEqual(calibration.formulas('PREP', [250, 1], candidate=True), '250 + W(n)')
         self.assertEqual(calibration.formulas('DIVCORE', [0, 500, 33], candidate=True), '500 × s + 33 × s × v')
         self.assertEqual(calibration.rounded_candidate('DIVCORE', [3977.26, 0, 158.884]), [4000, 0, 160])
-        self.assertEqual(calibration.rounded_candidate('MUL', [186.117, 13.1377]), [190, 14])
         # Byte rates are charged per byte of W(n) >= n: 6.40246 per byte of n is charged as 7 × W(n).
         self.assertEqual(calibration.rounded_candidate('PRODUCE', [2120.63, 6.40246]), [2200, 7])
         self.assertEqual(calibration.formulas('PRODUCE', [2200, 7], candidate=True), '2200 + 7 × W(n)')
@@ -184,28 +183,11 @@ class CalibrationPipelineTests(unittest.TestCase):
             path.write_text(json.dumps(data))
             return calibration.load_calibration(path)
 
-    def model(self, data):
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory)/'synthetic.json'
-            path.write_text(json.dumps(data))
-            return calibration.machine_model(path)
-
     def test_pricing_targets_a_fraction_of_the_reference(self):
         # 40e9 varops over 0.9 × the 2 s reference.
         self.assertEqual(calibration.TARGET_FRACTION, 0.9)
         points, meta = self.load(artifact())
         self.assertAlmostEqual(meta['varops_per_nanosecond'], 40 / (2.0 * 0.9))
-        # An artifact that recorded its rate for 0.9 of the reference, rather than
-        # for the reference itself, prices identically.
-        collected = artifact()
-        collected['normalization'].update(target_fraction_of_local_pre_v2_worst=0.9,
-                                          varops_per_nanosecond=40 / (2.0 * 0.9))
-        for row in collected['primitive_samples']:
-            row['normalized_varops_per_execution'] = row['ns_per_execution'] * 40 / (2.0 * 0.9)
-        recollected, _ = self.load(collected)
-        self.assertEqual([p['y'] for p in recollected], [p['y'] for p in points])
-        # So do the machine fits, which are fitted from the nanosecond samples.
-        self.assertEqual(self.model(collected)['F'], self.model(artifact())['F'])
 
     def test_all_families_and_median(self):
         points, meta = self.load(artifact())
@@ -222,14 +204,6 @@ class CalibrationPipelineTests(unittest.TestCase):
         self.assertEqual((fixed['group'], fixed['x'], fixed['y'], fixed['included']), ('else', 257, 10, True))
         skipped = calibration.fixture(dict(probe='F/skipped/256', ns_per_execution=2560))
         self.assertEqual((skipped['x'], skipped['y'], skipped['included']), (256, 10, False))
-
-    def test_normalize_offset_span_is_diagnostic(self):
-        manifest = {f'NORMALIZE/{group}/16': dict(items='1', bytes='0', normalize_bytes='16')
-                    for group in ('aligned', 'offset-span')}
-        aligned = calibration.fixture(dict(probe='NORMALIZE/aligned/16', ns_per_execution=10), manifest)
-        offset = calibration.fixture(dict(probe='NORMALIZE/offset-span/16', ns_per_execution=20), manifest)
-        self.assertTrue(aligned['included'])
-        self.assertFalse(offset['included'])
 
     def test_divcore_rows(self):
         rows = {}
@@ -266,11 +240,11 @@ class CalibrationPipelineTests(unittest.TestCase):
 
     def test_wrong_normalization_rejected(self):
         data = artifact()
-        data['normalization']['target_fraction_of_local_pre_v2_worst'] = 0.9
+        data['normalization']['varops_per_nanosecond'] *= 0.9
         with self.assertRaisesRegex(ValueError, 'inconsistent normalization'):
             self.load(data)
 
-    def test_legacy_family_rejected_in_candidate(self):
+    def test_unknown_family_rejected(self):
         data = artifact()
         data['primitive_samples'][0]['probe'] = 'COPY/isolated/8'
         with self.assertRaisesRegex(ValueError, 'unknown primitive'):
@@ -293,7 +267,6 @@ class CalibrationPipelineTests(unittest.TestCase):
         fits = calibration.fit_all(series, 100)
         self.assertEqual(set(fits), set(calibration.PRODUCER_ORDER) - calibration.CHECKS)
         self.assertEqual(len(fits['DIVCORE']), 3)
-        self.assertNotIn('RELEASE', fits)
 
     def test_divcore_per_row_term(self):
         # Many rows at a small divisor separate the per-row term from the cells.
@@ -324,7 +297,6 @@ class CalibrationPipelineTests(unittest.TestCase):
             series[p['family']].append(dict(p, machine='a'))
         fits = calibration.fit_all(series, 100)
         self.assertEqual(len(fits['MULCORE']), 4)
-        self.assertNotIn('MUL', fits)
 
     def test_mulcore_terms(self):
         # Rows over several shorter-operand widths separate the per-row and per-cell terms.
@@ -369,19 +341,11 @@ class CalibrationPipelineTests(unittest.TestCase):
         self.assertLessEqual(envelope[2], 50)
 
     def test_word_byte_reversal_is_fitted_as_bit(self):
-        # OP_BYTEREV's word kernel is a BIT path over the word span; the superseded
-        # byte-wise BIT/reverse samples are skipped when an artifact is loaded.
+        # OP_BYTEREV's word kernel is a BIT path over the word span.
         point = calibration.fixture(dict(probe='BIT/byterev/61', ns_per_execution=1))
         self.assertTrue(point['included'])
         self.assertEqual(point['x'], 64)
         self.assertTrue(calibration.fixture(dict(probe='BIT/xor/64', ns_per_execution=1))['included'])
-        data = artifact()
-        data['primitive_samples'] += [dict(probe=probe, epoch=epoch, ns_per_execution=100,
-                                           normalized_varops_per_execution=2000)
-                                      for probe in ('BIT/reverse/64', 'H256/secp_tagged/64') for epoch in range(3)]
-        points, _ = self.load(data)
-        self.assertTrue(any(p['label'].startswith('BIT/invert/') for p in points))
-        self.assertFalse(any(p['label'].startswith(('BIT/reverse/', 'H256/secp_tagged/')) for p in points))
 
 
     def test_select_and_unroll_units(self):
@@ -389,14 +353,11 @@ class CalibrationPipelineTests(unittest.TestCase):
         point = calibration.fixture(dict(probe='SELECT/inputs/collated/8/64', ns_per_execution=1))
         self.assertEqual((point['x'], point['group'], point['included']), (64, 'inputs/collated', True))
         self.assertFalse(calibration.fixture(dict(probe='SELECT/empty_items/noncollated/8/9', ns_per_execution=1))['included'])
-        # Earlier artifacts: one input plus n witness items.
-        self.assertEqual(calibration.fixture(dict(probe='SELECT/empty_items/collated/8', ns_per_execution=1))['x'], 9)
         # UNROLL is measured per charged unit against unrolled bytes per unit, and
         # checked against BASE and WRITE rather than priced.
-        point = calibration.fixture(dict(probe='UNROLL/push-520/200/52300', ns_per_execution=1000))
+        point = calibration.fixture(dict(probe='UNROLL/push-520/200/52300/60000', ns_per_execution=1000))
         self.assertEqual((point['x'], point['y'], point['group']), (261.5, 5, 'push'))
-        self.assertEqual((point['units'], point['bytes'], point['charged']), (200, 52300, None))
-        self.assertEqual(calibration.fixture(dict(probe='UNROLL/nop-1/2048/1028/617500', ns_per_execution=1))['charged'], 617500)
+        self.assertEqual((point['units'], point['bytes'], point['charged']), (200, 52300, 60000))
         self.assertNotIn('UNROLL', calibration.fit_all({'UNROLL': [point]}, 100))
         # Coefficients round up to two significant figures, and at least to a whole varop.
         self.assertEqual([calibration.round_coefficient(v) for v in (0, 27.04, 88.2, 283.3, 2234.7, 168514.1, 300)],

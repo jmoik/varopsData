@@ -14,7 +14,7 @@ from pathlib import Path
 import tempfile
 
 from restyle_report import restyle
-from fit_calibrations import MAX_EPOCH_NOISE, TARGET_FRACTION, candidate_charge, check_source_snapshots, envelope_model, features, formulas, hash_span, failed_conditions, independent_models, load_calibration, predict, rounded_candidate
+from fit_calibrations import MAX_EPOCH_NOISE, TARGET_FRACTION, candidate_charge, check_source_snapshots, envelope_model, features, formulas, hash_span, failed_conditions, independent_models, load_calibration, predict
 
 
 # Sections: the BIP 440 primitive categories, then one section per later BIP. A
@@ -204,7 +204,7 @@ def check_points(key, series):
     return points
 
 
-DISPLAY = {"SELECT": "OP_TX_SELECT", "DECODE": "MACRO_DECODE", "UNROLL": "Macro unrolling",
+DISPLAY = {"SELECT": "OP_TX_SELECT", "UNROLL": "Macro unrolling",
            "CSFS": "OP_CHECKSIGFROMSTACK", "BYTEREV": "OP_BYTEREV"}
 # Published primitive names; raw calibration data keeps the original family labels.
 PUBLISHED_NAMES = [(r'\bhashblockspan\(', 'H('), (r'\bF\b', 'BASE'), (r'\bPREP\b', 'PREPARE'), (r'\bPRODUCE\b', 'WRITE'),
@@ -806,7 +806,7 @@ def render(joint_path, output, source_root=None, title=TITLE):
             raise ValueError('Source audit is stale; rerun with --source-root')
         source_check = audit['source_check']
     for meta in joint['machines']:
-        # Inputs are recorded relative to the joint fit (absolute in older fits).
+        # Inputs are recorded relative to the joint fit.
         meta['file'] = str(joint_path.parent / meta['file'])
     if joint.get("schema") != "varop-joint-fit-v2":
         raise ValueError("this comparison requires a v2 joint fit")
@@ -820,9 +820,7 @@ def render(joint_path, output, source_root=None, title=TITLE):
     machine_models = independent_models([Path(meta["file"]) for meta in joint["machines"]])
     for meta, model in zip(joint["machines"], machine_models):
         source = Path(meta["file"])
-        points, loaded = load_calibration(source)
-        # Joint fits from before the epoch noise condition do not record it.
-        meta.setdefault('epoch_noise', loaded['epoch_noise'])
+        points, _ = load_calibration(source)
         identity = (meta['cpu'] + ' ' + source.name).lower()
         key = next((key for key, token in [('m1', 'm1'), ('m4', 'm4'), ('r5', 'ryzen 5 3600'), ('ryzen', 'ryzen'), ('i7', 'i7-7700'), ('intel', 'intel')] if token in identity), None)
         if key is None or any(m['key'] == key for m in machines):

@@ -24,9 +24,7 @@ import subprocess
 import tempfile
 
 
-ORDER = "F PREP OUTPUT COPY RELEASE READ ARITH BIT MOVE MUL DIVCORE H256 H160 H1 SIG TWEAK SELECT DECODE".split()
 CONSTANT = {"F", "SIG", "TWEAK", "NORMALIZE"}
-FIT_ORDER = [name for name in ORDER if name != "SIG"] + ["SIG"]
 PRODUCER_ORDER = "F PREP PRODUCE NORMALIZE READ ARITH BIT MOVE MULCORE DIVCORE H256 H160 H1 SIG TWEAK SELECT UNROLL".split()
 # Measured compositions of existing primitives: compared against their charge, never priced.
 CHECKS = {"UNROLL"}
@@ -87,7 +85,7 @@ def features(family, x, group):
         return x, x * int(group.split("=")[1])
     if family in {"H256", "H160", "H1"}:
         return 1, hash_span(x)
-    if family in {"PREP", "OUTPUT", "NORMALIZE"}:
+    if family in {"PREP", "NORMALIZE"}:
         return 1, word(x)
     return 1, x
 
@@ -103,9 +101,6 @@ def fixture(row, producer_manifest=None):
         group = '/'.join(parts[1:-1])
         x = int(record['normalize_bytes']) if family == 'NORMALIZE' else int(record['bytes']) / count
         y /= count
-        # Production vectors are word-aligned, so conversion never compacts an
-        # offset span; that path is timed as a diagnostic only.
-        included = not (family == 'NORMALIZE' and group == 'offset-span')
     elif family == "F":
         # F/<group>/<n>: n charged F-only instructions plus the final OP_1.
         # F/skipped/<n> times n uncharged skipped NOPs as a diagnostic.
@@ -116,23 +111,14 @@ def fixture(row, producer_manifest=None):
     elif family == "PREP":
         x, group = int(parts[1]), parts[2]
         included = group == "spare"
-    elif family == "OUTPUT":
-        if parts[1] == "scalar":
-            x, group = (int(parts[2]).bit_length() + 7) // 8, "scalar"
-        else:
-            x, group = int(parts[1]), "materialized"
     elif family == "ARITH":
         x, group = int(parts[2]) * 8, parts[1] + "/" + "/".join(parts[3:])
     elif family in {"READ", "BIT"}:
-        x, group = int(parts[2]), parts[1]
-        if family == "READ" or group != "reverse":
-            x = word(x)
+        x, group = word(int(parts[2])), parts[1]
         if len(parts) > 3:
             group += "/" + parts[3]
     elif family == "MOVE":
         x, group = int(parts[1]), parts[2]
-    elif family == "MUL":
-        x, group = int(parts[2]), "u=1"
     elif family == "MULCORE":
         # MULCORE/<u>/<v>/<pattern>: u rows of v limbs each.
         x, group = int(parts[1]), f"v={int(parts[2])}"
@@ -143,30 +129,20 @@ def fixture(row, producer_manifest=None):
     elif family == "H256":
         x, group = int(parts[2]), parts[1]
     elif family == "SELECT":
-        # SELECT/<kind>/<format>/<records>/<units>; earlier artifacts lack the unit count.
-        x = int(parts[4]) if len(parts) > 4 else int(parts[3]) + 1
+        # SELECT/<kind>/<format>/<records>/<units>.
+        x = int(parts[4])
         group, included = parts[1] + "/" + parts[2], parts[2] == "collated"
     elif family == "UNROLL":
-        # UNROLL/<shape>/<units>/<unrolled bytes>[/<charged varops>]: time per charged
+        # UNROLL/<shape>/<units>/<unrolled bytes>/<charged varops>: time per charged
         # unit against bytes per unit; the charge covers the complete script.
         units = int(parts[2])
         x, group = int(parts[3]) / units, parts[1].split("-")[0]
         y /= units
         return dict(label=row["probe"], family=family, x=x, y=y, c=1, v=x, group=group,
                     included=included, units=units, bytes=int(parts[3]),
-                    charged=int(parts[4]) if len(parts) > 4 else None)
-    elif family == "DECODE":
-        x, group = int(parts[2]), parts[1]
-    elif family == "COPY":
-        x, group = int(parts[2]), parts[1]
-        included = group == "isolated"
-    elif family == "RELEASE":
-        group = parts[1]
-        x = int(parts[3]) if group == "preallocated" else word(int(parts[2]))
+                    charged=int(parts[4]))
     elif family != "TWEAK":
         x = int(parts[1])
-    if family in {"COPY", "RELEASE"} and x == 0 and group != "preallocated":
-        group, included = "empty", False
     c, v = features(family, x, group)
     return dict(label=row["probe"], family=family, x=x, y=y, c=c, v=v,
                 group=group, included=included)
@@ -176,19 +152,15 @@ def load_calibration(path):
     data = json.loads(path.read_text())
     if data.get("schema") != "varop-calibration-v1":
         raise ValueError(f"{path}: unsupported calibration schema")
-    model_id = data.get('model_id', 'legacy-primitives')
+    model_id = data.get('model_id')
     if model_id != MODEL_ID:
         raise ValueError(f'{path}: unknown costing model {model_id}')
-    # Artifacts record their primitive families; MULCORE replaced the MUL row kernel.
-    order = data.get("primitive_order") or (PRODUCER_ORDER if model_id == MODEL_ID else ORDER)
     manifest = {r['probe']: r for r in data.get('producer_manifest', [])}
     normalization = data["normalization"]
     recorded_rate = float(normalization["varops_per_nanosecond"])
-    # Earlier runners recorded their rate for a fraction of the reference.
-    recorded_fraction = float(normalization.get("target_fraction_of_local_pre_v2_worst", 1.0))
     if int(normalization.get("budget_varops", BUDGET_VAROPS)) != BUDGET_VAROPS:
         raise ValueError(f"{path}: unexpected budget")
-    if not math.isclose(recorded_rate, pricing_rate(normalization, recorded_fraction), rel_tol=1e-12):
+    if not math.isclose(recorded_rate, pricing_rate(normalization, 1.0), rel_tol=1e-12):
         raise ValueError(f"{path}: inconsistent normalization")
     rate = pricing_rate(normalization)
     epochs = len({int(row["epoch"]) for row in data["primitive_samples"]})
@@ -196,20 +168,9 @@ def load_calibration(path):
     observations = defaultdict(list)
     for row in data["primitive_samples"]:
         name = row["probe"]
-        if name.startswith(("COPY_CONTROL/", "ZERO/", "SIGHASH/", "PRODUCER_CHECK/")):
+        if name.startswith("PRODUCER_CHECK/"):
             continue
-        # H256 prices Core's SHA256; libsecp's internal tagged hashing is not an H256 input.
-        # BIT/reverse timed the superseded byte-wise std::reverse; OP_BYTEREV's word kernel is BIT/byterev.
-        if name.startswith(("H256/secp_tagged/", "BIT/reverse/")):
-            continue
-        # Stack values always carry word-padding capacity, so tight PREP buffers cannot occur.
-        if name.startswith("PREP/") and name.endswith("/tight"):
-            continue
-        # Shortening a value needs an opcode that charges its result's production,
-        # so create-and-shrink is two productions (PRODUCE/churn), not one WRITE.
-        if name.startswith(("PRODUCE/shrink-empty/", "PRODUCE/shrink-one/")):
-            continue
-        if name.split("/", 1)[0] not in order:
+        if name.split("/", 1)[0] not in PRODUCER_ORDER:
             raise ValueError(f"{path}: unknown primitive {name}")
         ns = float(row["ns_per_execution"])
         if not math.isfinite(ns) or ns <= 0:
@@ -227,7 +188,7 @@ def load_calibration(path):
         point["y"] *= rate
         point["machine"] = machine
         points.append(point)
-    if {p["family"] for p in points} != set(order):
+    if {p["family"] for p in points} != set(PRODUCER_ORDER):
         raise ValueError(f"{path}: missing primitive family")
     meta = dict(file=str(path), model_id=model_id, sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
                 cpu=data["machine"]["cpu"], epochs=epochs,
@@ -649,9 +610,6 @@ def rounded_candidate(family, coeff):
     with round_flat and rates with round_coefficient; SIG stays at its fixed allowance."""
     if family == 'SIG':
         return [500000, 0]
-    if family == 'MUL':
-        # u × (a + b × v) has no flat.
-        return [round_coefficient(v) for v in coeff]
     return [round_flat(coeff[0])] + [round_coefficient(v) for v in coeff[1:]]
 
 
@@ -666,8 +624,6 @@ def formulas(family, coeff, candidate=False):
     """Formula text; candidates are charged on W(n) where the fit is per byte of n."""
     if family in CONSTANT:
         return f"{coeff[0]:.6g}"
-    if family == "MUL":
-        return f"u × ({terms((coeff[0], ''), (coeff[1], 'v'))})"
     if family == "MULCORE" and len(coeff) == 4:
         return terms((coeff[0], ''), (coeff[1], 'u'), (coeff[2], 'v'), (coeff[3], 'u × v'))
     if family == "MULCORE":
@@ -677,15 +633,14 @@ def formulas(family, coeff, candidate=False):
     if candidate and family in WORD_PRICED:
         variable = "W(n)"
     else:
-        variable = ("W(n)" if family in {"PREP", "READ", "ARITH", "BIT", "OUTPUT", "NORMALIZE"} else "k" if family in {"MOVE", "SELECT"}
+        variable = ("W(n)" if family in {"PREP", "READ", "ARITH", "BIT", "NORMALIZE"} else "k" if family in {"MOVE", "SELECT"}
                     else "H(n)" if family in {"H256", "H160", "H1"} else "n")
     return terms((coeff[0], ''), (coeff[1], variable))
 
 
 def fit_all(series, penalty):
     fits = {}
-    base = PRODUCER_ORDER if 'PRODUCE' in series else ORDER
-    order = [f for f in dict.fromkeys(base + ['MULCORE']) if f in series and f not in CHECKS]
+    order = [f for f in PRODUCER_ORDER if f in series and f not in CHECKS]
     for family in [f for f in order if f != 'SIG'] + [f for f in ('SIG',) if f in order]:
         points = [p for p in series[family] if p["included"]]
         for point in points:
@@ -875,8 +830,7 @@ def main():
         raise ValueError("inputs were collected from different commits")
     if len({meta['model_id'] for meta in machines}) != 1:
         raise ValueError('cannot combine different costing models; recollect all machines with the frozen candidate')
-    base = PRODUCER_ORDER if machines[0]['model_id'] == MODEL_ID else ORDER
-    order = [f for f in dict.fromkeys(base + ['MULCORE']) if f in series and f not in CHECKS]
+    order = [f for f in PRODUCER_ORDER if f in series and f not in CHECKS]
     if args.allow_source_mismatch and args.source_root is None:
         parser.error("--allow-source-mismatch requires --source-root")
     sources = [{name.replace("\\", "/"): digest for name, digest in meta["source_sha256"].items()}
@@ -920,8 +874,7 @@ def main():
                                             candidate_formula=formulas(family, candidate, candidate=True),
                                             maximum_coefficients=max_coeff[family],
                                             maximum_candidate_coefficients=rounded_candidate(family, max_coeff[family]),
-                                            notes=("SIG is a measured residual; 500000-varop sigops parity is a separate policy decision" if family == "SIG" else
-                                                   "RELEASE capacity is diagnostic, not a consensus charge input" if family == "RELEASE" else ""))
+                                            notes="SIG is a measured residual; 500000-varop sigops parity is a separate policy decision" if family == "SIG" else "")
         print(f"{family:<10} {formulas(family, envelope[family]):<48} {formulas(family, candidate, candidate=True):<38} {formulas(family, max_coeff[family])}")
     candidates = {family: record["candidate_coefficients"] for family, record in result["primitives"].items()}
     keys = [str(path) for path in paths]
@@ -943,10 +896,9 @@ def main():
     report_diagnostics(result["diagnostics"], machines)
     if output.exists():
         previous = json.loads(output.read_text())
-        # Older fits recorded absolute paths; joining keeps those unchanged.
         old_inputs = [((output.parent / m["file"]).resolve(), m["sha256"]) for m in previous.get("machines", [])]
         new_inputs = [(path, m["sha256"]) for path, m in zip(paths, machines)]
-        if previous.get("schema") not in {"varop-joint-fit-v1", result["schema"]} or old_inputs != new_inputs[:len(old_inputs)]:
+        if previous.get("schema") != result["schema"] or old_inputs != new_inputs[:len(old_inputs)]:
             raise ValueError(f"refusing to overwrite a result from different inputs: {output}")
     pending = None
     try:
