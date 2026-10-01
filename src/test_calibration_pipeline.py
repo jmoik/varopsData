@@ -15,7 +15,7 @@ from fit_calibrations import maximum_coefficients
 def artifact():
     probes = ['F/nop/256', 'PREP/9/spare', 'PRODUCE/grow/9', 'NORMALIZE/scalar/256',
               'READ/zero/16', 'ARITH/sub/2/equal/borrow-chain', 'BIT/invert/16',
-              'MOVE/8/empty', 'MUL/row/2', 'DIVCORE/9/2/div/normalized',
+              'MOVE/8/empty', 'MULCORE/2/1/ones', 'DIVCORE/9/2/div/normalized',
               'H256/core/32', 'H160/32', 'H1/32', 'SIG/32', 'TWEAK',
               'SELECT/weight-scan/collated/128/131', 'UNROLL/push-520/15296/3999904']
     rate = 20.0
@@ -23,10 +23,7 @@ def artifact():
                 normalization=dict(varops_per_nanosecond=rate,
                                    target_fraction_of_local_pre_v2_worst=1.0,
                                    local_pre_v2_worst_seconds=2.0),
-                machine=dict(cpu='synthetic'), source_sha256={},
-                fitting=dict(metadata=dict(epochs=3, head='synthetic'),
-                             fits=dict(F=dict(under_penalty_100_fit=dict(a_ns=15.0, b_ns=0.0)),
-                                       PRODUCE=dict(under_penalty_100_fit=dict(a_ns=70.0, b_ns=0.25)))),
+                machine=dict(cpu='synthetic'), source_sha256={}, head='synthetic',
                 producer_manifest=[dict(probe='PRODUCE/grow/9', kind='produce', items='2', bytes='13', normalize_bytes='0'),
                                    dict(probe='NORMALIZE/scalar/256', kind='normalize', items='1', bytes='0', normalize_bytes='2')],
                 primitive_samples=[dict(probe=probe, epoch=epoch, ns_per_execution=100 + epoch,
@@ -207,7 +204,7 @@ class CalibrationPipelineTests(unittest.TestCase):
             row['normalized_varops_per_execution'] = row['ns_per_execution'] * 40 / (2.0 * 0.9)
         recollected, _ = self.load(collected)
         self.assertEqual([p['y'] for p in recollected], [p['y'] for p in points])
-        # So do the machine fits, which are recorded in nanoseconds.
+        # So do the machine fits, which are fitted from the nanosecond samples.
         self.assertEqual(self.model(collected)['F'], self.model(artifact())['F'])
 
     def test_all_families_and_median(self):
@@ -241,6 +238,25 @@ class CalibrationPipelineTests(unittest.TestCase):
             rows[u, v] = (point['x'], point['c'], point['v'])
         self.assertEqual(rows, {(9, 2): (9, 9, 18), (1, 1): (2, 2, 2), (9, 1): (10, 10, 10),
                                 (1, 2): (1, 1, 2), (1, 9): (1, 1, 9)})
+
+    def test_lifetime_checks(self):
+        # A numeric result of 9 bytes: one production event plus PRODUCE, PREP and
+        # NORMALIZE at its 16-byte word span.
+        data = artifact()
+        probe = 'PRODUCER_CHECK/numeric/tight/9'
+        data['producer_manifest'].append(dict(probe=probe, kind='numeric', items='1', bytes='9', normalize_bytes='9'))
+        recorded = data['normalization']['varops_per_nanosecond']
+        data['primitive_samples'] += [dict(probe=probe, epoch=epoch, ns_per_execution=20,
+                                           normalized_varops_per_execution=20 * recorded) for epoch in range(3)]
+        model = {'PRODUCE': (100, 2), 'PREP': (50, 1), 'NORMALIZE': (30, 0)}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)/'synthetic.json'
+            path.write_text(json.dumps(data))
+            checked, above = calibration.lifetime_checks(path, model, 'm')
+        self.assertEqual(checked, 1)
+        composed = (100 + 2 * 9) + (100 + 2 * 16) + (50 + 16) + 30
+        self.assertAlmostEqual(above[0]['composed_varops'], composed)
+        self.assertAlmostEqual(above[0]['ratio'], 20 * 40 / (2.0 * 0.9) / composed)
 
     def test_incomplete_epochs_rejected(self):
         data = artifact()
@@ -292,11 +308,9 @@ class CalibrationPipelineTests(unittest.TestCase):
         self.assertAlmostEqual(cell, 50, delta=1)
 
     def test_mulcore_artifact(self):
-        # A frozen-model artifact records MULCORE in place of the MUL row kernel.
+        # The frozen model records MULCORE in place of the MUL row kernel.
         data = artifact()
-        data['primitive_order'] = [f if f != 'MUL' else 'MULCORE' for f in calibration.PRODUCER_ORDER]
         rate = data['normalization']['varops_per_nanosecond']
-        data['primitive_samples'] = [s for s in data['primitive_samples'] if not s['probe'].startswith('MUL/')]
         for probe in ('MULCORE/1/1/ones', 'MULCORE/9/2/random'):
             data['primitive_samples'] += [dict(probe=probe, epoch=epoch, ns_per_execution=100 + epoch,
                                                normalized_varops_per_execution=(100 + epoch) * rate)

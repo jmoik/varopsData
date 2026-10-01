@@ -47,7 +47,7 @@ For each opcode the source path (calls, multiplicities, size features, branches,
 
 **The criterion.** On every measured machine, the slowest feasible full block of complete Tapleaf 0xC2 scripts must take less than 1.0 times that machine's reference `T_pre`, the slowest measured block of Tapleaf 0xC0 scripts. There is no averaging across machines. A reproducible slower workload rejects the schedule; one noisy observation above 1.0 calls for investigation, not a verdict. Finite tests cannot prove the bound for every script or future processor.
 
-**The fit fraction.** Primitive fits are normalized so that a full budget of fitted work takes 0.9 times the machine's reference. The fraction is a margin for composition effects and machine variation that primitive measurements do not capture. It applies only to fitting: validation and the criterion above use 1.0. Only `fit_calibrations.py` applies it (`TARGET_FRACTION`); the runner records raw nanoseconds and the reference, so artifacts can be refitted with another fraction without remeasuring.
+**The fit fraction.** Primitive fits are normalized so that a full budget of fitted work takes 0.9 times the machine's reference. The fraction is a margin for composition effects and machine variation that primitive measurements do not capture. It applies only to fitting: validation and the criterion above use 1.0. Only `fit_calibrations.py` applies it (`TARGET_FRACTION`); the runner only measures and records raw nanoseconds and the reference, and every fit is made here from those samples, so artifacts can be refitted with another fraction without remeasuring.
 
 **Scope.** The claim covers script evaluation only: `EvalTapscriptV2` and its final-result check, or `EvalScript` and its clean-stack check for existing versions, including parsing, metering and execution. Transaction and block validation, Taproot commitment checks and signature-cache effects are not timed. Evaluation is serial; parallel block validation and shared-budget contention are outside the claim, and shared-budget accounting is covered by correctness tests.
 
@@ -147,7 +147,7 @@ Relative error treats small and large operations alike; the 100× penalty keeps 
 
 **Coverage of the charge.** The report lists every included measurement above its rounded charge, as `ratio = measured / charged`; above 1, a full budget of that operation alone would take longer than 0.9 times the reference. A measurement above its charge is a diagnostic finding; only complete scripts establish a limit violation.
 
-**Held-out checks.** Lifetime checks (numeric results with tight and spare capacity, retained values) and macro unrolling are measured but not fitted; they check that the composed charges cover complete lifetimes.
+**Held-out checks.** Lifetime checks (numeric results with tight and spare capacity, retained values) and macro unrolling are measured but not fitted; they check that the composed charges cover complete lifetimes. `fit_calibrations.py` compares each lifetime with its machine's composed fit and lists those above it (`held_out_lifetimes` in the joint fit's diagnostics).
 
 ## Simplicity and revising the basis
 

@@ -27,7 +27,7 @@ import tempfile
 ORDER = "F PREP OUTPUT COPY RELEASE READ ARITH BIT MOVE MUL DIVCORE H256 H160 H1 SIG TWEAK SELECT DECODE".split()
 CONSTANT = {"F", "SIG", "TWEAK", "NORMALIZE"}
 FIT_ORDER = [name for name in ORDER if name != "SIG"] + ["SIG"]
-PRODUCER_ORDER = "F PREP PRODUCE NORMALIZE READ ARITH BIT MOVE MUL DIVCORE H256 H160 H1 SIG TWEAK SELECT UNROLL".split()
+PRODUCER_ORDER = "F PREP PRODUCE NORMALIZE READ ARITH BIT MOVE MULCORE DIVCORE H256 H160 H1 SIG TWEAK SELECT UNROLL".split()
 # Measured compositions of existing primitives: compared against their charge, never priced.
 CHECKS = {"UNROLL"}
 MODEL_ID = "producer-normalize-v1"
@@ -191,7 +191,7 @@ def load_calibration(path):
     if not math.isclose(recorded_rate, pricing_rate(normalization, recorded_fraction), rel_tol=1e-12):
         raise ValueError(f"{path}: inconsistent normalization")
     rate = pricing_rate(normalization)
-    epochs = int(data["fitting"]["metadata"]["epochs"])
+    epochs = len({int(row["epoch"]) for row in data["primitive_samples"]})
     machine = str(path)
     observations = defaultdict(list)
     for row in data["primitive_samples"]:
@@ -231,7 +231,8 @@ def load_calibration(path):
         raise ValueError(f"{path}: missing primitive family")
     meta = dict(file=str(path), model_id=model_id, sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
                 cpu=data["machine"]["cpu"], epochs=epochs,
-                head=data["fitting"]["metadata"].get("head"),
+                # Earlier runners recorded the commit with their local fit.
+                head=data.get("head") or data.get("fitting", {}).get("metadata", {}).get("head"),
                 fixture_count=len(points), reference_seconds=data["normalization"]["local_pre_v2_worst_seconds"],
                 varops_per_nanosecond=rate, source_sha256=data["source_sha256"],
                 conditions=data.get("conditions"), epoch_noise=epoch_noise(data["primitive_samples"]))
@@ -463,59 +464,45 @@ def maximum_coefficients(models):
             for f in first}
 
 
-# machine_model's refits in three independent parts, slowest first, so a process
+# machine_model's fits in three independent parts, slowest first, so a process
 # pool can run every machine's parts at once. They merge in the order below.
 REFIT_PARTS = ('MULCORE', 'DIVCORE', 'other')
 FIT_PROCESSES = 12
 
 
 def refit_part(path, part):
-    """One part of machine_model's refits from the recorded samples."""
+    """One part of machine_model's fits from the recorded samples."""
     points, _ = load_calibration(Path(path))
-
-    def included(family):
-        return [p for p in points if p['family'] == family and p['included']]
+    series = defaultdict(list)
+    for point in points:
+        if point['included']:
+            series[point['family']].append(point)
 
     if part == 'DIVCORE':
-        return {'DIVCORE': tuple(fit_divcore(included('DIVCORE'), 100))}
+        return {'DIVCORE': tuple(fit_divcore(series['DIVCORE'], 100))}
     if part == 'MULCORE':
-        # Recorded MULCORE fits had no per-row term.
-        mul = included('MULCORE')
-        return {'MULCORE': tuple(fit_mulcore(mul, 100))} if mul else {}
+        return {'MULCORE': tuple(fit_mulcore(series['MULCORE'], 100))} if series['MULCORE'] else {}
     model = {}
-    # Recorded hash fits used message bytes; refit on the padded hash-block span.
-    for family in ('H256', 'H160', 'H1'):
-        model[family] = tuple(fit(included(family), 'affine', 100))
-    # Recorded PRODUCE fits included the shrink fixtures that loading now skips.
-    model['PRODUCE'] = tuple(fit(included('PRODUCE'), 'affine', 100))
-    # NORMALIZE is flat: conversion hands the buffer over in place, whatever its
-    # size. Recorded fits were affine and included the offset-span diagnostic.
-    model['NORMALIZE'] = tuple(fit(included('NORMALIZE'), 'constant', 100))
-    # Recorded PREP fits were per word; PREP is fitted and priced per byte of W(n).
-    model['PREP'] = tuple(fit(included('PREP'), 'affine', 100))
-    # Byte reversal belongs to the covenant opcodes; the recorded BIT fit included it.
-    model['BIT'] = tuple(fit(included('BIT'), 'affine', 100))
+    # SIG is fitted last: its background is the challenge hash at the H256 fit.
+    families = [f for f in series if f not in {'MULCORE', 'DIVCORE'} | CHECKS]
+    for family in sorted(families, key=lambda f: f == 'SIG'):
+        for point in series[family]:
+            point['background'] = background(family, point['x'], model)
+        mode = 'residual' if family == 'SIG' else 'constant' if family in CONSTANT else 'affine'
+        model[family] = tuple(fit(series[family], mode, 100))
     return model
 
 
 def machine_model(path, refits=None):
-    """Recorded 100x machine fit in varops, with DIVCORE refit from the recorded samples.
+    """One machine's 100x under-penalty fit in varops, from its recorded samples.
 
-    Recorded fits are in nanoseconds and are converted at the pricing rate. Recorded DIVCORE fits use the superseded quotient-step count;
-    the same fitter reproduces them exactly from the samples when given that count.
     refits maps each of REFIT_PARTS to its refit_part result, when computed elsewhere.
     """
-    data = json.loads(Path(path).read_text())
-    rate = pricing_rate(data['normalization'])
-    model = {f: tuple(record['under_penalty_100_fit'][k] * rate
-                      for k in ('a_ns', 'b_ns', 'c_ns') if k in record['under_penalty_100_fit'])
-             for f, record in data['fitting']['fits'].items()}
     if refits is None:
         refits = {part: refit_part(path, part) for part in REFIT_PARTS}
+    model = {}
     for part in ('DIVCORE', 'MULCORE', 'other'):
         model.update(refits[part])
-    for family in CHECKS:
-        model.pop(family, None)
     return model
 
 
@@ -698,7 +685,7 @@ def formulas(family, coeff, candidate=False):
 def fit_all(series, penalty):
     fits = {}
     base = PRODUCER_ORDER if 'PRODUCE' in series else ORDER
-    order = [f for f in base + ['MULCORE'] if f in series and f not in CHECKS]
+    order = [f for f in dict.fromkeys(base + ['MULCORE']) if f in series and f not in CHECKS]
     for family in [f for f in order if f != 'SIG'] + [f for f in ('SIG',) if f in order]:
         points = [p for p in series[family] if p["included"]]
         for point in points:
@@ -782,6 +769,39 @@ def charge_coverage(series, schedule, machine_keys, machine_names):
     return dict(checked=checked, above_charge=above)
 
 
+def lifetime_checks(path, model, machine):
+    """Held-out lifetimes (PRODUCER_CHECK) measured above one machine's composed fit.
+
+    A numeric result is produced at the word span of its bytes, prepared and
+    normalized; other lifetimes are their production events. ratio is measured /
+    composed; the lifetimes are never fitted."""
+    data = json.loads(Path(path).read_text())
+    rate = pricing_rate(data["normalization"])
+    observations = defaultdict(list)
+    for sample in data["primitive_samples"]:
+        if sample["probe"].startswith("PRODUCER_CHECK/"):
+            observations[sample["probe"]].append(float(sample["ns_per_execution"]))
+
+    def charge(family, count, span):
+        return model[family][0] * count + model[family][1] * span
+
+    above, checked = [], 0
+    for row in data.get("producer_manifest", []):
+        if not row["probe"].startswith("PRODUCER_CHECK/"):
+            continue
+        count, size, numeric = (int(row[k]) for k in ("items", "bytes", "normalize_bytes"))
+        composed = charge("PRODUCE", count, size)
+        if row["kind"] == "numeric":
+            span = word(numeric)
+            composed += charge("PRODUCE", 1, span) + charge("PREP", 1, span) + charge("NORMALIZE", 1, span)
+        measured = statistics.median(observations[row["probe"]]) * rate
+        checked += 1
+        if measured > composed:
+            above.append(dict(machine=machine, fixture=row["probe"], measured_varops=measured,
+                              composed_varops=composed, ratio=measured / composed))
+    return checked, above
+
+
 def failed_conditions(machines):
     """Runs whose epoch noise exceeds the BIP 440 limit; such a run is repeated, not priced."""
     return [meta for meta in machines if (meta.get("epoch_noise") or 0) > MAX_EPOCH_NOISE]
@@ -805,6 +825,10 @@ def report_diagnostics(diag, machines):
             count = sum(other["family"] == family for other in coverage["above_charge"])
             print(f"  {family:<10} {count:4d} fixtures; worst {item['ratio']:.2f}x the charge: "
                   f"{item['fixture']} on {item['machine']}")
+    lifetimes = diag["held_out_lifetimes"]
+    worst = max(lifetimes["above_fit"], key=lambda item: item["ratio"], default=None)
+    print(f"Held-out lifetimes against each machine's fit: {len(lifetimes['above_fit'])} of {lifetimes['checked']} "
+          f"above the composed fit" + (f"; worst {worst['ratio']:.2f}x: {worst['fixture']} on {worst['machine']}" if worst else ""))
     for meta in machines:
         noise = meta.get("epoch_noise")
         print(f"Conditions: {meta['label']}: " + ("fewer than three epochs, epoch noise not measured" if noise is None else
@@ -852,7 +876,7 @@ def main():
     if len({meta['model_id'] for meta in machines}) != 1:
         raise ValueError('cannot combine different costing models; recollect all machines with the frozen candidate')
     base = PRODUCER_ORDER if machines[0]['model_id'] == MODEL_ID else ORDER
-    order = [f for f in base + ['MULCORE'] if f in series and f not in CHECKS]
+    order = [f for f in dict.fromkeys(base + ['MULCORE']) if f in series and f not in CHECKS]
     if args.allow_source_mismatch and args.source_root is None:
         parser.error("--allow-source-mismatch requires --source-root")
     sources = [{name.replace("\\", "/"): digest for name, digest in meta["source_sha256"].items()}
@@ -880,7 +904,7 @@ def main():
     result = dict(schema="varop-joint-fit-v2", status=status,
                   model_id=machines[0]['model_id'],
                   pricing_basis="envelope",
-                  schedule_combination="Envelope of recorded independently fitted machine curves after same-machine normalization (see envelope_combination); DIVCORE is refit per machine from the recorded samples for trimmed-length quotient rows as fixed + step + cell. Round after combining; SIG remains fixed at 500000. Coefficientwise maxima are kept for comparison.",
+                  schedule_combination="Envelope of machine curves, each fitted independently from the samples recorded on that machine after same-machine normalization (see envelope_combination); DIVCORE rows are trimmed-length quotient rows, fitted as fixed + step + cell. Round after combining; SIG remains fixed at 500000. Coefficientwise maxima are kept for comparison.",
                   envelope_combination=ENVELOPE,
                   method=f"Per-machine median of raw fixture epochs, normalized so that a full 40-billion-varop budget of fitted work takes {TARGET_FRACTION:g}× the recorded local pre-v2 reference (rate derived from the recorded reference time, whatever normalization the artifact was collected with); equal path-group and size-decade weights; weighted squared log error with a 100× underprediction penalty; nonnegative predefined coefficients; no coefficient rounding. SIG diagnostic fits do not replace the fixed 500000 allowance.",
                   machines=machines, source_check=source_check,
@@ -908,10 +932,14 @@ def main():
     if args.implemented:
         implemented = json.loads(args.implemented.read_text())
         schedules[f"implemented ({implemented['source']})"] = implemented["coefficients"]
+    lifetimes = [lifetime_checks(path, model, label) for path, model, label in zip(paths, models, labels)]
     result["diagnostics"] = dict(
         quality_gate=quality_gate(series, models, keys, labels),
         charge_coverage={name: charge_coverage(series, schedule, keys, labels)
-                         for name, schedule in schedules.items()})
+                         for name, schedule in schedules.items()},
+        held_out_lifetimes=dict(checked=sum(checked for checked, _ in lifetimes),
+                                above_fit=sorted((item for _, above in lifetimes for item in above),
+                                                 key=lambda item: -item["ratio"])))
     report_diagnostics(result["diagnostics"], machines)
     if output.exists():
         previous = json.loads(output.read_text())
