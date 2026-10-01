@@ -672,8 +672,7 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
     chips = [f'{len(machines)} machines', f'{sum(len(m["points"]) for m in machines):,} measurements']
     if dated:
         chips.append(f'measured {dated.group(0)}')
-    status = (f' These are the prices <a href="{BIP440_URL}">BIP 440</a> specifies and the '
-              f'<a href="{GSR_URL}">gsr branch</a> implements.' if same_schedule else '')
+    status = (f' These are the prices the <a href="{GSR_URL}">gsr branch</a> implements.' if same_schedule else '')
     parts.append(f'<p><strong>{" · ".join(chips)}</strong> Under <a href="{BIP440_URL}">BIP 440</a>, a transaction '
                  'with Tapleaf 0xC2 inputs gets a budget of 10,000 varops per weight unit, 40 billion for a full block. Every '
                  'operation pays BASE plus the primitives below, priced so that on each of these machines a block of the '

@@ -231,8 +231,9 @@ A schedule passes only if every candidate interval's upper end is at most 1; a l
 
 ### Current prices
 
-BIP 440 and the implementation (gsr `7d0c293b64`) price every primitive from the six-machine full-run envelope of [`2026-10-01-full-runs-one-deduction`](data/2026-10-01-full-runs-one-deduction/); each dataset's README records what changed since the one before. Earlier datasets remain in the Git history.
+The implementation (gsr `7d0c293b64`) prices every primitive from the six-machine full-run envelope of [`2026-10-01-full-runs-one-deduction`](data/2026-10-01-full-runs-one-deduction/); each dataset's README records what changed since the one before. Earlier datasets remain in the Git history.
 
 ### Open items
 
+- Update BIP 440 to these prices; the published draft still lists earlier ones.
 - To do before finalizing: add a non-Apple ARM64 machine and a low-end home-node device; run the complete realistic and full-varops suite and its validation on every admitted machine; finalize the WRITE price with complete storage-lifetime and script benchmarks, since buffer-growth measurements depend strongly on allocation history; set and test a separate peak-memory bound.
