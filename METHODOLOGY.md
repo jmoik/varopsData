@@ -4,13 +4,13 @@ The complete method behind the BIP 440 cost primitives, in the order of [BIP 440
 
 ## Calibration target
 
-**The criterion.** On every measured machine, the slowest feasible full block of complete Tapleaf 0xC2 scripts must take less than 1.0 times that machine's reference `T_pre`, the slowest measured block of existing-version scripts. There is no averaging across machines. A reproducible slower workload rejects the schedule; one noisy observation above 1.0 calls for investigation, not a verdict. Finite tests cannot prove the bound for every script or future processor.
+**The criterion.** On every measured machine, the slowest feasible full block of complete Tapleaf 0xC2 scripts must take less than 1.0 times that machine's reference `T_pre`, the slowest measured block of Tapleaf 0xC0 scripts. There is no averaging across machines. A reproducible slower workload rejects the schedule; one noisy observation above 1.0 calls for investigation, not a verdict. Finite tests cannot prove the bound for every script or future processor.
 
 **The fit fraction.** Primitive fits are normalized so that a full budget of fitted work takes 0.9 times the machine's reference. The fraction is a margin for composition effects and machine variation that primitive fixtures do not capture. It applies only to fitting: screening, confirmation and the criterion above use 1.0. Only `fit_calibrations.py` applies it (`TARGET_FRACTION`); the runner records raw nanoseconds and the reference, so artifacts can be refitted with another fraction without remeasuring.
 
 **Scope.** The claim covers script evaluation only: `EvalTapscriptV2` and its final-result check, or `EvalScript` and its clean-stack check for existing versions, including parsing, metering and execution. Transaction and block validation, Taproot commitment checks and signature-cache effects are not timed. Evaluation is serial; parallel block validation and shared-budget contention are outside the claim, and shared-budget accounting is covered by correctness tests.
 
-**The reference.** `T_pre` is the slowest successful workload of the Tapleaf 0xC0 panel that `bench_varops` measures on the same machine and build: 87 complete Tapleaf 0xC0 scripts and 80,000 raw Schnorr verifications. The panel covers signature checks (CHECKSIG, CHECKSIGVERIFY, CHECKSIGADD), repeated hashing of 1- and 520-byte elements (`3DUP` + three hashes), comparisons and arithmetic on 4-byte operands, stack operations, conditionals over 4 MB scripts, pushes and the 1,000-item initial stack. The runner measures it with `bench_varops --case-filter OP_NOP --sample-budget-percent 2 --epochs 5` (the filter keeps every Tapleaf 0xC0 case and limits Tapleaf 0xC2 timing; the sample limit does not truncate Tapleaf 0xC0 cases). The slowest workload differs by machine. In the [`2026-10-01-full-runs`](data/2026-10-01-full-runs/) dataset it was signature checks on the i5-12500, Ryzen 5 3600 and Ryzen 9 9950X, repeated RIPEMD160 of 520-byte elements on the Apple machines, and repeated HASH256 of 520-byte elements on the i7-7700, which has no SHA-NI. Calibration runs measure the panel with the candidate build's existing-version evaluator. The final gate uses a pinned pre-upgrade build for the reference, so a candidate slowdown of existing scripts cannot raise `T_pre` there.
+**The reference.** `T_pre` is the slowest successful workload of the Tapleaf 0xC0 panel that `bench_varops` measures on the same machine and build: 87 complete Tapleaf 0xC0 scripts and 80,000 raw Schnorr verifications. The panel covers signature checks (CHECKSIG, CHECKSIGVERIFY, CHECKSIGADD), repeated hashing of 1- and 520-byte elements (`3DUP` + three hashes), comparisons and arithmetic on 4-byte operands, stack operations, conditionals over 4 MB scripts, pushes and the 1,000-item initial stack. The slowest workload differs by machine: signature checks on some, repeated hashing of 520-byte elements on others (see the [README](README.md#machines)). Calibration runs measure the panel with the candidate build's Tapleaf 0xC0 evaluator. The final gate uses a pinned pre-upgrade build for the reference, so a candidate slowdown of existing scripts cannot raise `T_pre` there.
 
 **Two benchmark modes.**
 
@@ -41,13 +41,11 @@ Normalizing to each machine's own reference means a uniformly slow machine does 
 
 **Outliers.** If one machine's coefficient exceeds 1.5 times the next-highest, an independent full run on that machine, after a reboot and on a different day, must reproduce it within 15%; otherwise the first run is discarded. A reproduced outlier is diagnosed. If it stems from a correctable implementation cost outside consensus, such as avoidable allocation, the implementation is fixed and every machine is remeasured; otherwise the machine's fit stays in the combination. Reports name the machine whose fit sets the price at each size, and the diagnosis of each outlier. Rounded prices are final only when complete-script benchmarks stay below 1.0 times the reference on every admitted machine.
 
-**Machines so far.** Apple M4 Pro and M1 Pro (macOS, Apple Clang), Intel i5-12500 and i7-7700 and AMD Ryzen 5 3600 (Linux, GCC; the i7-7700 has no SHA-NI), and AMD Ryzen 9 9950X (Windows 11, clang-cl). A non-Apple ARM64 machine and a low-end home-node device are still missing. Each dataset's README lists its machines, compilers, SHA256 backends, references and epoch noise.
-
 ### Run conditions
 
 Each primitive is timed in several epochs, each a pass over all primitives, and priced at the median of its epochs. **Epoch noise** is the median over fixtures of the median absolute deviation of a fixture's epochs from their median, relative to that median. A run whose epoch noise exceeds **1.5%** is repeated, up to three attempts; failed attempts are kept under `calibration-intermediate/failed-<start>-attempt-<n>/` and recorded in the artifact (`conditions.failed_attempts`). `fit_calibrations.py` applies the same limit to every artifact, including ones collected before the check existed, and rejects runs above it unless `--allow-failed-conditions` is given for an exploratory fit.
 
-Undisturbed runs measure 0.03–0.5%. With seven epochs the measure reads about twice what it reads with three, and a Mac with its usual background tasks measures 1.1–1.2%, hence 1.5% rather than the earlier 1%. The threshold is a provisional screening check: it catches a machine disturbed during a run, not one loaded evenly throughout. The one-minute load average is recorded where the OS reports it, for information only (an idle macOS desktop already reports 1.5–2). A second reference measurement and a reference-drift condition were dropped.
+Undisturbed runs measure 0.03–0.5%. The limit catches a machine disturbed during a run, not one loaded evenly throughout.
 
 ## Fixtures and sampling
 
@@ -67,7 +65,7 @@ The sample grid follows the operation, not its expected use: dense near zero, at
 
     sum_i w_i * p_i * ln(predicted_i / measured_i)^2,   p_i = 100 if predicted_i < measured_i, else 1
 
-Relative error treats small and large operations alike; the 100× penalty keeps the fit at the upper edge of its measurements. A fit is not required to sit above every point, and no safety multiplier enters it. The runner records a fit for every primitive. `fit_calibrations.py` refits MUL, DIV, the hashes, WRITE, NORMALIZE, PREPARE and BIT from the recorded samples in their current bases, so older artifacts are fitted like new ones, and uses the recorded fits for the others.
+Relative error treats small and large operations alike; the 100× penalty keeps the fit at the upper edge of its measurements. A fit is not required to sit above every point, and no safety multiplier enters it.
 
 **Weights.** Weights follow the grid, not expected usage. Within a machine, each path group of a primitive counts equally, each size decade within a group counts equally, and the fixtures of a decade share its weight: `w = 1 / (groups × decades in the group × fixtures in the decade)`. No operation size is favored by a judgment about how scripts will use it.
 
@@ -89,8 +87,6 @@ Two examples:
 
 - **MUL** makes one row call per limb of the shorter operand, each with a fixed overhead. A basis of `a + b u + c u v` can charge that overhead only per limb of the longer operand or per limb product, so it over-charges both products with a one-limb operand and wide products, across the whole size range. The per-row term `v` matches the loop structure.
 - **DIV** charges a dividend shorter than the divisor one full row, although the implementation only compares lengths. That over-charge is accepted to keep one formula for every operand size.
-
-Earlier findings of this kind: the DIV per-row term was found by search, not by the primitive grid, and OP_BYTEREV of values up to 33 bytes measured above 1.0 on the i5-12500 and i7-7700 because its pop and push were outside the BIT fixtures, which now time its complete work.
 
 ## Combining machines
 
@@ -117,9 +113,9 @@ After combining, round each coefficient upward on its own (`rounded_candidate`):
 - **Rates** to two significant figures, and at least to a whole varop. The prices then carry no more precision than a sample of machines supports, while rounding adds at most 10% to a rate of 10 or more. Rates below 10 can rise by more, because a whole varop is the smallest step.
 - **Flats** more coarsely: to a multiple of 10 below 100 and of 50 from 100, but never to more than two significant figures (so 100 from 1,000). A flat is the intercept of a fit, which moves more between calibration runs than the rates do; the coarse steps keep it from changing on every refit, at up to 50% more for a value just above 100.
 
-Zero and values already at a step stay unchanged. Coverage of the machines comes from the envelope, not from rounding. Do not refit after rounding: retain the unrounded fits and report the rounding uplift, especially for small rates. For example, a combined MUL fit of `327.8 + 9.38 u + 106.8 v + 28.29 u v` becomes `350 + 10 u + 110 v + 29 u v`, a flat of `53.7` becomes `60`, and TWEAK's `168,387` becomes `170,000`.
+Zero and values already at a step stay unchanged. Coverage of the machines comes from the envelope, not from rounding. Do not refit after rounding: retain the unrounded fits and report the rounding uplift, especially for small rates. For example, a combined MUL fit of `360.9 + 5.23 u + 118.2 v + 28.20 u v` becomes `400 + 6 u + 120 v + 29 u v`, RIPEMD160's flat of `50.7` becomes `60`, and TWEAK's `168,023` becomes `170,000`.
 
-Rates are fitted per byte of `n` and charged per byte of the padded span the operation processes: `W(n)` for WRITE, READ, ARITH and BIT, `H(n)` for the hashes, and per counted item elsewhere. Since `W(n) ≥ n`, this never charges less than the fit. PREPARE's fitted rate is far below one varop per byte, so it is rounded and charged per 64-bit word instead, where a whole varop is a smaller step.
+Rates are fitted per byte of `n` and charged per byte of the padded span the operation processes: `W(n)` for PREPARE, WRITE, READ, ARITH and BIT, `H(n)` for the hashes, and per counted item elsewhere. Since `W(n) ≥ n`, this never charges less than the fit. Every rate is a whole number of varops, so PREPARE's rate, fitted far below one varop per byte, is charged well above its fit on large operands.
 
 **SIGCHECK** is exempt from fitting and rounding: it stays 500,000, matching the existing 50-weight-unit signature allowance. Where the reference is itself signature-bound, fitted verification approaches 500,000, so signature-heavy scripts run at about 1.0 times the reference; the budget then admits as many signatures as existing scripts. The benchmarks time uncached production Schnorr verification on valid signatures and separate the modeled challenge-hash contribution; the fitted residual does not replace the policy price. Transaction-message construction is not measured; the fixed allowance covers it by design.
 
@@ -134,7 +130,7 @@ Primitive benchmarks do not replace complete-script benchmarks. The decisive che
 **Searches.** A primitive grid can miss a feature region, so two searches complement the corpus:
 
 - `bench_varops --shape-search --reference-seconds T_pre` samples operand sizes and byte shapes per opcode, hill-climbs the highest projected full-budget time per consumed varop, and confirms the leaders over five epochs.
-- `bench_varops --program-search --reference-seconds T_pre --search-seconds N --search-corpus DIR` (experimental, not part of the runner) extends it to multi-opcode programs, stack depth and live data size. It is a coverage-guided loop in the style of PerfFuzz: it mutates and splices stack-neutral programs (an initial witness stack, then steps that copy operands or move earlier results, apply one opcode and keep or drop the results) and retains a program when it reaches a new feature (an opcode, a data dependency between two opcodes, an operand size class, a stack depth or a live size) or is slower than that feature's program. Its fitness is the time of a full block of the repeated program that a block can actually hold: a direct script is bounded by the budget and by its weight, and a macro-substituted body pays BASE per substituted instruction plus the unrolled script's write, so cheap bodies are not credited with a full budget. Inactive branches are left to the corpus. The corpus directory keeps each feature's slowest program and is reloaded and re-measured by later runs and other machines. The deadline, the screening budget per sample (`--search-budget`, default 1% of the block) and the confirmation of the leaders bound its runtime.
+- `bench_varops --program-search` (experimental, not part of the runner) extends the search to multi-opcode programs in the style of PerfFuzz.
 
 The corpus and the shape search project sampled work to the full budget (`wall × (40e9 − initial) / (consumed − initial)`). For cheap, small-operand sequences that projection is an upper bound: neither a direct script, limited by weight, nor a macro, which charges BASE per substituted instruction, can fill the budget with them.
 
@@ -144,7 +140,7 @@ The corpus and the shape search project sampled work to the full budget (`wall �
 
 Timing evidence has three tiers; only the last accepts a schedule.
 
-1. **Screening** finds candidates cheaply and is expected to be noisy. On each machine run `bench_varops --exclude-experimental --sample-budget-percent 2 --epochs 1 --file screen.csv` and the shape search. A case is **flagged** when its measured or projected full-budget time exceeds 1.0 times that run's slowest Tapleaf 0xC0 case. Screening never passes or fails a schedule, and a flagged case is never dropped for being inconvenient.
+1. **Screening** finds candidates cheaply and is expected to be noisy. On each machine run `bench_varops --sample-budget-percent 2 --epochs 1 --file screen.csv` and the shape search. A case is **flagged** when its measured or projected full-budget time exceeds 1.0 times that run's slowest Tapleaf 0xC0 case. Screening never passes or fails a schedule, and a flagged case is never dropped for being inconvenient.
 2. **Confirmation** re-measures every flagged case with longer samples, more rounds and a same-run reference: `bench_varops --confirm screen.csv --sample-budget-percent 10 --epochs 7 --file confirm.csv`. It reruns exactly the flagged Tapleaf 0xC2 cases together with the screening run's three slowest Tapleaf 0xC0 cases, in randomized order per round, and reports each case's per-round ratio against the slowest reference measured in the same round. Verdicts: `below-limit` (every round ≤ 1.0), `straddles-limit` (median ≤ 1.0 but some round above) and `above-limit` (median > 1.0). Every sample records CPU time, page faults and involuntary context switches, so a slow round can be attributed to the process or the system. `straddles-limit` cases stay in the report and the final panel; `above-limit` requires investigation (instrumentation, counts, omitted work) before any repricing. A projection resting on one repetition per sample, such as a large prepared pool, is confirmed at a larger `--sample-budget-percent`.
 3. **Final gate**: the frozen-panel campaign below, with every confirmed-flagged case and the slowest confirmed cases of each family. Its outcome decides acceptance.
 
@@ -159,8 +155,6 @@ For each workload, `T` is the median of its session times. On each machine, `T_p
 
 A configuration passes only if every candidate interval's upper end is at most 1; a lower end above 1 demonstrates failure; otherwise it is unresolved. Investigate any observed ratio above 1 even before an interval resolves. Report every interval and unresolved case. Repeated campaigns for the same candidate need a predeclared error budget across attempts. The rule covers the frozen finite panel under repeatable session conditions, not undiscovered scripts, machines or implementation changes.
 
-Separately, test evaluator rejection paths: budget exhaustion at operation boundaries, oversized results, late decoding and final-stack failures. Bound evaluator work and temporary memory before rejection, including allowed postcharge work. Preserve raw runs and candidate revisions; if a case fails, fix the measurement or model and obtain a new holdout rather than relabelling the failing case.
-
 ## Primitives
 
 An opcode's charge is `BASE` plus the primitives its formula names (BIP 440 Cost Primitives and Opcode Costs, BIP 441 for the re-enabled opcodes). The prices themselves are in BIP 440, `src/script/varops.h` and the [report](report/joint-calibration.html).
@@ -170,7 +164,7 @@ Notation: `W(n) = 8 ceil(n / 8)` is the word span of `n` bytes, `H(n) = 64 floor
 | Primitive | Raw label | Fitted basis | Charged as | Fixtures |
 | --- | --- | --- | --- | --- |
 | `BASE` | `F` | `a` | flat | 28 |
-| `PREPARE(n)` | `PREP` | `a + b W(n)` | flat + per 64-bit word | 221 |
+| `PREPARE(n)` | `PREP` | `a + b W(n)` | flat + per byte of `W(n)` | 221 |
 | `WRITE(n)` | `PRODUCE` | `a + b n` | flat + per byte of `W(n)` | 1,311 |
 | `NORMALIZE` | `NORMALIZE` | `a` | flat | 251 |
 | `READ(n)` | `READ` | `a + b n` | flat + per byte of `W(n)` | 708 |
@@ -193,7 +187,7 @@ Notation: `W(n) = 8 ceil(n / 8)` is the word span of `n` bytes, `H(n) = 64 floor
 Each item names what is timed, its paths (the path groups that the fit weights equally) and its range. Unless stated otherwise the benchmark calls the production helper on prepared operands, which are outside the timer.
 
 - **BASE**: Tapleaf 0xC2 evaluation and final-result checking of 256, 1,024, 4,096 and 16,384 instructions that pay only BASE, followed by OP_1, divided by the executed instruction count. Paths: NOPs, upgradable NOPs, CODESEPARATOR, alternating ELSE, and flat and nested IF/ENDIF in an inactive branch. Parsing and prescanning are included; entry and finalization are amortized. Skipped instructions (`F/skipped`) are timed as a diagnostic but not fitted, since serialized weight funds them.
-- **PREPARE**: production value conversion of 0 to 4,000,000 bytes on values with word-padded capacity, the state in which every stack value is written. Fitted per byte of `W(n)`; its rate is far below one varop per byte, so it is charged per 64-bit word.
+- **PREPARE**: production value conversion of 0 to 4,000,000 bytes on values with word-padded capacity, the state in which every stack value is written. Fitted and charged per byte of `W(n)`.
 - **WRITE**: complete finite creation, insertion and release cycles, 0 to 4,000,000 bytes, with 100 ms batches. Paths:
   - `stack`: copying a prepared value onto the stack and releasing it;
   - `vector`: building a value in a word-padded buffer, as producers do, then inserting and releasing it;
@@ -214,7 +208,7 @@ Each item names what is timed, its paths (the path groups that the fit weights e
 - **RIPEMD160**, **SHA1**: complete calls across the permitted 520-byte direct-input range, including 32-byte second-pass inputs; the digest buffer is prepared outside the timer.
 - **SIGCHECK**: uncached production Schnorr verification of valid signatures over messages of 0 to 4,000,000 bytes (OP_CHECKSIGFROMSTACK), checking that the challenge hash stays within `SHA256(64 + n)`. Not fitted for the price, which stays 500,000.
 - **TWEAK**: one complete fixed-size production public-key tweak.
-- **OP_TX_SELECT**: selector setup plus `k` charged units, on collated output, per unit kind: witness items (`empty_items`), weight scan, amount scan, outputs and input fields. Transaction-backed fixtures; OP_TX finalization is postponed.
+- **OP_TX_SELECT**: selector setup plus `k` charged units, on collated output, per unit kind: witness items (`empty_items`), weight scan, amount scan, outputs and input fields. Transaction-backed fixtures.
 
 **Held-out checks**, measured but not fitted:
 
@@ -223,7 +217,7 @@ Each item names what is timed, its paths (the path groups that the fit weights e
 
 ### Composition rules
 
-- **Lifetimes.** WRITE includes eventual release. Initial witness values pay WRITE once after the immediate-success prescan, including empty values. Moves, drops and in-place shrinkage are not new producers; an opcode that shortens a value pays WRITE for its result. See the [storage ledger](#storage-accounting).
+- **Lifetimes.** WRITE includes eventual release. Initial witness values pay WRITE once after the immediate-success prescan, including empty values. Moves, drops and in-place shrinkage are not new producers; an opcode that shortens a value pays WRITE for its result.
 - **Numeric results** pay `WRITE(W(n)) + NORMALIZE`. MUL charges WRITE and PREPARE of its full product span and WRITE of a scratch row before execution, and only NORMALIZE at output. DIV includes its internal temporary storage.
 - **Small results.** A count or numeric comparison costs `WRITE(8) + NORMALIZE` whatever its encoded length; a constant or boolean written directly costs `WRITE(8)`.
 - **No separate allocation charge.** Required allocation and growth belong to the producing operation, including scratch storage; they are never omitted or charged twice.
@@ -235,55 +229,12 @@ Each item names what is timed, its paths (the path groups that the fit weights e
 
 For each opcode the source path (calls, multiplicities, size features, branches, charge timing, storage ownership) is derived before looking at its timing; `bench_varops --coverage-manifest` exports the formula and the primitives of every opcode, and an independent charge calculator in `bench_varops --verify-costs` must agree with the meter. Agreement shows accounting, not timing coverage: complete-script benchmarks check that.
 
-### Storage accounting
-
-A production event is a specified semantic value/result, not each allocator call. Reuse may conservatively pay production again; capacity never enters a charge.
-
-| Path | Production/lifetime accounting | Other work / check |
-|---|---|---|
-| Initial witness values | WRITE once per item after immediate-success prescan | Empty items included; early success bypass unchanged |
-| Literal/scalar push | WRITE(bytes); scalar uses NUMERIC_RESULT(8) | Fixed opcode cost; numeric materialization for scalar |
-| DUP/OVER/PICK/TUCK families | WRITE once per new copy | Count conversion or truth check as applicable |
-| DROP/NIP/2DROP, final cleanup | No separate release | Lifetime funded by original producer |
-| ALTSTACK, SWAP/ROT/ROLL | No new production | MOVE prices ownership/header changes |
-| CAT growth | WRITE(full result), even if allocation reused | Inputs were funded independently; growth is not free |
-| SUBSTR | WRITE(result) once | Index PREPARE/READ; source/index release already funded |
-| LEFT/RIGHT shrink | WRITE(result) once | Pushing may copy the result out of the old buffer; original producer funds releasing it |
-| Numeric/bit results, comparisons, MIN/MAX | NUMERIC_RESULT(n) = WRITE(W(n)) + NORMALIZE | PREPARE/kernel work separately; no second RELEASE |
-| MUL | WRITE(full result span) + PREPARE(result span) + WRITE(scratch row) before kernel | Row/accumulation kernels exclude these allocations; only NORMALIZE at output |
-| DIV/MOD | DIV includes internal scratch and normalization | External result uses NUMERIC_RESULT; do not add kernel scratch again |
-| Hash/key result | WRITE(digest/key bytes) | Hash/tweak helper writes prepared output; does not insert on stack |
-
-The numeric output production is a conservative semantic charge even when the input allocation is reused. This is distinct from accidentally charging both an explicit RELEASE and a lifetime-inclusive WRITE. PREPARE tight-capacity growth is checked by finite source-to-result lifetimes, not an allocator-dependent extra formula. Known lifetime-fit underpredictions remain evidence to validate across machines; this ledger alone does not prove timing coverage.
-
-Retained capacity is bounded: `ValtypeStack::push_back(valtype&&)` copies a value whose capacity exceeds twice its word-rounded length into a word-rounded buffer. Every path that can shorten a value pays production of its result (LEFT/RIGHT/SUBSTR, numeric/scalar results, MUL's prepaid span), so the copy is always funded. Creating and then shortening a value is therefore two productions; WRITE is fitted without shrink fixtures, and `PRODUCE/churn` measures the pair. Stack element storage is therefore at most twice the word-rounded logical bytes, plus vector headers and allocator overhead. Every producer (literal pushes, OP_1..OP_16, CAT, SUBSTR, digests, OP_TX, numeric results) reserves `WordPaddedCapacity(n)` before filling a value, so pushing it, or later preparing it as a number, never reallocates; the reserve in `push_back` only guards values that did not. The PRODUCE fixtures build values the same way.
-
-Regression checks: `producer_lifetime_accounting` covers initial values, empty values, moves/drops, shrinkage and multiplication preflight; `producer_composition_boundaries` covers CAT, SUBSTR, ADD carry growth and SUB borrow shrinkage with exact and one-short budgets around byte/word/allocation boundaries; `shortening_splice_costs` covers LEFT/RIGHT; `valtype_stack_move_bounds_retained_capacity` covers the capacity bound. `bench_varops --verify-costs` checks independent formulas and exact budgets across generated scripts.
-
-### Removed primitives
-
-Earlier cost models used other primitives; older datasets and the archive use their names.
-
-| Former | Replaced by |
-| --- | --- |
-| `COPY`, `RELEASE`, `ALLOC` | WRITE, which times a complete lifetime |
-| `OUTPUT`, `SMALL` | NORMALIZE plus WRITE |
-| `DIVSTEP` | the `b s` term of the bundled DIV |
-| `FINAL` | PREPARE + READ of the final element |
-| `DECODE`, `REF` | BASE per decoded instruction and the macro unrolling charge |
-| `SIGHASH`, `DISCARD` | SIGCHECK's fixed allowance; no release charge |
-
 ## Status
 
 ### Current prices
 
-The implementation (gsr `7d0c293b64`) and BIP draft price every primitive, OP_TX_SELECT included, from the six-machine (M1 Pro, i5-12500, Ryzen 9 9950X, i7-7700, Ryzen 5 3600, M4 Pro) full-run envelope of [`2026-10-01-full-runs-one-deduction`](data/2026-10-01-full-runs-one-deduction/), measured with the 8 MB fixture pool and normalized to 0.9 times each reference. SHA256 is fitted on Core SHA256 only. The `BIT/byterev` fixtures time OP_BYTEREV's complete work (pop, reverse, push), since a `bench_varops` screening of an earlier schedule found short OP_BYTEREV values above 1.0 times the reference on the i5-12500 and i7-7700 when only the reversal was measured. Each opcode deducts its charges, BASE included, from the shared budget once, so the deduction F measures is the only one a complete opcode makes; a second deduction per charged opcode had put OP_BYTEREV of 0-1 bytes at 1.04 times the reference on the Ryzen 9 9950X. The previous prices came from the five-machine [`2026-10-01-full-runs`](data/2026-10-01-full-runs/). The 3-epoch datasets of 2026-09-30 (gsr `ea7a71e20e` and `13e9a89dc7`), from which earlier prices came, remain in the Git history (last in `0f5c9fa`). Historical raw artifacts remain unchanged.
+BIP 440 and the implementation (gsr `7d0c293b64`) price every primitive from the six-machine full-run envelope of [`2026-10-01-full-runs-one-deduction`](data/2026-10-01-full-runs-one-deduction/); each dataset's README records what changed since the one before. Earlier datasets remain in the Git history.
 
 ### Open items
 
 - To do before finalizing: add a non-Apple ARM64 machine and a low-end home-node device; run the complete realistic and full-varops suite and the confirmation tiers on every admitted machine; finalize the WRITE price with complete storage-lifetime and script benchmarks, since buffer-growth measurements depend strongly on allocation history; set and test a separate peak-memory bound.
-- OP_TX and macro finalization are postponed; their fixtures and prices remain experimental.
-
-### History
-
-Realistic-mode measurements of directly encoded workloads under an earlier cost schedule, on x86_64 and ARM64, found the slowest existing-version blocks dominated by Schnorr verification (80,000 signatures) and repeated hashing of 520-byte elements (`3DUP` + HASH256 or RIPEMD160). Under Tapleaf 0xC2 the slowest blocks then also included MUL on 1-byte operands, `2DUP` + LSHIFT on 10 KB elements, HASH256 of 1 KB elements, ROLL at maximum depth, and copying of 100 KB–2 MB elements (TUCK, CAT). Until 2026-04-10 this repository collected those `bench_varops` worst-case results for the original BIP 440 cost model, including runs contributed by others; the CSV files and plots remain in its Git history (`906848d`).
