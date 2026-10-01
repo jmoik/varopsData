@@ -1,6 +1,6 @@
 Primitive  Envelope (varops, unrounded)                   Rounded candidate                      Maximum coefficients (unrounded)
 F          303.629                                          350                                    303.629
-PREP       162.985 + 0.0010472 × W(n)                       200 + W(n)/8                           162.985 + 0.0010472 × W(n)
+PREP       162.985 + 0.0010472 × W(n)                       200 + W(n)                             162.985 + 0.0010472 × W(n)
 PRODUCE    728.233 + 7.12851 × n                            750 + 8 × W(n)                         728.233 + 7.12851 × n
 NORMALIZE  193.799                                          200                                    193.799
 READ       80.5772 + 0.954331 × W(n)                        90 + W(n)                              80.5772 + 0.954331 × W(n)

@@ -75,10 +75,10 @@ class CalibrationPipelineTests(unittest.TestCase):
     def test_schedule_rounding(self):
         # Hashes are priced per byte of the block-padded length: 49.0253 per byte is charged as 50.
         self.assertEqual(calibration.rounded_candidate('H256', [3043.03, 49.0253]), [3100, 50])
-        # PREP's rate is priced per 64-bit word: 0.0301 per byte of W(n) is 0.241 per word, charged as 1.
+        # Every rate is a whole number of varops per byte of W(n): PREP's 0.0301 is charged as 1.
         self.assertEqual(calibration.rounded_candidate('PREP', [241.381, .0301]), [250, 1])
-        self.assertEqual(calibration.rounded_candidate('PREP', [241.381, 1.3]), [250, 11])
-        self.assertEqual(calibration.formulas('PREP', [250, 1], candidate=True), '250 + W(n)/8')
+        self.assertEqual(calibration.rounded_candidate('PREP', [241.381, 1.3]), [250, 2])
+        self.assertEqual(calibration.formulas('PREP', [250, 1], candidate=True), '250 + W(n)')
         self.assertEqual(calibration.formulas('DIVCORE', [0, 500, 33], candidate=True), '500 × s + 33 × s × v')
         self.assertEqual(calibration.rounded_candidate('DIVCORE', [3977.26, 0, 158.884]), [4000, 0, 160])
         self.assertEqual(calibration.rounded_candidate('MUL', [186.117, 13.1377]), [190, 14])
@@ -109,9 +109,9 @@ class CalibrationPipelineTests(unittest.TestCase):
     def test_candidate_charge_uses_pricing_units(self):
         c = {'PRODUCE': [680, 7], 'PREP': [180, 1], 'H256': [280, 38], 'MOVE': [180, 23], 'SIG': [500000, 0],
              'MULCORE': [340, 5, 110, 29], 'F': [310, 0]}
-        # WRITE is charged on W(n), PREPARE per word, hashes on the block span.
+        # WRITE and PREPARE are charged on W(n), hashes on the block span.
         self.assertEqual(calibration.candidate_charge('PRODUCE', dict(x=9, group='g'), c), 680 + 7 * 16)
-        self.assertEqual(calibration.candidate_charge('PREP', dict(x=9, group='spare'), c), 180 + 2)
+        self.assertEqual(calibration.candidate_charge('PREP', dict(x=9, group='spare'), c), 180 + 16)
         self.assertEqual(calibration.candidate_charge('H256', dict(x=56, group='g'), c), 280 + 38 * 128)
         self.assertEqual(calibration.candidate_charge('MOVE', dict(x=3, group='g'), c), 180 + 69)
         self.assertEqual(calibration.candidate_charge('SIG', dict(x=32, group='g'), c), 500000 + 280 + 38 * 128)

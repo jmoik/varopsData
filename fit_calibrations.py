@@ -633,9 +633,6 @@ def independent_models(paths):
 # W(n) (whole 8-byte words) for numeric and byte operations, H(n) (whole 64-byte blocks)
 # for the hashes. Fitted byte rates are per byte of n, and W(n) >= n.
 WORD_PRICED = {'PREP', 'PRODUCE', 'READ', 'ARITH', 'BIT'}
-# PREP's fitted byte rate is far below one varop, so its rate is priced per 64-bit word
-# of W(n) instead: one whole varop per byte would charge eight per word.
-PER_WORD = {'PREP'}
 
 
 def ceil_to(value, step):
@@ -665,8 +662,6 @@ def rounded_candidate(family, coeff):
     with round_flat and rates with round_coefficient; SIG stays at its fixed allowance."""
     if family == 'SIG':
         return [500000, 0]
-    if family in PER_WORD:
-        coeff = [coeff[0], 8 * coeff[1]]
     if family == 'MUL':
         # u × (a + b × v) has no flat.
         return [round_coefficient(v) for v in coeff]
@@ -692,9 +687,7 @@ def formulas(family, coeff, candidate=False):
         return terms((coeff[0], ''), (coeff[1], 'u'), (coeff[2], 'u × v'))
     if family == "DIVCORE":
         return terms((coeff[0], ''), (coeff[1], 's'), (coeff[2], 's × v'))
-    if candidate and family in PER_WORD:
-        variable = "W(n)/8"
-    elif candidate and family in WORD_PRICED:
+    if candidate and family in WORD_PRICED:
         variable = "W(n)"
     else:
         variable = ("W(n)" if family in {"PREP", "READ", "ARITH", "BIT", "OUTPUT", "NORMALIZE"} else "k" if family in {"MOVE", "SELECT"}
@@ -731,8 +724,6 @@ def candidate_charge(family, point, candidates):
         return coeff[0]
     if family in {"DIVCORE", "MULCORE"}:
         return predict(family, point, coeff, {})
-    if family in PER_WORD:
-        return coeff[0] + coeff[1] * word(point["x"]) / 8
     if family in WORD_PRICED:
         return coeff[0] + coeff[1] * word(point["x"])
     c, v = features(family, point["x"], point["group"])

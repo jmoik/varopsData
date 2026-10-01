@@ -405,7 +405,7 @@
         200,
         1
       ],
-      "candidate_formula": "200 + W(n)/8",
+      "candidate_formula": "200 + W(n)",
       "maximum_coefficients": [
         162.98536410374228,
         0.0010472045329164305
