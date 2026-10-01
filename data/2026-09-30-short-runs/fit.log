@@ -31,4 +31,4 @@ Conditions: 12th Gen Intel(R) Core(TM) i5-12500: not recorded (reference measure
 Conditions: varop-calibration-ryzen99500x-3epoch: not recorded (reference measured once, load not sampled)
 Conditions: Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz: not recorded (reference measured once, load not sampled)
 Conditions: AMD Ryzen 5 3600 6-Core Processor: not recorded (reference measured once, load not sampled)
-Saved e3-20260930-ea7a71e20e/joint-calibration.json
+Saved data/2026-09-30-short-runs/joint-calibration.json

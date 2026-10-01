@@ -5,7 +5,7 @@ Keeps every chart, measurement and table from the generated HTML and replaces th
 presentation: light/dark theme, sidebar navigation, a summary price schedule,
 colour-blind-checked machine colours and hover tooltips.
 
-    python3 restyle_report.py 0.4.0/joint-calibration.html
+    python3 src/restyle_report.py report/joint-calibration.html
 
 With one argument the file is restyled in place and the untouched original is kept
 next to it as *.orig.html (re-running restyles from that original).

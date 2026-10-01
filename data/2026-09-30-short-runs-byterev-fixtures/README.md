@@ -1,7 +1,7 @@
-# 3-epoch runs on six machines · 2026-09-30
+# 3-epoch runs on six machines with new OP_BYTEREV fixtures · 2026-09-30
 
 Commit `13e9a89dc7` (branch `gsr`), model `producer-normalize-v1`, 8 MB fixture pool.
-Since the previous dataset (`ea7a71e20e`), the implementation charges the candidates of that dataset (gsr `c46da31e5a`),
+Since the previous dataset ([`2026-09-30-short-runs`](../2026-09-30-short-runs/), commit `ea7a71e20e`), the implementation charges the candidates of that dataset (gsr `c46da31e5a`),
 and the `BIT/byterev/n` fixtures time OP_BYTEREV's work after dispatch (pop, reverse, push) instead of the reversal
 kernel alone. `bench_varops` had found short OP_BYTEREV values above the 1.0 limit on the i5 (1.19x) and i7 (1.12x)
 at `BASE + BIT(W(n))` with BIT's flat at 90; with these fixtures in the BIT fit, its flat is 183 before rounding.
@@ -18,7 +18,7 @@ at `BASE + BIT(W(n))` with BIT's flat at 90; with these fixtures in the BIT fit,
 | Intel i7-7700 | GCC 15.2.0 | sse4/avx2 (no SHA-NI) | 3.482 | 3.483 | Hetzner, `bitcoinSetup.sh` |
 | Ryzen 5 3600 | GCC 15.2.0 | x86_shani | 3.201 | 3.199 | Hetzner, `bitcoinSetup.sh` |
 
-`joint-calibration.json` and `fit.log` come from `fit_calibrations.py` over all six artifacts in the order above,
+`joint-calibration.json` and `fit.log` come from `src/fit_calibrations.py` over all six artifacts in the order above,
 with `--source-root` on the gsr repository. Runs are admitted by their epoch noise, at most 1.5%; these measure
 0.13–0.77% (M4 Pro 0.77%, M1 Pro 0.29%). Their median loads of 3.09 and 2.37, which an earlier fitter rejected,
 are no longer a condition. The fit prices a full budget at 0.9× each machine's pre-v2 reference; BIT's

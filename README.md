@@ -1,6 +1,6 @@
 # varopsData
 
-How the costs of Tapscript v2 operations are measured and priced. [BIP 440](https://github.com/jmoik/bips/blob/gsr-full/bip-0440.mediawiki) gives every script a varops budget and prices each operation from a few cost primitives; this repository holds the measurements on several machines, the fitting code and the [report](0.4.0/joint-calibration.html) (download to view). The benchmarks are on the `gsr` branch of [jmoik/bitcoin](https://github.com/jmoik/bitcoin/tree/gsr).
+How the costs of Tapscript v2 operations are measured and priced. [BIP 440](https://github.com/jmoik/bips/blob/gsr-full/bip-0440.mediawiki) gives every script a varops budget and prices each operation from a few cost primitives; this repository holds the measurements on several machines, the fitting code and the [report](report/joint-calibration.html) (download to view). The benchmarks are on the `gsr` branch of [jmoik/bitcoin](https://github.com/jmoik/bitcoin/tree/gsr).
 
 **The requirement:** on every machine, a full block of the slowest Tapscript v2 scripts must take less time than the slowest block of existing scripts on that machine.
 
@@ -20,7 +20,7 @@ The details of every step, each primitive's fixtures and the acceptance statisti
 
 ## Machines
 
-The current dataset, [`e7-20261001-e60ac7e070`](e7-20261001-e60ac7e070/), has full runs on five machines; the Apple M4 Pro is missing from it. A non-Apple ARM64 machine and a low-end home-node device are still needed.
+The current dataset, [`data/2026-10-01-full-runs`](data/2026-10-01-full-runs/), has full runs on five machines; the Apple M4 Pro is missing from it. A non-Apple ARM64 machine and a low-end home-node device are still needed.
 
 | Machine | OS | Reference `T_pre` | Slowest existing workload |
 |---|---|---|---|
@@ -36,21 +36,22 @@ On each machine, from a checkout of the `gsr` branch (45–60 minutes):
 
     python3 dev/varops/primitive-calibration/run_calibration.py --output varop-calibration-<machine>-full.json
 
-Put the artifacts in a dataset folder, then fit and render (Python 3, standard library only):
+Put the artifacts in a new folder under `data/`, then fit, render and test (Python 3, standard library only):
 
-    python3 fit_calibrations.py <dataset>/varop-calibration-*.json --source-root <gsr checkout>
-    python3 render_joint_calibration.py <dataset>/joint-calibration.json \
-        --output 0.4.0/joint-calibration.html --source-root <gsr checkout>
-    python3 -m unittest test_calibration_pipeline
+    python3 src/fit_calibrations.py data/<dataset>/varop-calibration-*.json --source-root <gsr checkout>
+    python3 src/render_joint_calibration.py data/<dataset>/joint-calibration.json \
+        --output report/joint-calibration.html --source-root <gsr checkout>
+    python3 -m unittest discover -s src
 
 ## Contents
 
 | Path | |
 |---|---|
-| `e7-20261001-e60ac7e070/` | Current dataset: five machines, 7 epochs. |
-| `e3-20260930-13e9a89dc7/`, `e3-20260930-ea7a71e20e/` | Earlier six-machine datasets, from which the implemented prices come. |
-| `0.4.0/joint-calibration.html` | The report. |
-| `fit_calibrations.py`, `render_joint_calibration.py`, `restyle_report.py`, `test_calibration_pipeline.py` | Fitting, report and tests. |
+| `data/2026-10-01-full-runs/` | Current dataset: full runs on five machines. |
+| `data/2026-09-30-short-runs/` | 3-epoch runs on six machines; the implemented prices come from its fit. |
+| `data/2026-09-30-short-runs-byterev-fixtures/` | The same, after OP_BYTEREV's fixtures were corrected; the source of BIT's price. |
+| `report/joint-calibration.html` | The report, rendered from the current dataset. |
+| `src/` | Fitting (`fit_calibrations.py`), the report (`render_joint_calibration.py`, `restyle_report.py`) and tests. |
 | `METHODOLOGY.md` | The full method. |
 
-Each dataset folder holds one artifact per machine with every raw sample, the joint fit, the fit log, a source audit and a README with the run details.
+Each folder in `data/` holds one artifact per machine with every raw sample, the joint fit, the fit log, a source audit and a README with the run details.

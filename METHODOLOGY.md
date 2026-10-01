@@ -10,7 +10,7 @@ The complete method behind the BIP 440 cost primitives, in the order of [BIP 440
 
 **Scope.** The claim covers script evaluation only: `EvalTapscriptV2` and its final-result check, or `EvalScript` and its clean-stack check for existing versions, including parsing, metering and execution. Transaction and block validation, Taproot commitment checks and signature-cache effects are not timed. Evaluation is serial; parallel block validation and shared-budget contention are outside the claim, and shared-budget accounting is covered by correctness tests.
 
-**The reference.** `T_pre` is the slowest successful workload of the pre-v2 panel that `bench_varops` measures on the same machine and build: 87 complete Tapscript v1 scripts and 80,000 raw Schnorr verifications. The panel covers signature checks (CHECKSIG, CHECKSIGVERIFY, CHECKSIGADD), repeated hashing of 1- and 520-byte elements (`3DUP` + three hashes), comparisons and arithmetic on 4-byte operands, stack operations, conditionals over 4 MB scripts, pushes and the 1,000-item initial stack. The runner measures it with `bench_varops --case-filter OP_NOP --sample-budget-percent 2 --epochs 5` (the filter keeps every pre-v2 case and limits v2 timing; the sample limit does not truncate pre-v2 cases). The slowest workload differs by machine. In the `e7-20261001-e60ac7e070` runs it was signature checks on the i5-12500, Ryzen 5 3600 and Ryzen 9 9950X, repeated RIPEMD160 of 520-byte elements on the Apple machines, and repeated HASH256 of 520-byte elements on the i7-7700, which has no SHA-NI. Calibration runs measure the panel with the candidate build's existing-version evaluator. The final gate uses a pinned pre-upgrade build for the reference, so a candidate slowdown of existing scripts cannot raise `T_pre` there.
+**The reference.** `T_pre` is the slowest successful workload of the pre-v2 panel that `bench_varops` measures on the same machine and build: 87 complete Tapscript v1 scripts and 80,000 raw Schnorr verifications. The panel covers signature checks (CHECKSIG, CHECKSIGVERIFY, CHECKSIGADD), repeated hashing of 1- and 520-byte elements (`3DUP` + three hashes), comparisons and arithmetic on 4-byte operands, stack operations, conditionals over 4 MB scripts, pushes and the 1,000-item initial stack. The runner measures it with `bench_varops --case-filter OP_NOP --sample-budget-percent 2 --epochs 5` (the filter keeps every pre-v2 case and limits v2 timing; the sample limit does not truncate pre-v2 cases). The slowest workload differs by machine. In the [`2026-10-01-full-runs`](data/2026-10-01-full-runs/) dataset it was signature checks on the i5-12500, Ryzen 5 3600 and Ryzen 9 9950X, repeated RIPEMD160 of 520-byte elements on the Apple machines, and repeated HASH256 of 520-byte elements on the i7-7700, which has no SHA-NI. Calibration runs measure the panel with the candidate build's existing-version evaluator. The final gate uses a pinned pre-upgrade build for the reference, so a candidate slowdown of existing scripts cannot raise `T_pre` there.
 
 **Two benchmark modes.**
 
@@ -61,7 +61,7 @@ The sample grid follows the operation, not its expected use: dense near zero, at
 
 ## Fitting
 
-**Conversion.** Each fixture's median time is converted to varops at `40,000,000,000 / (0.9 × T_pre)` per nanosecond, so a full budget of fitted work takes 0.9 times the reference on each machine (`pricing_rate` in `fit_calibrations.py`).
+**Conversion.** Each fixture's median time is converted to varops at `40,000,000,000 / (0.9 × T_pre)` per nanosecond, so a full budget of fitted work takes 0.9 times the reference on each machine (`pricing_rate` in `src/fit_calibrations.py`).
 
 **Objective.** Each machine is fitted independently, in the primitive's declared feature basis and with nonnegative coefficients. The fit minimizes the weighted squared logarithmic error
 
@@ -163,9 +163,9 @@ Separately, test evaluator rejection paths: budget exhaustion at operation bound
 
 ## Primitives
 
-Calibration model **producer-normalize-v1**, the only implemented schedule. An opcode's charge is `BASE` plus the primitives its formula names (BIP 440 Cost Primitives and Opcode Costs, BIP 441 for the re-enabled opcodes). The prices themselves are in BIP 440, `src/script/varops.h` and the [report](0.4.0/joint-calibration.html).
+Calibration model **producer-normalize-v1**, the only implemented schedule. An opcode's charge is `BASE` plus the primitives its formula names (BIP 440 Cost Primitives and Opcode Costs, BIP 441 for the re-enabled opcodes). The prices themselves are in BIP 440, `src/script/varops.h` and the [report](report/joint-calibration.html).
 
-Notation: `W(n) = 8 ceil(n / 8)` is the word span of `n` bytes, `H(n) = 64 floor((n + 72) / 64)` the bytes a 64-byte-block hash processes, and `u ≥ v` limb counts. Fixture counts are those of one machine in the `e7-20261001-e60ac7e070` runs; raw labels are the names in the artifacts.
+Notation: `W(n) = 8 ceil(n / 8)` is the word span of `n` bytes, `H(n) = 64 floor((n + 72) / 64)` the bytes a 64-byte-block hash processes, and `u ≥ v` limb counts. Fixture counts are those of one machine in the [`2026-10-01-full-runs`](data/2026-10-01-full-runs/) dataset; raw labels are the names in the artifacts.
 
 | Primitive | Raw label | Fitted basis | Charged as | Fixtures |
 | --- | --- | --- | --- | --- |
@@ -277,11 +277,11 @@ Earlier models used primitives that producer-normalize-v1 replaced; older datase
 
 ### Current prices
 
-The implementation and BIP draft price every primitive from the six-machine (M4 Pro, M1 Pro, i5-12500, Ryzen 9 9950X, i7-7700, Ryzen 5 3600), three-epoch envelope of [`e3-20260930-ea7a71e20e`](e3-20260930-ea7a71e20e/), measured with the 8 MB fixture pool and normalized to 0.9 times each reference. SHA256 is fitted on Core SHA256 only. BIT is the exception: a `bench_varops` screening found OP_BYTEREV of values up to 33 bytes above 1.0 times the reference on the i5-12500 and i7-7700, because its pop and push were outside the BIT fixtures. The `BIT/byterev` fixtures now time its complete work, and BIT is priced `190 + 2 W(n)` from [`e3-20260930-13e9a89dc7`](e3-20260930-13e9a89dc7/joint-calibration.json). OP_TX_SELECT is priced from the same envelope. Historical raw artifacts remain unchanged.
+The implementation and BIP draft price every primitive from the six-machine (M4 Pro, M1 Pro, i5-12500, Ryzen 9 9950X, i7-7700, Ryzen 5 3600), three-epoch envelope of [`2026-09-30-short-runs`](data/2026-09-30-short-runs/), measured with the 8 MB fixture pool and normalized to 0.9 times each reference. SHA256 is fitted on Core SHA256 only. BIT is the exception: a `bench_varops` screening found OP_BYTEREV of values up to 33 bytes above 1.0 times the reference on the i5-12500 and i7-7700, because its pop and push were outside the BIT fixtures. The `BIT/byterev` fixtures now time its complete work, and BIT is priced `190 + 2 W(n)` from [`2026-09-30-short-runs-byterev-fixtures`](data/2026-09-30-short-runs-byterev-fixtures/). OP_TX_SELECT is priced from the same envelope. Historical raw artifacts remain unchanged.
 
 ### Open items
 
-- The current dataset, `e7-20261001-e60ac7e070`, has full runs on five machines; the M4 Pro is missing.
+- The current dataset, [`2026-10-01-full-runs`](data/2026-10-01-full-runs/), has full runs on five machines; the M4 Pro is missing.
 - To do before finalizing: add a non-Apple ARM64 machine and a low-end home-node device; run the complete realistic and full-varops suite and the confirmation tiers on every admitted machine; finalize the WRITE price with complete storage-lifetime and script benchmarks, since buffer-growth measurements depend strongly on allocation history; set and test a separate peak-memory bound.
 - OP_TX and macro finalization are postponed; their fixtures and prices remain experimental.
 

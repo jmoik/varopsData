@@ -20,6 +20,8 @@ from fit_calibrations import MAX_EPOCH_NOISE, TARGET_FRACTION, candidate_charge,
 # primitive or opcode appears under the BIP that introduced it; groups within a
 # section are headed only when there is more than one.
 BIP440 = "Primitives defined by BIP 440."
+TITLE = "Varops multi-machine calibration"
+
 SECTIONS = [
     dict(slug="category-interpreter", title="Interpreter",
          intro=BIP440 + " BIP 441 restores opcodes without adding primitives: each restored opcode is priced entirely from these.",
@@ -571,7 +573,7 @@ def diagnostics_html(joint, machines, dataset, same_schedule):
     return ''.join(parts)
 
 
-def render(joint_path, output, source_root=None, title="Varops 0.4.0 · multi-machine calibration"):
+def render(joint_path, output, source_root=None, title=TITLE):
     joint = json.loads(joint_path.read_text())
     audit_path = joint_path.with_name('source-verification.json')
     joint_digest = hashlib.sha256(joint_path.read_bytes()).hexdigest()
@@ -629,10 +631,7 @@ def render(joint_path, output, source_root=None, title="Varops 0.4.0 · multi-ma
     def family_models(family):
         # Only the envelope: the machine fits are listed in each primitive's table.
         return {'envelope': env_model}
-    if output.exists() and not any(known in output.read_text()[:500] for known in
-                                   ("Varops 0.4.0 · two-machine calibration",
-                                    "Varops 0.4.0 · three-machine calibration",
-                                    title)):
+    if output.exists() and not any(known in output.read_text()[:500] for known in (TITLE, title)):
         raise ValueError(f"refusing to overwrite unrelated HTML: {output}")
 
     parts = ["""<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -839,7 +838,7 @@ def main():
     parser.add_argument("joint", type=Path, help="joint-calibration.json")
     parser.add_argument("--output", type=Path, help="HTML path (default beside joint JSON)")
     parser.add_argument("--source-root", type=Path, help="Verify sources against recorded commits and save the audit")
-    parser.add_argument("--title", default="Varops 0.4.0 · multi-machine calibration", help="page title")
+    parser.add_argument("--title", default=TITLE, help="page title")
     args = parser.parse_args()
     source = args.joint.resolve()
     output = args.output.resolve() if args.output else source.with_suffix('.html')

@@ -33,4 +33,4 @@ Conditions: 12th Gen Intel(R) Core(TM) i5-12500: epoch noise 0.20%
 Conditions: varop-calibration-ryzen99500x-3epoch: epoch noise 0.26%
 Conditions: Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz: epoch noise 0.15%
 Conditions: AMD Ryzen 5 3600 6-Core Processor: epoch noise 0.13%
-Saved e3-20260930-13e9a89dc7/joint-calibration.json
+Saved data/2026-09-30-short-runs-byterev-fixtures/joint-calibration.json
