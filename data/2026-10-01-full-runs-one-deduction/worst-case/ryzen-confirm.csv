@@ -1,0 +1,69 @@
+# Schema: bench_varops-v6
+# CPU: Unknown
+# Architecture: x86_64
+# Compiler: Clang 23.1.2
+# SHA256 Implementation: x86_shani(1way;2way)
+# Record types: summary=aggregated row; sample=normalized wall-clock measurement.
+# Wall_Seconds: summary median or sample value; Schnorr samples are normalized to 80,000 validations.
+# Full_Varops_Wall_Seconds: natural legal-script runtime extrapolated to exactly 40 billion varops.
+# Full-varops extrapolation requires at least 1% of the budget in the measured script.
+# Measurement_Mode distinguishes realistic measurements and full-varops extrapolations.
+# Realistic sample rows record process CPU seconds, page faults and involuntary context switches during the timed execution (Windows reports all page faults as minor, without switches).
+# New_In_V2 marks workloads requiring v2 rules or limits, not only new opcode names.
+# Records: summary=5 sample=42
+# Realistic measurement: scripts stop at their natural script-size or varops limit, or at the declared exploratory sample cap; initial stack preparation is untimed.
+# Executed_Logical_Opcodes counts candidate-schedule v2 preflight opcode events; fragment calls include their executed body instructions.
+# Sequence opcodes exclude the final cleanup/result suffix.
+# Corpus: requested_opcodes=78 generated=4 completed=4 profile=exploratory-sample
+# Protocol: schnorr_samples=7 sample_budget_percent=10 sample_budget_varops=4000000000
+# Confirmation: threshold 1.000x; screening reference 1.743 s; 1 flagged cases; per-round ratio = max(measured, projected) / slowest same-round reference
+# Confirmation: gsr-tapscript-v2/OP_CHECKSIGADD/OP_3DUP+OP_CHECKSIGADD+OP_DROP/signature-preserve/64B+0B+32B/valid-fixed-message/No error screening=1.005x rounds=7 median=0.939x min=0.854x max=0.971x verdict=below-limit
+#
+Record_Type,Measurement_Mode,Rank,Name,Domain,Headline_Role,New_In_V2,Opcode,Sequence_Opcodes,Operand_Shape,Operand_Pattern,Script_Bytes,Initial_Stack_Items,Initial_Stack_Bytes,Varops_Consumed,Expected_Termination,Actual_Termination,Saturation,Repetitions,Sequence_Varops,Stage,Round,Order,Samples,Wall_Seconds,Wall_Min_Seconds,Wall_Max_Seconds,MdAPE,Schnorr_Equivalents,Varops_Percentage,Full_Varops_Status,Full_Varops_Script_Bytes,Full_Varops_Script_Executions,Full_Varops_Measured_Varops,Full_Varops_Scale,Full_Varops_Stage,Full_Varops_Samples,Full_Varops_Wall_Seconds,Full_Varops_Wall_Min_Seconds,Full_Varops_Wall_Max_Seconds,Full_Varops_MdAPE,Full_Varops_Schnorr_Equivalents,CPU_Seconds,Minor_Page_Faults,Major_Page_Faults,Involuntary_Context_Switches
+summary,combined,1,pre-gsr-tapscript-v1/OP_CHECKSIG/OP_2DUP+OP_CHECKSIG+OP_DROP/signature-preserve/64B+32B/valid-fixed-message/No error,pre-gsr-tapscript-v1,pre-baseline,false,OP_CHECKSIG,OP_2DUP+OP_CHECKSIG+OP_DROP,64B+32B,valid-fixed-message,240003,2,96,0,No error,No error,validation-weight,80000,0,stable,,,7,1.6849613000000001,1.6326088999999999,1.7343757,0.013147529634043399,81720.055095617092,0,not-v2,,,,,,,,,,,,,,,
+summary,combined,2,pre-gsr-tapscript-v1/OP_CHECKSIGVERIFY/OP_2DUP+OP_CHECKSIGVERIFY/signature-preserve/64B+32B/valid-fixed-message/No error,pre-gsr-tapscript-v1,pre-baseline,false,OP_CHECKSIGVERIFY,OP_2DUP+OP_CHECKSIGVERIFY,64B+32B,valid-fixed-message,160003,2,96,0,No error,No error,validation-weight,80000,0,stable,,,7,1.6752961,1.6265712999999999,1.7884834999999999,0.018856088264657678,81251.296153491727,0,not-v2,,,,,,,,,,,,,,,
+summary,combined,3,pre-gsr-tapscript-v1/OP_CHECKSIGADD/OP_3DUP+OP_CHECKSIGADD+OP_DROP/signature-preserve/64B+0B+32B/valid-fixed-message/No error,pre-gsr-tapscript-v1,pre-baseline,false,OP_CHECKSIGADD,OP_3DUP+OP_CHECKSIGADD+OP_DROP,64B+0B+32B,valid-fixed-message,240004,3,96,0,No error,No error,validation-weight,80000,0,stable,,,7,1.6500022000000001,1.6199041000000001,1.9166053999999999,0.013867974902807169,80024.550529373824,0,not-v2,,,,,,,,,,,,,,,
+summary,combined,4,Schnorr signature validation,raw-schnorr,pre-baseline,false,RAW_SCHNORR_80000,RAW_SCHNORR_VERIFY,64B+32B,valid-fixed-message,0,0,0,0,No error,No error,80000-signature-anchor,80000,0,schnorr-baseline,,,7,1.6494960000000001,1.6418079999999999,1.6925760000000001,0.0039635200342790014,80000,0,reference,,,,,,,,,,,,,,,
+summary,combined,5,gsr-tapscript-v2/OP_CHECKSIGADD/OP_3DUP+OP_CHECKSIGADD+OP_DROP/signature-preserve/64B+0B+32B/valid-fixed-message/No error,gsr-tapscript-v2,common-v2,false,OP_CHECKSIGADD,OP_3DUP+OP_CHECKSIGADD+OP_DROP,64B+0B+32B,valid-fixed-message,23494,3,96,3999538426,No error,No error,varops-budget,7830,510796,stable,,,7,0.15988759999999999,0.15817220000000001,0.16395860000000001,0.0051822136218725506,7754.4947062617912,9.9988460650000004,extrapolated,23494,1,3999538426,10.00116119791436,stable,7,1.599061661147652,1.5819056692287499,1.6397763883843615,0.0051822136218726139,77553.951565697746,,,,
+sample,realistic,,pre-gsr-tapscript-v1/OP_CHECKSIG/OP_2DUP+OP_CHECKSIG+OP_DROP/signature-preserve/64B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,1,3,,1.6849613000000001,,,,,,,,,,,,,,,,,,1.6875,0,,
+sample,realistic,,pre-gsr-tapscript-v1/OP_CHECKSIG/OP_2DUP+OP_CHECKSIG+OP_DROP/signature-preserve/64B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,2,2,,1.6904828999999999,,,,,,,,,,,,,,,,,,1.671875,0,,
+sample,realistic,,pre-gsr-tapscript-v1/OP_CHECKSIG/OP_2DUP+OP_CHECKSIG+OP_DROP/signature-preserve/64B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,3,0,,1.6339758,,,,,,,,,,,,,,,,,,1.625,0,,
+sample,realistic,,pre-gsr-tapscript-v1/OP_CHECKSIG/OP_2DUP+OP_CHECKSIG+OP_DROP/signature-preserve/64B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,4,3,,1.6992623,,,,,,,,,,,,,,,,,,1.703125,0,,
+sample,realistic,,pre-gsr-tapscript-v1/OP_CHECKSIG/OP_2DUP+OP_CHECKSIG+OP_DROP/signature-preserve/64B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,5,2,,1.6326088999999999,,,,,,,,,,,,,,,,,,1.625,0,,
+sample,realistic,,pre-gsr-tapscript-v1/OP_CHECKSIG/OP_2DUP+OP_CHECKSIG+OP_DROP/signature-preserve/64B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,6,0,,1.6630957,,,,,,,,,,,,,,,,,,1.671875,0,,
+sample,realistic,,pre-gsr-tapscript-v1/OP_CHECKSIG/OP_2DUP+OP_CHECKSIG+OP_DROP/signature-preserve/64B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,7,0,,1.7343757,,,,,,,,,,,,,,,,,,1.734375,0,,
+sample,realistic,,pre-gsr-tapscript-v1/OP_CHECKSIGVERIFY/OP_2DUP+OP_CHECKSIGVERIFY/signature-preserve/64B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,1,0,,1.7059831000000001,,,,,,,,,,,,,,,,,,1.6875,0,,
+sample,realistic,,pre-gsr-tapscript-v1/OP_CHECKSIGVERIFY/OP_2DUP+OP_CHECKSIGVERIFY/signature-preserve/64B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,2,1,,1.6752961,,,,,,,,,,,,,,,,,,1.671875,0,,
+sample,realistic,,pre-gsr-tapscript-v1/OP_CHECKSIGVERIFY/OP_2DUP+OP_CHECKSIGVERIFY/signature-preserve/64B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,3,2,,1.6464367,,,,,,,,,,,,,,,,,,1.625,0,,
+sample,realistic,,pre-gsr-tapscript-v1/OP_CHECKSIGVERIFY/OP_2DUP+OP_CHECKSIGVERIFY/signature-preserve/64B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,4,1,,1.6265712999999999,,,,,,,,,,,,,,,,,,1.625,0,,
+sample,realistic,,pre-gsr-tapscript-v1/OP_CHECKSIGVERIFY/OP_2DUP+OP_CHECKSIGVERIFY/signature-preserve/64B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,5,3,,1.7113313999999999,,,,,,,,,,,,,,,,,,1.6875,0,,
+sample,realistic,,pre-gsr-tapscript-v1/OP_CHECKSIGVERIFY/OP_2DUP+OP_CHECKSIGVERIFY/signature-preserve/64B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,6,3,,1.6442912000000001,,,,,,,,,,,,,,,,,,1.640625,0,,
+sample,realistic,,pre-gsr-tapscript-v1/OP_CHECKSIGVERIFY/OP_2DUP+OP_CHECKSIGVERIFY/signature-preserve/64B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,7,3,,1.7884834999999999,,,,,,,,,,,,,,,,,,1.765625,0,,
+sample,realistic,,pre-gsr-tapscript-v1/OP_CHECKSIGADD/OP_3DUP+OP_CHECKSIGADD+OP_DROP/signature-preserve/64B+0B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,1,1,,1.6520333,,,,,,,,,,,,,,,,,,1.65625,0,,
+sample,realistic,,pre-gsr-tapscript-v1/OP_CHECKSIGADD/OP_3DUP+OP_CHECKSIGADD+OP_DROP/signature-preserve/64B+0B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,2,0,,1.7430806000000001,,,,,,,,,,,,,,,,,,1.734375,0,,
+sample,realistic,,pre-gsr-tapscript-v1/OP_CHECKSIGADD/OP_3DUP+OP_CHECKSIGADD+OP_DROP/signature-preserve/64B+0B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,3,1,,1.6199041000000001,,,,,,,,,,,,,,,,,,1.609375,0,,
+sample,realistic,,pre-gsr-tapscript-v1/OP_CHECKSIGADD/OP_3DUP+OP_CHECKSIGADD+OP_DROP/signature-preserve/64B+0B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,4,0,,1.6274329999999999,,,,,,,,,,,,,,,,,,1.609375,0,,
+sample,realistic,,pre-gsr-tapscript-v1/OP_CHECKSIGADD/OP_3DUP+OP_CHECKSIGADD+OP_DROP/signature-preserve/64B+0B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,5,0,,1.6358431,,,,,,,,,,,,,,,,,,1.625,0,,
+sample,realistic,,pre-gsr-tapscript-v1/OP_CHECKSIGADD/OP_3DUP+OP_CHECKSIGADD+OP_DROP/signature-preserve/64B+0B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,6,1,,1.6500022000000001,,,,,,,,,,,,,,,,,,1.640625,0,,
+sample,realistic,,pre-gsr-tapscript-v1/OP_CHECKSIGADD/OP_3DUP+OP_CHECKSIGADD+OP_DROP/signature-preserve/64B+0B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,7,1,,1.9166053999999999,,,,,,,,,,,,,,,,,,1.90625,0,,
+sample,realistic,,Schnorr signature validation,,,false,,,,,,,,,,,,,,schnorr-baseline,1,0,,1.6429840000000002,,,,,,,,,,,,,,,,,,0.015625,0,,
+sample,realistic,,Schnorr signature validation,,,false,,,,,,,,,,,,,,schnorr-baseline,2,1,,1.6438639999999998,,,,,,,,,,,,,,,,,,0.015625,0,,
+sample,realistic,,Schnorr signature validation,,,false,,,,,,,,,,,,,,schnorr-baseline,3,2,,1.6515440000000001,,,,,,,,,,,,,,,,,,0.03125,0,,
+sample,realistic,,Schnorr signature validation,,,false,,,,,,,,,,,,,,schnorr-baseline,4,3,,1.677168,,,,,,,,,,,,,,,,,,0.015625,0,,
+sample,realistic,,Schnorr signature validation,,,false,,,,,,,,,,,,,,schnorr-baseline,5,4,,1.6494960000000001,,,,,,,,,,,,,,,,,,0.015625,0,,
+sample,realistic,,Schnorr signature validation,,,false,,,,,,,,,,,,,,schnorr-baseline,6,5,,1.6925760000000001,,,,,,,,,,,,,,,,,,0.03125,0,,
+sample,realistic,,Schnorr signature validation,,,false,,,,,,,,,,,,,,schnorr-baseline,7,6,,1.6418079999999999,,,,,,,,,,,,,,,,,,0.015625,0,,
+sample,realistic,,gsr-tapscript-v2/OP_CHECKSIGADD/OP_3DUP+OP_CHECKSIGADD+OP_DROP/signature-preserve/64B+0B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,1,2,,0.16014249999999999,,,,,,,,,,,,,,,,,,0.140625,0,,
+sample,full-varops,,gsr-tapscript-v2/OP_CHECKSIGADD/OP_3DUP+OP_CHECKSIGADD+OP_DROP/signature-preserve/64B+0B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,1,2,,1.6016109571370003,,,,,,,,,,,,,,,,,,,,,
+sample,realistic,,gsr-tapscript-v2/OP_CHECKSIGADD/OP_3DUP+OP_CHECKSIGADD+OP_DROP/signature-preserve/64B+0B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,2,3,,0.16395860000000001,,,,,,,,,,,,,,,,,,0.171875,0,,
+sample,full-varops,,gsr-tapscript-v2/OP_CHECKSIGADD/OP_3DUP+OP_CHECKSIGADD+OP_DROP/signature-preserve/64B+0B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,2,3,,1.6397763883843615,,,,,,,,,,,,,,,,,,,,,
+sample,realistic,,gsr-tapscript-v2/OP_CHECKSIGADD/OP_3DUP+OP_CHECKSIGADD+OP_DROP/signature-preserve/64B+0B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,3,3,,0.15988759999999999,,,,,,,,,,,,,,,,,,0.171875,0,,
+sample,full-varops,,gsr-tapscript-v2/OP_CHECKSIGADD/OP_3DUP+OP_CHECKSIGADD+OP_DROP/signature-preserve/64B+0B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,3,3,,1.599061661147652,,,,,,,,,,,,,,,,,,,,,
+sample,realistic,,gsr-tapscript-v2/OP_CHECKSIGADD/OP_3DUP+OP_CHECKSIGADD+OP_DROP/signature-preserve/64B+0B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,4,2,,0.15817220000000001,,,,,,,,,,,,,,,,,,0.15625,0,,
+sample,full-varops,,gsr-tapscript-v2/OP_CHECKSIGADD/OP_3DUP+OP_CHECKSIGADD+OP_DROP/signature-preserve/64B+0B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,4,2,,1.5819056692287499,,,,,,,,,,,,,,,,,,,,,
+sample,realistic,,gsr-tapscript-v2/OP_CHECKSIGADD/OP_3DUP+OP_CHECKSIGADD+OP_DROP/signature-preserve/64B+0B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,5,1,,0.15906329999999999,,,,,,,,,,,,,,,,,,0.15625,0,,
+sample,full-varops,,gsr-tapscript-v2/OP_CHECKSIGADD/OP_3DUP+OP_CHECKSIGADD+OP_DROP/signature-preserve/64B+0B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,5,1,,1.5908177039722111,,,,,,,,,,,,,,,,,,,,,
+sample,realistic,,gsr-tapscript-v2/OP_CHECKSIGADD/OP_3DUP+OP_CHECKSIGADD+OP_DROP/signature-preserve/64B+0B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,6,2,,0.15949769999999999,,,,,,,,,,,,,,,,,,0.15625,0,,
+sample,full-varops,,gsr-tapscript-v2/OP_CHECKSIGADD/OP_3DUP+OP_CHECKSIGADD+OP_DROP/signature-preserve/64B+0B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,6,2,,1.5951622083965851,,,,,,,,,,,,,,,,,,,,,
+sample,realistic,,gsr-tapscript-v2/OP_CHECKSIGADD/OP_3DUP+OP_CHECKSIGADD+OP_DROP/signature-preserve/64B+0B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,7,2,,0.1635636,,,,,,,,,,,,,,,,,,0.171875,0,,
+sample,full-varops,,gsr-tapscript-v2/OP_CHECKSIGADD/OP_3DUP+OP_CHECKSIGADD+OP_DROP/signature-preserve/64B+0B+32B/valid-fixed-message/No error,,,false,,,,,,,,,,,,,,stable,7,2,,1.6358259297111852,,,,,,,,,,,,,,,,,,,,,

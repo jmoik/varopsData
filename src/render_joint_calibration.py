@@ -581,14 +581,30 @@ def load_screens(dataset):
         reference = max((row for row in summary if row[index['Headline_Role']] == 'pre-baseline'),
                         key=lambda row: number(row, 'Wall_Seconds'))
         reference_seconds = number(reference, 'Wall_Seconds')
-        cases = [(max(number(row, 'Wall_Seconds'), number(row, 'Full_Varops_Wall_Seconds')) / reference_seconds,
+        confirmed = load_confirmation(dataset / SCREEN_DIR / meta['confirms'][key]) if key in meta.get('confirms', {}) else {}
+        # A re-measured case counts with the slowest of its confirmation rounds.
+        cases = [(confirmed[row[index['Name']]]['max'] if row[index['Name']] in confirmed else
+                  max(number(row, 'Wall_Seconds'), number(row, 'Full_Varops_Wall_Seconds')) / reference_seconds,
                   row[index['Opcode']], row[index['Name']])
                  for row in summary if row[index['Domain']] == 'gsr-tapscript-v2']
         worst = max(cases)
         screens[key] = dict(file=name, reference=reference[index['Name']], reference_seconds=reference_seconds,
                             ratio=worst[0], case=worst[2], above=sum(ratio > 1 for ratio, _, _ in cases),
-                            count=len(cases), cases=cases)
+                            count=len(cases), cases=cases, confirmed=confirmed)
     return dict(commit=meta['commit'], screens=screens)
+
+
+def load_confirmation(path):
+    """Cases a bench_varops --confirm run re-measured, from its "# Confirmation:" lines."""
+    confirmed = {}
+    for line in path.open():
+        found = re.match(r'# Confirmation: (.+?) screening=([\d.]+)x rounds=(\d+) median=([\d.]+)x '
+                         r'min=([\d.]+)x max=([\d.]+)x verdict=(\S+)', line)
+        if found:
+            name, screening, rounds, median, low, high, verdict = found.groups()
+            confirmed[name] = dict(screening=float(screening), rounds=int(rounds), median=float(median),
+                                   min=float(low), max=float(high), verdict=verdict)
+    return confirmed
 
 
 def case_label(name):
@@ -613,7 +629,7 @@ def screens_html(screens, machines, dataset, page_dir=None):
              'Tapleaf 0xC2 workload as a complete script, every opcode with its BASE and all its charges, and '
              'projects it to a full 40-billion-varop budget. The result is compared with the slowest Tapleaf 0xC0 '
              f'script on the same machine. Prices of gsr <code>{esc(screens["commit"])}</code>; a case above 1.0× '
-             'would be re-measured at a 10% budget over 7 rounds before it counts.</p>'
+             'is re-measured at a 10% budget over 7 rounds and counts with its slowest round.</p>'
              '<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Reference</th><th>Worst Tapleaf 0xC2 '
              'script</th><th>× reference</th><th>Scripts above</th></tr></thead><tbody>']
     for machine, screen in rows:
@@ -627,6 +643,11 @@ def screens_html(screens, machines, dataset, page_dir=None):
                      f'{screen["reference_seconds"]:.2f} s</td><td>{esc(case_label(screen["case"]))}{file}</td>'
                      f'<td>{screen["ratio"]:.2f}×</td><td>{screen["above"]} of {screen["count"]}</td></tr>')
     parts.append('</tbody></table></div>')
+    for machine, screen in rows:
+        for name, c in (screen or {}).get('confirmed', {}).items():
+            parts.append(f'<p>{esc(machine["label"])}: {esc(case_label(name))} screened at {c["screening"]:.3f}×. '
+                         f'Re-measured over {c["rounds"]} rounds it took {c["min"]:.2f}× to {c["max"]:.2f}× '
+                         f'(median {c["median"]:.2f}×).</p>')
     if missing:
         parts.append(f'<p>Not yet screened at these prices: {esc(", ".join(missing))}.</p>')
     parts.append('</details>')

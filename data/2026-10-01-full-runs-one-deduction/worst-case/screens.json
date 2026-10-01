@@ -1,6 +1,16 @@
 {
   "commit": "7d0c293b64",
   "command": "bench_varops --sample-budget-percent 2 --epochs 1 --silent --file worst-case-screen-7d0c293b64.csv",
-  "confirm": "bench_varops --confirm <screen> --sample-budget-percent 10 --epochs 7: no case above 1.0x, nothing to confirm",
-  "screens": {"m1": "m1-screen.csv", "intel": "intel-screen.csv", "i7": "i7-screen.csv", "r5": "r5-screen.csv", "m4": "m4-screen.csv"}
+  "confirm": "bench_varops --confirm <screen> --sample-budget-percent 10 --epochs 7 --file <confirm>: run where a screen flags a case above 1.0x",
+  "screens": {
+    "m1": "m1-screen.csv",
+    "intel": "intel-screen.csv",
+    "i7": "i7-screen.csv",
+    "r5": "r5-screen.csv",
+    "m4": "m4-screen.csv",
+    "ryzen": "ryzen-screen.csv"
+  },
+  "confirms": {
+    "ryzen": "ryzen-confirm.csv"
+  }
 }
