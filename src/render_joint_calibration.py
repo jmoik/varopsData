@@ -67,7 +67,8 @@ def unroll_charge(units, length, base=BASE, write=WRITE, prepare=PREPARE, read=R
 CHECKS = {
     'CSFS': dict(
         source='SIG', select=lambda p: True,
-        charge='SIGCHECK + SHA256(64 + n)',
+        charge=f'{SIGCHECK + SHA256[0]} + {SHA256[1]} × H(64 + n)',
+        composition='SIGCHECK + SHA256(64 + n)',
         charged=lambda p: SIGCHECK + SHA256[0] + SHA256[1] * hash_span(64 + p['x']),
         curve=lambda x: SIGCHECK + SHA256[0] + SHA256[1] * hash_span(64 + round(x)),
         xlabel='Message bytes n',
@@ -112,7 +113,7 @@ MODELS = {
     'H256': 'Core SHA256 of an <code>n</code>-byte message, from initialization to finalization over whole 64-byte blocks.',
     'H160': 'RIPEMD160 of an <code>n</code>-byte message (at most 520 bytes), from initialization to finalization over whole 64-byte blocks.',
     'H1': 'SHA1 of an <code>n</code>-byte message (at most 520 bytes), from initialization to finalization over whole 64-byte blocks.',
-    'SIG': 'One BIP340 Schnorr verification. The price is fixed at 500,000 by policy; the fitted residual is shown for comparison.',
+    'SIG': 'One BIP340 Schnorr verification, without its challenge hash, which SHA256 charges. The price is fixed at 500,000 by policy; the fitted residual, the verification time less the fitted challenge hash over all measured message sizes, is shown for comparison.',
     'TWEAK': 'One BIP449 x-only public key tweak (OP_TWEAKADD).',
     'SELECT': 'One OP_TX selection with <code>k</code> charged units: every planned value and every record scanned for an aggregate field (witness items, weight and amount scans, outputs, input fields), including planning, collated framing and cleanup.',
 }
@@ -717,7 +718,7 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
         parts.append(f'<a href="#{section["slug"]}">{esc(section["title"].split(" · ")[0])}</a>')
     parts.append('</nav></header>')
 
-    def machine_legend(pts, fits=True):
+    def machine_legend(pts, fits=True, charge=None):
         present = [key for key, _, _ in LEGEND_MACHINES if any(q['machine_key'] == key for q in pts)]
         legend = ''.join(f'<span><i class="plot-mark {key}" aria-hidden="true"></i>{label}</span>'
                          for key, label, _ in LEGEND_MACHINES if key in present)
@@ -725,8 +726,29 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
             legend += '<span><i class="plot-line basis" aria-hidden="true"></i>Envelope</span>'
             legend += '<span><i class="plot-line candidate" aria-hidden="true"></i>Rounded candidate</span>'
         else:
-            legend += '<span><i class="plot-line basis" aria-hidden="true"></i>Implemented charge</span>'
+            legend += ('<span><i class="plot-line basis" aria-hidden="true"></i>Implemented charge'
+                       + (f' <code>{esc(charge)}</code>' if charge else '') + '</span>')
         return f'<div class="plot-legend" aria-label="Plot legend">{legend}</div>'
+
+    def signature_table(pts):
+        """OP_CHECKSIG verifies a signature over the 32-byte transaction digest, the only
+        message size Bitcoin signs; other sizes belong to OP_CHECKSIGFROMSTACK."""
+        span = hash_span(96)
+        charge = SIGCHECK + SHA256[0] + SHA256[1] * span
+        out = [f'<p>OP_CHECKSIG verifies a BIP 340 signature over the 32-byte transaction digest, so its challenge hash '
+               f'covers 96 bytes: R, P and the digest. It is charged <code>SIGCHECK + SHA256(96)</code> = 500,000 + '
+               f'{SHA256[0]} + {SHA256[1]} × {span} = {charge:,} varops. The table compares one such verification, '
+               'measured on each machine, with that charge. Other message sizes are verified only by '
+               '<a href="#CSFS">OP_CHECKSIGFROMSTACK</a>, whose charge grows with the message.</p>',
+               '<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Measured verification (varops)</th>'
+               '<th>Charge (varops)</th><th>Measured / charge</th></tr></thead><tbody>']
+        for machine in machines:
+            own = [p for p in pts if p['machine_key'] == machine['key'] and p['x'] == 32]
+            if own:
+                y = own[0]['y']
+                out.append(f'<tr><td>{esc(machine["label"])}</td><td>{y:,.0f}</td><td>{charge:,}</td><td>{y / charge:.3g}</td></tr>')
+        out.append('</tbody></table></div>')
+        return out
 
     def priced_article(family, tag):
         pts = series[family]
@@ -750,7 +772,9 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
         if family in FIXTURES:
             out.append(f'<p class="muted"><strong>Fixtures:</strong> {FIXTURES[family]}</p>')
         out.append('<details open><summary>Fitted costs</summary>')
-        if family != 'PRODUCE':
+        if family == 'SIG':
+            out.extend(signature_table(pts))
+        elif family != 'PRODUCE':
             out.append(machine_legend(pts))
             if family in {"H256", "DIVCORE", "MULCORE", "NORMALIZE"}:
                 for group in sorted({p["group"] for p in pts}):
@@ -763,8 +787,6 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
         for machine in machines:
             out.append(f'<tr><td>{esc(machine["label"])}</td><td><code>{esc(formulas(family, models[machine["key"]][family]))}</code></td></tr>')
         out.append(f'<tr><td>Envelope (pricing basis)</td><td><code>{esc(formulas(family, env_model[family]))}</code></td></tr></tbody></table></div>')
-        if family == "SIG":
-            out.append('<p class="muted">x is the message length: OP_CHECKSIGFROMSTACK verifies a message of any length, and the BIP 340 challenge hash over R || P || message is charged as SHA256(64 + n) on top of the flat SIGCHECK. Both curves therefore rise with the message; SIG itself is flat. The envelope is the fitted verification residual plus the fitted hash work; the rounded candidate is 500,000 + SHA256(64 + n). The 500,000-varop sigops-parity charge is a separate policy decision and covers fixed transaction-message preparation; there is no separate SIGHASH primitive.</p>')
         out.append('</details></article>')
         return out
 
@@ -772,7 +794,8 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
         spec = CHECKS[key]
         points = check_points(key, series)
         out = [f'<article id="{key}"><{tag}>{esc(DISPLAY[key])}</{tag}>',
-               f'<p><strong>Charged as:</strong> <code>{esc(spec["charge"])}</code>, composed of existing primitives; no coefficient is fitted.</p>',
+               f'<p><strong>Charged as:</strong> <code>{esc(spec["charge"])}</code> varops'
+               + (f' ({esc(spec["composition"])})' if 'composition' in spec else '') + '.</p>',
                f'<p class="model"><strong>Measures:</strong> {spec["models"]}</p>',
                f'<p class="muted"><strong>Fixtures:</strong> {spec["fixtures"]}</p>']
         if spec.get('note'):
@@ -781,7 +804,7 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
             out.append('<p><strong>Awaiting calibration:</strong> the calibration shown here predates these fixtures.</p></article>')
             return out
         out.append('<details open><summary>Measured work and implemented charge</summary>')
-        out.append(machine_legend(points, fits=False))
+        out.append(machine_legend(points, fits=False, charge=spec['charge']))
         out.append(f'<div class="chart">{check_chart(key, points)}</div>')
         out.append('<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Largest measured / charged</th><th>Fixture</th></tr></thead><tbody>')
         for machine in machines:
