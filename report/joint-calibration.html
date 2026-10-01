@@ -198,7 +198,6 @@ svg [fill="#172536"]{fill:var(--basis)}svg [stroke="#172536"]{stroke:var(--basis
 .tip .f{font:12.5px ui-monospace,monospace;color:var(--text);margin:2px 0}
 .tip .val{font-weight:650;font-variant-numeric:tabular-nums}
 
-.category[hidden]{display:none}
 .mobile-nav{display:none}
 @media(max-width:1000px){
   .layout{grid-template-columns:minmax(0,1fr);padding:18px 16px 60px;gap:0}
@@ -222,20 +221,21 @@ svg [fill="#172536"]{fill:var(--basis)}svg [stroke="#172536"]{stroke:var(--basis
   const isDark = () => root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
   btn.addEventListener('click', () => { const t = isDark() ? 'light' : 'dark'; root.dataset.theme = t; store.set(t); });
 
-  function showCategory(){
-    const target = document.getElementById(decodeURIComponent(location.hash.slice(1)));
-    const selected = target?.classList.contains('category') ? target.id
-      : (target?.closest('.category')?.id || document.querySelector('.category')?.id);
-    document.querySelectorAll('.category').forEach(el => { el.hidden = el.id !== selected; });
+  // All categories form one page; tabs and the sidebar follow the section in view.
+  const OFFSET = 80;
+  const above = els => [...els].filter(el => el.getBoundingClientRect().top <= OFFSET).pop();
+  function markCurrent(){
+    const cat = above(document.querySelectorAll('.category'))?.id;
     document.querySelectorAll('.tabs a').forEach(el => {
-      const on = el.getAttribute('href') === '#' + selected;
-      el.classList.toggle('active', on); on ? el.setAttribute('aria-current', 'page') : el.removeAttribute('aria-current');
+      const on = el.getAttribute('href') === '#' + cat;
+      el.classList.toggle('active', on); on ? el.setAttribute('aria-current', 'true') : el.removeAttribute('aria-current');
     });
-    const art = target?.closest('article')?.id;
+    const art = cat && above(document.querySelectorAll(`#${cat} article`))?.id;
     document.querySelectorAll('.sidebar a').forEach(el => el.classList.toggle('current', !!art && el.getAttribute('href') === '#' + art));
-    if (target && target.id !== selected) requestAnimationFrame(() => target.scrollIntoView());
   }
-  addEventListener('hashchange', showCategory); showCategory();
+  let queued = false;
+  addEventListener('scroll', () => { if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; markCurrent(); }); } }, { passive: true });
+  addEventListener('hashchange', markCurrent); markCurrent();
 
   // Point tooltips: move native <title>s into data attributes on first hover.
   const MACHINE = { m1: ['Apple M1 Pro', 'm1'], m4: ['Apple M4 Pro', 'm4'], ryzen: ['AMD Ryzen 9 9950X', 'ryzen'], intel: ['Intel Core i5-12500', 'intel'], i7: ['Intel Core i7-7700', 'i7'], r5: ['AMD Ryzen 5 3600', 'r5'] };
