@@ -20,15 +20,16 @@ The details of every step, each primitive's fixtures and the acceptance statisti
 
 ## Machines
 
-The current dataset, [`data/2026-10-01-full-runs`](data/2026-10-01-full-runs/), has full runs on five machines; the Apple M4 Pro is missing from it. A non-Apple ARM64 machine and a low-end home-node device are still needed.
+The current dataset, [`data/2026-10-01-full-runs-one-deduction`](data/2026-10-01-full-runs-one-deduction/), has full runs on six machines. A non-Apple ARM64 machine and a low-end home-node device are still needed.
 
 | Machine | OS | Reference `T_pre` | Slowest existing workload |
 |---|---|---|---|
 | Apple M1 Pro | macOS | 2.26 s | repeated RIPEMD160 |
 | Intel i5-12500 | Linux | 2.73 s | signature checks |
-| AMD Ryzen 9 9950X | Windows | 1.60 s | signature checks |
+| AMD Ryzen 9 9950X | Windows | 1.59 s | signature checks |
 | Intel i7-7700 | Linux | 3.48 s | repeated HASH256 (no SHA-NI) |
 | AMD Ryzen 5 3600 | Linux | 3.20 s | signature checks |
+| Apple M4 Pro | macOS | 1.59 s | repeated RIPEMD160 |
 
 ## Reproduce
 
@@ -47,7 +48,8 @@ Put the artifacts in a new folder under `data/`, then fit, render and test (Pyth
 
 | Path | |
 |---|---|
-| `data/2026-10-01-full-runs/` | Current dataset: full runs on five machines; the prices come from its fit. |
+| `data/2026-10-01-full-runs-one-deduction/` | Current dataset: full runs on six machines after the one-deduction-per-opcode change; the prices come from its fit. |
+| `data/2026-10-01-full-runs/` | Full runs on five machines (no M4 Pro), before that change. |
 | `data/2026-09-30-short-runs/` | Earlier 3-epoch runs on six machines. |
 | `data/2026-09-30-short-runs-byterev-fixtures/` | The same, after OP_BYTEREV's fixtures were corrected. |
 | `report/joint-calibration.html` | The report, rendered from the current dataset. |

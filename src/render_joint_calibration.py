@@ -48,15 +48,15 @@ SECTIONS = [
          groups=[("Unrolling", ("UNROLL",))]),
 ]
 # Prices implemented in src/script/varops.h, compared against the joint candidate.
-IMPLEMENTED_AT = 'f86a69bb9d'
-CURRENT_COSTS = {'F': '350', 'PREP': '200 + W(n)', 'PRODUCE': '750 + 8 × W(n)', 'NORMALIZE': '200',
-                 'READ': '90 + W(n)', 'ARITH': '150 + 3 × W(n)', 'BIT': '150 + 2 × W(n)', 'MOVE': '150 + 22 × k',
-                 'MULCORE': '400 + 6 × u + 120 × v + 29 × u × v', 'DIVCORE': '500 × s + 33 × s × v',
+IMPLEMENTED_AT = '7d0c293b64'
+CURRENT_COSTS = {'F': '350', 'PREP': '200 + W(n)', 'PRODUCE': '800 + 8 × W(n)', 'NORMALIZE': '200',
+                 'READ': '90 + 2 × W(n)', 'ARITH': '150 + 3 × W(n)', 'BIT': '200 + 2 × W(n)', 'MOVE': '200 + 37 × k',
+                 'MULCORE': '400 + 6 × u + 120 × v + 29 × u × v', 'DIVCORE': '510 × s + 33 × s × v',
                  'H256': '300 + 38 × H(n)', 'H160': '60 + 40 × H(n)',
                  'H1': '200 + 24 × H(n)', 'SIG': '500000', 'TWEAK': '170000',
-                 'SELECT': '1800 + 270 × k'}
-BASE, WRITE, SHA256, BIT, SIGCHECK = 350, (750, 8), (300, 38), (150, 2), 500_000
-PREPARE, READ = (200, 1), (90, 1)  # per byte of W(n)
+                 'SELECT': '2400 + 270 × k'}
+BASE, WRITE, SHA256, BIT, SIGCHECK = 350, (800, 8), (300, 38), (200, 2), 500_000
+PREPARE, READ = (200, 1), (90, 2)  # per byte of W(n)
 
 
 def unroll_charge(units, length, base=BASE, write=WRITE, prepare=PREPARE, read=READ, padded=True):
