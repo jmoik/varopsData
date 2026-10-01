@@ -57,6 +57,7 @@ CURRENT_COSTS = {'F': '350', 'PREP': '200 + W(n)', 'PRODUCE': '800 + 8 × W(n)',
                  'SELECT': '2400 + 270 × k'}
 BASE, WRITE, SHA256, BIT, SIGCHECK = 350, (800, 8), (300, 38), (200, 2), 500_000
 PREPARE, READ = (200, 1), (90, 2)  # per byte of W(n)
+ARITH, MOVE, MUL, NORMALIZE, SELECT = (150, 3), (200, 37), (400, 6, 120, 29), 200, (2400, 270)
 
 
 def unroll_charge(units, length, base=BASE, write=WRITE, prepare=PREPARE, read=READ, padded=True):
@@ -67,6 +68,57 @@ def unroll_charge(units, length, base=BASE, write=WRITE, prepare=PREPARE, read=R
         return write[0] + write[1] * span(n)
     return (units * base + write_cost(length) + 4 * base + write_cost(0) + write_cost(8) +
             prepare[0] + prepare[1] * 8 + read[0] + read[1] * 8)
+
+# Common opcodes composed from the implemented prices, as the v2 evaluator adds the charges.
+OPCODE_PRIMITIVES = {'BASE': 'F', 'WRITE': 'PRODUCE', 'READ': 'READ', 'MOVE': 'MOVE', 'PREPARE': 'PREP',
+                     'NORMALIZE': 'NORMALIZE', 'ARITH': 'ARITH', 'BIT': 'BIT', 'MUL': 'MULCORE', 'SHA256': 'H256',
+                     'SIG': 'SIG', 'OP_TX_SELECT': 'SELECT'}
+
+
+def opcode_examples():
+    """Rows of (opcode, charge, example, varops); the charge links its primitives."""
+    span = lambda n: (n + 7) // 8 * 8
+    write = lambda n: WRITE[0] + WRITE[1] * span(n)
+    read = lambda n: READ[0] + READ[1] * span(n)
+    prepare = lambda n: PREPARE[0] + PREPARE[1] * span(n)
+    sha256 = lambda n: SHA256[0] + SHA256[1] * hash_span(n)
+    rows = [
+        ('OP_DUP', 'BASE + WRITE(n)', 'a 32-byte value', BASE + write(32)),
+        ('OP_EQUAL', 'BASE + READ(n) + WRITE(8), READ only if both sizes are n', 'two 32-byte values',
+         BASE + read(32) + write(8)),
+        ('OP_ROLL', 'BASE + READ(m) + PREPARE(m) + MOVE(k), for an m-byte depth k', 'depth 10',
+         BASE + read(1) + prepare(1) + MOVE[0] + MOVE[1] * 10),
+        ('OP_ADD', 'BASE + PREPARE(a) + PREPARE(b) + ARITH(max(a, b)) + WRITE(r) + NORMALIZE',
+         'two 8-byte numbers, 8-byte sum', BASE + 2 * prepare(8) + ARITH[0] + ARITH[1] * 8 + write(8) + NORMALIZE),
+        ('OP_MUL', 'BASE + PREPARE(a) + PREPARE(b) + MUL(u, v) + WRITE(8 × (u + v)) + NORMALIZE', 'two 8-byte numbers',
+         BASE + 2 * prepare(8) + MUL[0] + MUL[1] + MUL[2] + MUL[3] + write(16) + NORMALIZE),
+        ('OP_BYTEREV', 'BASE + BIT(n)', 'a 32-byte value', BASE + BIT[0] + BIT[1] * 32),
+        ('OP_SHA256', 'BASE + SHA256(n) + WRITE(32)', 'a 32-byte value', BASE + sha256(32) + write(32)),
+        ('OP_CHECKSIG', 'BASE + SHA256(96) + SIG + WRITE(8), SHA256 and SIG only for a non-empty signature',
+         'a valid signature', BASE + sha256(96) + SIGCHECK + write(8)),
+        ('OP_CHECKSIGFROMSTACK', 'BASE + SHA256(64 + n) + SIG + WRITE(8), SHA256 and SIG only for a non-empty signature',
+         'a 32-byte message', BASE + sha256(64 + 32) + SIGCHECK + write(8)),
+        ('OP_TX', 'BASE + OP_TX_SELECT(k) + WRITE of each result, WRITE(8) for a number', 'one number, e.g. nVersion',
+         BASE + SELECT[0] + SELECT[1] + write(8)),
+    ]
+    link = lambda m: f'<a href="#{OPCODE_PRIMITIVES[m.group(0)]}">{m.group(0)}</a>'
+    pattern = r'\b(' + '|'.join(OPCODE_PRIMITIVES) + r')\b'
+    return [(op, re.sub(pattern, link, charge, count=0), example, value) for op, charge, example, value in rows]
+
+
+def opcodes_html():
+    rows = ''.join(f'<tr><td><code>{op}</code></td><td>{charge}</td><td>{example}</td><td class="num">{value:,}</td></tr>'
+                   for op, charge, example, value in opcode_examples())
+    return ('<div class="card prose" id="opcodes"><div class="card-title">How opcodes are charged</div>'
+            '<p>Opcodes have no prices of their own. Each pays BASE plus the primitives for the work it does, sized '
+            'by its actual operands, and the sum is deducted from the budget once per opcode. A few common opcodes, '
+            'at example sizes:</p>'
+            '<table><thead><tr><th>Opcode</th><th>Charge</th><th>Example</th><th>Varops</th></tr></thead>'
+            f'<tbody>{rows}</tbody></table>'
+            '<p>a and b are operand sizes in bytes and r the size of the result. Numbers produced as results pay '
+            'WRITE + NORMALIZE; booleans and constants pay WRITE(8). Macros add no primitive: unrolling pays BASE per '
+            'substituted instruction and visited reference, plus WRITE of the unrolled script.</p></div>')
+
 
 # Opcodes charged from existing primitives. Each measured fixture is divided by
 # its implemented charge; a ratio above 1 means the charge does not cover it.
@@ -812,6 +864,7 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
     references = [machine['meta']['reference_seconds'] for machine in machines]
     epochs = sorted({machine['meta']['epochs'] for machine in machines})
     passes = f'{epochs[0]} passes' if len(epochs) == 1 else f'{epochs[0]} to {epochs[-1]} passes'
+    parts.append(opcodes_html())
     parts.append('<div class="card prose" id="method"><div class="card-title">How the prices are derived</div><ol class="steps">'
                  '<li><strong>Reference.</strong> Each machine times the most expensive blocks possible today, such as '
                  '80,000 signature checks or repeated hashing of 520-byte values. The slowest is that machine&#39;s '

@@ -173,6 +173,8 @@ td .plot-mark,td .plot-line{margin-right:10px}
 .schedule td.cat{color:var(--muted);font-size:13px}
 .schedule td.pcol code{font-size:13.5px;font-weight:600}
 .schedule td.basis code{color:var(--text-2)}
+#opcodes td:first-child code{white-space:nowrap;font-weight:600}
+#opcodes td.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 .schedule tr.group>td{background:var(--surface-2);font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);padding-top:7px;padding-bottom:7px}
 .footnote{font-size:13px;color:var(--muted);margin-top:10px}
 
@@ -382,11 +384,13 @@ def restyle(src):
     # Collect categories and primitives for navigation and the schedule table.
     # Sections are BIPs titled "<BIP> · <opcodes>"; navigation uses the short part.
     # Entries without a fitted candidate show their implemented or composed charge.
-    cats = []
+    cats, composed = [], set()
     for sm in re.finditer(r'<section class="category" id="([^"]+)"><h2>(.*?)</h2>(.*?)</section>', body, re.S):
         prims = []
         for am in re.finditer(r'<article id="([^"]+)"><h[34]>(.*?)</h[34]>(.*?)</article>', sm.group(3), re.S):
             price = re.search(r'(?:Price|Charged as):</strong> <code>(.*?)</code>', am.group(3))
+            if price and 'Charged as' in price.group(0):
+                composed.add(am.group(1))
             basis = re.search(r'Envelope of all machines</td><td><code>(.*?)</code>', am.group(3))
             prims.append((am.group(1), am.group(2), price.group(1) if price else '', basis.group(1) if basis else ''))
         cats.append((sm.group(1), sm.group(2).split(' · ')[0], prims))
@@ -452,14 +456,19 @@ def restyle(src):
                     header, flags=re.S)
 
     rows = []
+    # Opcodes charged from existing primitives appear in the opcode table, not here.
     for cid, cname, prims in cats:
+        prims = [prim for prim in prims if prim[0] not in composed]
+        if not prims:
+            continue
         rows.append(f'<tr class="group"><td colspan="3">{cname}</td></tr>')
         for pid, name, price, basis in prims:
             rows.append(f'<tr><td><a href="#{pid}">{name}</a></td><td class="pcol"><code>{price}</code></td>'
                         f'<td class="basis">{f"<code>{basis}</code>" if basis else "—"}</td></tr>')
 
     sidebar = ['<aside class="sidebar" aria-label="Primitives"><h4>Overview</h4><a href="#prices"><span>Prices</span></a>']
-    for anchor, label in (('method', 'How prices are derived'), ('machines', 'Machines')):
+    for anchor, label in (('opcodes', 'How opcodes are charged'), ('method', 'How prices are derived'),
+                          ('machines', 'Machines')):
         if f'id="{anchor}"' in header:
             sidebar.append(f'<a href="#{anchor}"><span>{label}</span></a>')
     if diagnostics:
