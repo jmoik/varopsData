@@ -20,7 +20,6 @@ from fit_calibrations import MAX_EPOCH_NOISE, TARGET_FRACTION, candidate_charge,
 # primitive or opcode appears under the BIP that introduced it; groups within a
 # section are headed only when there is more than one.
 TITLE = "Varops calibration"
-BIP440_URL = "https://github.com/jmoik/bips/blob/gsr-full/bip-0440.mediawiki"
 METHODOLOGY_URL = "https://github.com/jmoik/varopsData/blob/master/METHODOLOGY.md"
 GSR_URL = "https://github.com/jmoik/bitcoin/tree/gsr"
 
@@ -673,7 +672,7 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
     if dated:
         chips.append(f'measured {dated.group(0)}')
     status = (f' These are the prices the <a href="{GSR_URL}">gsr branch</a> implements.' if same_schedule else '')
-    parts.append(f'<p><strong>{" · ".join(chips)}</strong> Under <a href="{BIP440_URL}">BIP 440</a>, a transaction '
+    parts.append(f'<p><strong>{" · ".join(chips)}</strong> Under BIP 440, a transaction '
                  'with Tapleaf 0xC2 inputs gets a budget of 10,000 varops per weight unit, 40 billion for a full block. Every '
                  'operation pays BASE plus the primitives below, priced so that on each of these machines a block of the '
                  'most expensive scripts takes no longer to validate than the slowest block of today&#39;s scripts.'
