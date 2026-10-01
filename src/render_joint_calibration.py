@@ -545,7 +545,7 @@ def case_label(name):
     return ' '.join(part for part in (parts[1], parts[4] if len(parts) > 4 else '') if part)
 
 
-def screens_html(screens, machines, dataset):
+def screens_html(screens, machines, dataset, page_dir=None):
     """Complete-script check: the worst Tapleaf 0xC2 script per machine against its reference."""
     if screens is None:
         return ''
@@ -568,7 +568,8 @@ def screens_html(screens, machines, dataset):
         if not screen:
             parts.append(f'<tr><td>{esc(machine["label"])}</td><td colspan="4">not screened yet</td></tr>')
             continue
-        link = f'../{dataset.as_posix()}/{SCREEN_DIR}/{screen["file"]}' if not dataset.is_absolute() else ''
+        link = Path(os.path.relpath(Path(dataset).resolve() / SCREEN_DIR / screen['file'],
+                                    Path(page_dir).resolve())).as_posix() if page_dir else ''
         file = f' (<a href="{esc(link)}">CSV</a>)' if link else ''
         parts.append(f'<tr><td>{esc(machine["label"])}</td><td>{esc(case_label(screen["reference"]))}, '
                      f'{screen["reference_seconds"]:.2f} s</td><td>{esc(case_label(screen["case"]))}{file}</td>'
@@ -593,7 +594,7 @@ def worst_script(screens, family):
     return best
 
 
-def diagnostics_html(joint, machines, dataset):
+def diagnostics_html(joint, machines, dataset, page_dir=None):
     """Complete-script screens, measurements above their price, the fit quality gate and run quality."""
     diag = joint.get('diagnostics')
     if not diag:
@@ -607,7 +608,7 @@ def diagnostics_html(joint, machines, dataset):
     parts = ['<div id="diagnostics"><h2>Checks</h2>',
              '<p>Complete scripts decide whether the prices hold; the checks below them qualify the single '
              'measurements the prices are fitted on and do not change the prices.</p>',
-             screens_html(screens, machines, dataset)]
+             screens_html(screens, machines, dataset, page_dir)]
 
     coverage = diag['charge_coverage'].get('candidate') or next(iter(diag['charge_coverage'].values()))
     above = sorted(coverage['above_charge'], key=lambda item: -item['ratio'])
@@ -867,7 +868,7 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
             f"{labels[id(meta)]} (passes differ by {100 * meta['epoch_noise']:.2f}%)" for meta in failed)) + '.')
     if warnings:
         parts.append('<div class="card">' + ''.join(f'<p class="warning">{w}</p>' for w in warnings) + '</div>')
-    parts.append(diagnostics_html(joint, machines, joint_path.parent))
+    parts.append(diagnostics_html(joint, machines, joint_path.parent, Path(output).parent))
     parts.append('<nav class="nav" aria-label="Sections">')
     for section in SECTIONS:
         parts.append(f'<a href="#{section["slug"]}">{esc(section["title"].split(" · ")[0])}</a>')
