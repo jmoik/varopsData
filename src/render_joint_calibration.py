@@ -451,14 +451,14 @@ def check_chart(key, points):
 
 
 def reference_row(artifact):
-    """Summary row of the worst pre-v2 reference case recorded in an artifact."""
+    """Summary row of the worst Tapleaf 0xC0 reference case recorded in an artifact."""
     reference = json.loads(Path(artifact).read_text())['reference']
     return next((row for row in reference['raw_rows'] if row['Record_Type'] == 'summary'
                  and row['Name'] == reference['worst_case'] and row['Wall_Min_Seconds']), None)
 
 
 def reference_spread(artifact):
-    """Per-round spread of the worst pre-v2 reference case, from the artifact's summary row."""
+    """Per-round spread of the worst Tapleaf 0xC0 reference case, from the artifact's summary row."""
     row = reference_row(artifact)
     if row is None:
         return None
@@ -467,7 +467,7 @@ def reference_spread(artifact):
 
 
 def reference_workload(artifact):
-    """The slowest pre-v2 workload of a machine, in plain words."""
+    """The slowest Tapleaf 0xC0 workload of a machine, in plain words."""
     row = reference_row(artifact)
     if row is None:
         return 'not recorded'
@@ -665,7 +665,7 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
 .chart{margin:14px 0 20px}.chart > svg{display:block;width:100%;height:auto;max-height:540px}.plot-legend span{display:inline-flex;align-items:center;gap:5px}.plot-legend .legend-icon{display:inline-block;width:14px;height:14px;flex:0 0 14px}.tick{font:12px system-ui;fill:#526174}.axis{font:13px system-ui;fill:#172536}
 .table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:8px 10px;text-align:left;border-bottom:1px solid #e2e8f0;vertical-align:top}th{background:#f1f5f9}code{white-space:nowrap;font-size:13px}
 .facet-title{font-size:15px;margin:16px 0 3px;color:#415268}article{scroll-margin-top:20px}.category[hidden]{display:none}@media(max-width:650px){main{padding:10px}header,article{padding:13px}h1{font-size:23px}}
-</style><main><header><h1>How Tapscript v2 operations are priced</h1>"""]
+</style><main><header><h1>How Tapleaf 0xC2 operations are priced</h1>"""]
     heads = sorted({machine['meta']['head'][:10] for machine in machines if machine['meta'].get('head')})
     same_schedule = all(cost_comparison(joint, family)[2] for family in CURRENT_COSTS)
     dated = re.match(r'\d{4}-\d{2}-\d{2}', joint_path.parent.name)
@@ -675,7 +675,7 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
     status = (f' These are the prices <a href="{BIP440_URL}">BIP 440</a> specifies and the '
               f'<a href="{GSR_URL}">gsr branch</a> implements.' if same_schedule else '')
     parts.append(f'<p><strong>{" · ".join(chips)}</strong> Under <a href="{BIP440_URL}">BIP 440</a>, a transaction '
-                 'spending Tapscript v2 gets a budget of 10,000 varops per weight unit, 40 billion for a full block. Every '
+                 'with Tapleaf 0xC2 inputs gets a budget of 10,000 varops per weight unit, 40 billion for a full block. Every '
                  'operation pays BASE plus the primitives below, priced so that on each of these machines a block of the '
                  'most expensive scripts takes no longer to validate than the slowest block of today&#39;s scripts.'
                  f'{status}</p>')

@@ -26,5 +26,5 @@ That is about 13 ns, below the M1's 41.7 ns clock tick, so four of its seven epo
 normally. The benchmark will raise a fixture's rounds until every recorded epoch spans 50 clock ticks.
 
 `joint-calibration.json` and `fit.log` come from `src/fit_calibrations.py` over the five artifacts in the order above,
-with `--source-root` on the gsr repository. A full budget of fitted work is priced at 0.9× each machine's pre-v2
+with `--source-root` on the gsr repository. A full budget of fitted work is priced at 0.9× each machine's Tapleaf 0xC0
 reference.

@@ -20,7 +20,7 @@ The 9950X and Ryzen 5 references are back at their earlier values (1.59–1.63 s
 slower references lowered those machines' normalized costs.
 
 `joint-calibration.json` and `fit.log` come from `src/fit_calibrations.py` over all six artifacts in the order above,
-with `--source-root` on the gsr repository. They are refit with each machine normalized to its pre-v2 reference
+with `--source-root` on the gsr repository. They are refit with each machine normalized to its Tapleaf 0xC0 reference
 itself; the implemented prices came from the earlier fit that priced a full budget at 0.9× the reference
 (commit f343ea8), so the report marks them as differing from the candidate.
 

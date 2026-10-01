@@ -1,4 +1,4 @@
-# Recovered pre-v2 reference samples
+# Recovered Tapleaf 0xC0 reference samples
 
 The artifacts in the parent directory record only the reference summary rows: `bench_varops` leaves
 `Domain` empty on its per-round sample rows, and the exporter kept rows by `Domain`. This directory adds
