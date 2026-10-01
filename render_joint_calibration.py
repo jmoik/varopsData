@@ -13,7 +13,7 @@ from pathlib import Path
 import tempfile
 
 from restyle_report import restyle
-from fit_calibrations import MAX_EPOCH_NOISE, PER_WORD, TARGET_FRACTION, check_source_snapshots, envelope_model, features, formulas, hash_span, failed_conditions, independent_models, load_calibration, predict, rounded_candidate
+from fit_calibrations import MAX_EPOCH_NOISE, PER_WORD, TARGET_FRACTION, candidate_charge, check_source_snapshots, envelope_model, features, formulas, hash_span, failed_conditions, independent_models, load_calibration, predict, rounded_candidate
 
 
 # Sections: the BIP 440 primitive categories, then one section per later BIP. A
@@ -260,7 +260,8 @@ def describe(path):
     return f"{system}, {machine['compiler']}, {sha}"
 
 
-def chart(family, points, models, group=None, id_prefix=""):
+def chart(family, points, models, group=None, id_prefix="", candidates=None):
+    """candidates, when given, are the rounded candidate coefficients, drawn dotted over the envelope."""
     shown = [p for p in points if group is None or p["group"] == group]
     if not shown:
         return ""
@@ -274,6 +275,10 @@ def chart(family, points, models, group=None, id_prefix=""):
         sample_x = [x for x in sample_x if x >= 1]
     lines = {key: [(x, curve(family, x, line_group, model)) for x in sample_x]
              for key, model in models.items()}
+    if candidates is not None:
+        lines['candidate'] = [(x, candidate_charge(family, dict(zip(('c', 'v'), features(family, x, line_group)),
+                                                                x=x, group=line_group), candidates))
+                              for x in sample_x]
     values = [p["y"] for p in shown] + [y for line in lines.values() for _, y in line]
     ymin, ymax = min(values), max(values)
     ymin = max(ymin / 1.3, 0.01)
@@ -288,11 +293,13 @@ def chart(family, points, models, group=None, id_prefix=""):
 
     title = f"{display} — {group}" if group is not None else display
     machine_count = len({p['machine_key'] for p in shown})
-    description = ('; '.join(f'{marker}: {label}' for key, label, marker in LEGEND_DESC if any(p['machine_key'] == key for p in shown)) + '. Dashed lines are individual fits. Hollow marks are excluded diagnostics.')
+    description = ('; '.join(f'{marker}: {label}' for key, label, marker in LEGEND_DESC if any(p['machine_key'] == key for p in shown)) + '. Hollow marks are excluded diagnostics.')
     if family == 'PRODUCE' and machine_count > 1:
         description = 'Machine is encoded by colour and path by marker shape.'
     if 'envelope' in models:
         description += ' Solid black is the envelope, the pricing basis: the cheapest curve of the same form covering every machine fit at every chargeable size, without rounding.'
+    if candidates is not None:
+        description += ' The dotted line is the rounded candidate, the charge the schedule applies.'
     pieces = [f'<svg viewBox="0 0 {WIDTH} {HEIGHT}" role="img" aria-label="{esc(title)}: {machine_count} machines and {len(models)} fitted cost curves">',
               f'<title>{esc(title)}: normalized varops per measured operation</title>',
               f'<desc>{description}</desc>',
@@ -326,6 +333,11 @@ def chart(family, points, models, group=None, id_prefix=""):
                 ' stroke-dasharray="9 4"' if key == "cells_only" else
                 ' stroke-dasharray="6 4"' if key != "envelope" else "")
         pieces.append(f'<path d="{path}" fill="none" stroke="{COLORS[key]}" stroke-width="2.5"{dash}/>')
+    if candidates is not None:
+        path = " ".join(f'{"M" if i == 0 else "L"}{xy(x,y)[0]:.2f},{xy(x,y)[1]:.2f}'
+                        for i, (x, y) in enumerate(lines['candidate']))
+        pieces.append(f'<path class="candidate" d="{path}" fill="none" stroke="{COLORS["basis"]}" stroke-width="3"'
+                      ' stroke-dasharray="0.1 6" stroke-linecap="round"/>')
     for key in ("m1", "m4", "ryzen", "intel", "i7", "r5"):
         color = COLORS[key]
         for p in shown:
@@ -360,6 +372,8 @@ def chart(family, points, models, group=None, id_prefix=""):
             legend += f'<span style="color:{COLORS[key]}">● {label}</span>'
         if 'envelope' in models:
             legend += '<span style="color:#172536">━ Envelope</span>'
+        if candidates is not None:
+            legend += '<span><i class="plot-line candidate" aria-hidden="true"></i>Rounded candidate</span>'
         legend += '</div><div class="plot-legend">'
         for path, (_, _, label) in PRODUCE_MARKERS.items():
             legend += f'<span><svg class="legend-icon" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">{produce_marker(path, 7, 7, "#526174")}</svg>{esc(label)}</span>'
@@ -618,9 +632,11 @@ def render(joint_path, output, source_root=None, title="Varops 0.4.0 · multi-ma
                 abs(a - b) > 1e-6 * max(1.0, abs(a)) for a, b in zip(record['envelope_coefficients'], env_model[family])):
             raise ValueError(f'envelope of {family} differs from the joint fit')
 
+    candidates = {family: record['candidate_coefficients'] for family, record in joint['primitives'].items()}
+
     def family_models(family):
-        # Drawn in order: machine fits, then the envelope on top.
-        return {**models, 'envelope': env_model}
+        # Only the envelope: the machine fits are listed in each primitive's table.
+        return {'envelope': env_model}
     if output.exists() and not any(known in output.read_text()[:500] for known in
                                    ("Varops 0.4.0 · two-machine calibration",
                                     "Varops 0.4.0 · three-machine calibration",
@@ -635,11 +651,11 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
 .muted{color:#526174}.warning{border-left:4px solid #c17712;padding-left:13px}.nav{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0}
 .nav a{display:inline-block;padding:7px 12px;border:1px solid #cbd5e1;border-radius:7px;color:#1d4ed8;text-decoration:none;background:white}
 .nav a.active{background:#e7eefc;color:#153a83;border-color:#7895d6}.legend{display:flex;flex-wrap:wrap;gap:15px;margin:10px 0 4px;font-size:14px}
-.swatch{display:inline-block;width:22px;height:0;border-top:3px solid;vertical-align:middle;margin-right:5px}.dash{border-top-style:dashed}
+.swatch{display:inline-block;width:22px;height:0;border-top:3px solid;vertical-align:middle;margin-right:5px}.dash{border-top-style:dashed}.dot{border-top-style:dotted}.swatch.mark{width:9px;border-top-width:9px;border-radius:50%}
 .plot-legend{display:flex;flex-wrap:wrap;gap:7px 17px;margin:8px 0 2px;font-size:14px;color:#415268}.plot-legend span{white-space:nowrap}
 .plot-mark{display:inline-block;width:9px;height:9px;vertical-align:middle;margin-right:6px}.plot-mark.m1{background:#2563eb;border-radius:50%}.plot-mark.m4{background:#dc6b18}.plot-mark.ryzen{background:#7c3aed;transform:rotate(45deg)}
 .plot-mark.intel{background:#b91c1c;clip-path:polygon(50% 0,100% 100%,0 100%)}.plot-mark.i7{background:#be185d;clip-path:polygon(0 0,100% 0,50% 100%)}.plot-mark.r5{background:#4a3aa7;clip-path:polygon(0 50%,100% 0,100% 100%)}
-.plot-line{display:inline-block;width:20px;border-top:2px dashed;vertical-align:middle;margin-right:6px}.plot-line.m1{border-color:#2563eb}.plot-line.m4{border-color:#dc6b18}.plot-line.ryzen{border-color:#7c3aed}.plot-line.intel{border-color:#b91c1c}.plot-line.i7{border-color:#be185d}.plot-line.r5{border-color:#4a3aa7}.plot-line.basis{border-color:#172536;border-top-style:solid}
+.plot-line{display:inline-block;width:20px;border-top:2px dashed;vertical-align:middle;margin-right:6px}.plot-line.m1{border-color:#2563eb}.plot-line.m4{border-color:#dc6b18}.plot-line.ryzen{border-color:#7c3aed}.plot-line.intel{border-color:#b91c1c}.plot-line.i7{border-color:#be185d}.plot-line.r5{border-color:#4a3aa7}.plot-line.basis{border-color:#172536;border-top-style:solid}.plot-line.candidate{border-color:#172536;border-top-style:dotted;border-top-width:3px}
 .chart{margin:14px 0 20px}.chart > svg{display:block;width:100%;height:auto;max-height:540px}.plot-legend span{display:inline-flex;align-items:center;gap:5px}.plot-legend .legend-icon{display:inline-block;width:14px;height:14px;flex:0 0 14px}.tick{font:12px system-ui;fill:#526174}.axis{font:13px system-ui;fill:#172536}
 .table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:8px 10px;text-align:left;border-bottom:1px solid #e2e8f0;vertical-align:top}th{background:#f1f5f9}code{white-space:nowrap;font-size:13px}
 .facet-title{font-size:15px;margin:16px 0 3px;color:#415268}article{scroll-margin-top:20px}.category[hidden]{display:none}@media(max-width:650px){main{padding:10px}header,article{padding:13px}h1{font-size:23px}}
@@ -650,7 +666,7 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
     parts.append('<p><strong>Pricing basis: envelope</strong> (solid black) is the cheapest curve of each primitive&#39;s form that stays at or above every machine&#39;s fitted curve at every size the charge applies to. Formally, with feature vector φ(x) ≥ 0 and machine fits θ<sub>m</sub>, it minimizes the weighted mean relative charge Σ<sub>x</sub> w(x)·θ·φ(x) / max<sub>m</sub> θ<sub>m</sub>·φ(x) over the fixtures, with the fits&#39; path-group and size-decade weights, subject to θ·φ(x) ≥ θ<sub>m</sub>·φ(x) for every machine m and every chargeable size x, and θ ≥ 0. Sizes start at zero except where an operation cannot be smaller: a hash always processes at least one 64-byte block, a division has at least one quotient row and one divisor limb, and a multiplication&#39;s shorter operand is at most as long as the longer one. RIPEMD160 and SHA1 take at most 520 bytes; other sizes are unbounded. Where sizes start at zero and are unbounded, covering every machine at size zero needs the largest flat and covering them at large sizes needs the largest rate, so there the envelope takes the largest flat and the largest rate of any machine; it is lower only for DIV, MUL and the hashes. It is unrounded and is the basis of the rounded implementation prices shown below. It covers the individual fitted curves, not necessarily every measurement. SIG remains a fixed policy charge; its comparison curves are diagnostic.</p>')
     parts.append(f'<p>Fresh {len(machines)}-machine calibration: {sum(len(m["points"]) for m in machines):,} machine-fixture medians; epochs per fixture: {esc(", ".join(str(m["meta"]["epochs"]) for m in machines))}. Each machine is normalized by its own pre-v2 reference: a full 40-billion-varop budget of fitted work is priced to take that reference time. The schedule holds only if complete scripts stay below the reference on every machine. Each machine is fitted independently with equal path-group and size-decade weights and a 100× underprediction penalty. Coefficients remain unrounded; this is not a guaranteed upper bound or whole-script validation.</p>')
     read_rate = joint['primitives']['READ']['envelope_coefficients'][1]
-    parts.append(f'<p>The candidate rounds the envelope up, each coefficient on its own. A flat rounds to a multiple of 10 below 100 and of 50 from 100, but never to more than two significant figures: it is the intercept of a fit and moves most between runs, so coarse steps keep it from changing on every refit, at up to 50% more for a flat just above 100. A rate rounds to two significant figures, and at least to a whole varop, which adds at most 10% to any rate of 10 or more. Rates are per byte of the padded length the operation processes, W(n) for WRITE, READ, ARITH and BIT (n rounded up to a multiple of 8 bytes, so W(5) = 8), per 64-bit word of W(n) for PREPARE, whose fitted byte rate is far below one varop, and H(n) for the hashes (the message plus its padding, rounded up to a multiple of 64 bytes), or per counted item elsewhere. Zero stays zero and exact multiples keep their value. NORMALIZE is a flat charge and SIG remains fixed at 500,000. Whole varops per byte overcharge large operands most where the fitted rate is small: READ&#39;s {read_rate:.3g} per byte is charged as {math.ceil(read_rate - 1e-9)}. The table below compares it with the prices implemented in the research implementation and BIP draft; where they differ, the implementation has not been updated. Raw fits and plotted curves remain unrounded. Whole-script confirmation on every machine remains required.</p>')
+    parts.append(f'<p>The candidate rounds the envelope up, each coefficient on its own. A flat rounds to a multiple of 10 below 100 and of 50 from 100, but never to more than two significant figures: it is the intercept of a fit and moves most between runs, so coarse steps keep it from changing on every refit, at up to 50% more for a flat just above 100. A rate rounds to two significant figures, and at least to a whole varop, which adds at most 10% to any rate of 10 or more. Rates are per byte of the padded length the operation processes, W(n) for WRITE, READ, ARITH and BIT (n rounded up to a multiple of 8 bytes, so W(5) = 8), per 64-bit word of W(n) for PREPARE, whose fitted byte rate is far below one varop, and H(n) for the hashes (the message plus its padding, rounded up to a multiple of 64 bytes), or per counted item elsewhere. Zero stays zero and exact multiples keep their value. NORMALIZE is a flat charge and SIG remains fixed at 500,000. Whole varops per byte overcharge large operands most where the fitted rate is small: READ&#39;s {read_rate:.3g} per byte is charged as {math.ceil(read_rate - 1e-9)}. The table below compares it with the prices implemented in the research implementation and BIP draft; where they differ, the implementation has not been updated. Raw fits remain unrounded; the plots draw the rounded candidate dotted over the unrounded envelope. Whole-script confirmation on every machine remains required.</p>')
     for note in RUN_NOTES:
         parts.append(f'<p class="warning">{esc(note)}</p>')
     unmatched = source_check.get("unmatched", [])
@@ -664,8 +680,8 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
     for machine in machines:
         key = machine['key']
         shape = {'m1': 'circles', 'm4': 'squares', 'ryzen': 'diamonds', 'intel': 'triangles', 'i7': 'inverted triangles', 'r5': 'left-pointing triangles'}[key]
-        legend += f'<span><span class="swatch dash" style="border-color:{COLORS[key]}"></span>{esc(machine["label"])} ({esc(describe(machine["meta"]["file"]))}) · {shape}</span>'
-    parts.append(legend + '<span><span class="swatch" style="border-color:#172536"></span>Envelope · solid (pricing basis)</span><span>Hollow marks: excluded diagnostics</span></div>')
+        legend += f'<span><span class="swatch mark" style="border-color:{COLORS[key]}"></span>{esc(machine["label"])} ({esc(describe(machine["meta"]["file"]))}) · {shape}</span>'
+    parts.append(legend + '<span><span class="swatch" style="border-color:#172536"></span>Envelope · solid (pricing basis)</span><span><span class="swatch dot" style="border-color:#172536"></span>Rounded candidate · dotted</span><span>Hollow marks: excluded diagnostics</span></div>')
     quick = []
     for machine in machines:
         settings = json.loads(Path(machine['meta']['file']).read_text()).get('measurement_settings')
@@ -714,9 +730,8 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
         legend = ''.join(f'<span><i class="plot-mark {key}" aria-hidden="true"></i>{label}</span>'
                          for key, label, _ in LEGEND_MACHINES if key in present)
         if fits:
-            legend += ''.join(f'<span><i class="plot-line {key}" aria-hidden="true"></i>{short} fit</span>'
-                              for key, _, short in LEGEND_MACHINES if key in present)
             legend += '<span><i class="plot-line basis" aria-hidden="true"></i>Envelope</span>'
+            legend += '<span><i class="plot-line candidate" aria-hidden="true"></i>Rounded candidate</span>'
         else:
             legend += '<span><i class="plot-line basis" aria-hidden="true"></i>Implemented charge</span>'
         return f'<div class="plot-legend" aria-label="Plot legend">{legend}</div>'
@@ -748,11 +763,11 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
             out.append(machine_legend(pts))
             if family in {"H256", "DIVCORE", "MULCORE", "NORMALIZE"}:
                 for group in sorted({p["group"] for p in pts}):
-                    out.append(f'<div class="facet-title">{esc(group)}</div><div class="chart">{chart(family, pts, family_models(family), group)}</div>')
+                    out.append(f'<div class="facet-title">{esc(group)}</div><div class="chart">{chart(family, pts, family_models(family), group, candidates=candidates)}</div>')
             else:
-                out.append(f'<div class="chart">{chart(family, pts, family_models(family))}</div>')
+                out.append(f'<div class="chart">{chart(family, pts, family_models(family), candidates=candidates)}</div>')
         else:
-            out.append(f'<div class="chart">{chart(family, pts, {"envelope": env_model})}</div>')
+            out.append(f'<div class="chart">{chart(family, pts, {"envelope": env_model}, candidates=candidates)}</div>')
         out.append('<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Fitted cost (varops, unrounded)</th></tr></thead><tbody>')
         for machine in machines:
             out.append(f'<tr><td>{esc(machine["label"])}</td><td><code>{esc(formulas(family, models[machine["key"]][family]))}</code></td></tr>')

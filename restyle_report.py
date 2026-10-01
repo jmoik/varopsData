@@ -200,6 +200,7 @@ article>p,article>details>p,.chart>p{color:var(--text-2);max-width:86ch}
 .plot-line{display:inline-block;width:22px;height:0;border-top:2px dashed;flex:0 0 22px}
 .plot-line.m1{border-color:var(--m1)}.plot-line.m4{border-color:var(--m4)}.plot-line.ryzen{border-color:var(--ryzen)}.plot-line.intel{border-color:var(--intel)}.plot-line.i7{border-color:var(--i7)}.plot-line.r5{border-color:var(--r5)}
 .plot-line.basis{border-color:var(--basis);border-top-style:solid;border-top-width:3px}
+.plot-line.candidate{border-color:var(--basis);border-top-style:dotted;border-top-width:3px}
 .legend-icon{width:14px;height:14px;flex:0 0 14px}
 .swatch{display:inline-block;width:22px;border-top:2px solid;vertical-align:middle}
 
@@ -219,6 +220,7 @@ svg [fill="#526174"]{fill:var(--text-2)}svg [stroke="#526174"]{stroke:var(--text
     for h, t in SERIES.items()) + r'''
 .chart svg path[stroke-dasharray]{stroke-width:1.6;stroke-opacity:.9}
 .chart svg path[fill="none"][stroke="#172536"]:not([stroke-dasharray]){stroke-width:2.6}
+.chart svg path.candidate{stroke-width:3;stroke-opacity:1}
 .chart svg g>g[fill],.chart svg g>circle,.chart svg g>rect,.chart svg g>path[d$="Z"]{fill-opacity:.82}
 .chart svg g.hot>*,.chart svg g.hot>g>*{stroke-width:2.2;fill-opacity:1}
 .chart svg g.hot{filter:drop-shadow(0 0 2px var(--surface))}
@@ -451,11 +453,15 @@ def restyle(src):
 
     legend_items = []
     if legend:
-        for m in re.finditer(r'<span><span class="swatch( dash)?" style="border-color:(#[0-9a-fA-F]{6})"></span>(.*?)</span>',
+        for m in re.finditer(r'<span><span class="swatch( dash| dot| mark)?" style="border-color:(#[0-9a-fA-F]{6})"></span>(.*?)</span>',
                              legend.group(1)):
             token = SERIES.get(m.group(2).lower(), '')
             label = m.group(3)
-            if m.group(1):
+            if m.group(1) == ' dot':
+                icon = '<i class="plot-line candidate"></i>'
+            elif m.group(1) == ' mark':
+                icon = f'<i class="plot-mark {token}"></i>'
+            elif m.group(1):
                 icon = f'<i class="plot-mark {token}"></i><i class="plot-line {token}"></i>'
             else:
                 icon = f'<i class="plot-line {token}"></i>'
