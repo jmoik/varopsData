@@ -1,6 +1,6 @@
 # Full runs on six machines, one budget deduction per opcode · 2026-10-01
 
-Commit `fe9a342227` (branch `gsr`), model `producer-normalize-v1`, 8 MB fixture pool, runner defaults:
+Commit `fe9a342227` (branch `gsr`), model `producer-normalize-v1`, 8 MB operand pool, runner defaults:
 
     python3 dev/varops/primitive-calibration/run_calibration.py --output varop-calibration-<machine>-full.json
 
@@ -18,8 +18,8 @@ Ryzen 5 3600 ran it through `bitcoinSetup.sh` with the same settings. Every run 
 
 `fe9a342227` deducts each opcode's charges, BASE included, from the shared budget once. Before it, every opcode
 with its own charge made a second atomic deduction after BASE's. F's NOP scripts timed one deduction and the
-primitive fixtures none, so complete opcodes cost more than BASE plus their primitives on the i5, i7 and 9950X:
-OP_BYTEREV of 0-1 bytes reached 1.04x on the 9950X. The primitive fixtures are unchanged; on the five machines
+primitive measurements none, so complete opcodes cost more than BASE plus their primitives on the i5, i7 and 9950X:
+OP_BYTEREV of 0-1 bytes reached 1.04x on the 9950X. The primitive measurements are unchanged; on the five machines
 of [`2026-10-01-full-runs`](../2026-10-01-full-runs/) every fit except MOVE on the i5-12500 (21 -> 36 varops per
 entry) moved within run-to-run noise. The M4 Pro is new in this dataset and sets the BIT, SELECT, PRODUCE and
 MOVE flats.

@@ -1,6 +1,6 @@
 # Full runs on five machines · 2026-10-01
 
-Commit `e60ac7e070` (branch `gsr`), model `producer-normalize-v1`, 8 MB fixture pool, runner defaults:
+Commit `e60ac7e070` (branch `gsr`), model `producer-normalize-v1`, 8 MB operand pool, runner defaults:
 
     python3 dev/varops/primitive-calibration/run_calibration.py --output varop-calibration-<machine>-full.json
 
@@ -23,7 +23,7 @@ limit is now 1.5% in the runner and the fitter.
 The M1's first run crashed with `nonpositive fit timing`. A slow single pilot epoch left
 `ARITH/add/375000/one-word/borrow-chain`, an O(1) addition on 3 MB operands, at one repetition per epoch.
 That is about 13 ns, below the M1's 41.7 ns clock tick, so four of its seven epochs read 0. The second run planned it
-normally. The benchmark will raise a fixture's rounds until every recorded epoch spans 50 clock ticks.
+normally. The benchmark will raise a measurement's rounds until every recorded epoch spans 50 clock ticks.
 
 `joint-calibration.json` and `fit.log` come from `src/fit_calibrations.py` over the five artifacts in the order above,
 with `--source-root` on the gsr repository. A full budget of fitted work is priced at 0.9× each machine's Tapleaf 0xC0
