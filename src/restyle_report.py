@@ -39,14 +39,13 @@ MACHINES = {
 }
 # Colour words in the generated prose that must follow the new palette.
 TEXT_FIXES = [
-    ('(solid black)', '(bold solid line)'),
-    ('The black curve is the unrounded', 'The bold solid line is the unrounded'),
-    ('Solid black is the envelope', 'The bold solid line is the envelope'),
     ('orange squares', 'amber squares'),
     ('purple diamonds', 'teal diamonds'),
 ]
-REPEATED_NOTE = 'The bold solid line is the unrounded envelope used for pricing.'
-W_NOTE = 'W(n) rounds bytes up to a multiple of eight.'
+W_NOTE = 'W(n) is n rounded up to a multiple of 8 bytes.'
+H_NOTE = 'H(n) is the bytes a hash processes: n plus padding, in whole 64-byte blocks.'
+SYMBOLS = ('n is a size in bytes. ' + W_NOTE + ' ' + H_NOTE + ' k counts stack entries or charged units, u and v '
+           'are the 64-bit limbs of the longer and shorter operand, and s the quotient rows of a division.')
 
 CSS = r'''
 :root{
@@ -130,7 +129,15 @@ h2{font-size:20px;letter-spacing:-.01em;margin:0 0 14px;font-weight:650}
 .group-title{font-size:15px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:30px 0 12px}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}
 .chip{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:99px;background:var(--surface-2);border:1px solid var(--border);font-size:13px;color:var(--text-2);white-space:nowrap}
-.lede{color:var(--text-2);font-size:15.5px;max-width:78ch}
+.lede{color:var(--text-2);font-size:15.5px;max-width:78ch;margin:0}
+.steps{margin:0 0 14px;padding-left:22px;color:var(--text-2);max-width:82ch}
+.steps li{margin:0 0 8px;padding-left:4px}.steps li::marker{color:var(--muted);font-weight:600}
+.steps strong{color:var(--text)}
+.card>.plot-legend{margin-top:14px}
+#diagnostics details{border-top:1px solid var(--border);margin:0;padding:10px 0}
+#diagnostics details details{border:0;padding:4px 0 0}
+#diagnostics>details:last-child{padding-bottom:0}
+.footer{font-size:13px;color:var(--muted);text-align:center;margin:36px 0 0}
 .card-title{font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 12px}
 .prose p{color:var(--text-2);max-width:82ch}
 .prose p strong{color:var(--text)}
@@ -379,32 +386,26 @@ def restyle(src):
     for sm in re.finditer(r'<section class="category" id="([^"]+)"><h2>(.*?)</h2>(.*?)</section>', body, re.S):
         prims = []
         for am in re.finditer(r'<article id="([^"]+)"><h[34]>(.*?)</h[34]>(.*?)</article>', sm.group(3), re.S):
-            price = (re.search(r'Rounded implementation candidate:</strong> <code>(.*?)</code>', am.group(3)) or
-                     re.search(r'(?:Charged as|Implemented in varops\.h):</strong> <code>(.*?)</code>', am.group(3)))
-            basis = re.search(r'Envelope \(pricing basis\)</td><td><code>(.*?)</code>', am.group(3))
+            price = re.search(r'(?:Price|Charged as):</strong> <code>(.*?)</code>', am.group(3))
+            basis = re.search(r'Envelope of all machines</td><td><code>(.*?)</code>', am.group(3))
             prims.append((am.group(1), am.group(2), price.group(1) if price else '', basis.group(1) if basis else ''))
         cats.append((sm.group(1), sm.group(2).split(' · ')[0], prims))
     cat_of = {pid: name for _, name, prims in cats for pid, _, _, _ in prims}
 
-    # Article heads: primitive name + prominent rounded price.
+    # Article heads: primitive name + prominent price.
     def art_head(m):
-        pid, name, formula, rest, rounding, note = m.groups()
-        pieces = [p.strip() for p in rounding.split(',')]
+        pid, name, formula, rest = m.groups()
         parts = ['<div class="art-head"><div>',
                  f'<div class="eyebrow">{cat_of.get(pid, "")}</div><h3><a href="#{pid}">{name}</a></h3></div>',
-                 '<div class="price"><span class="price-label">Rounded candidate</span>',
-                 f'<code class="price-val">{formula} <span class="u">varops</span></code></div></div>',
-                 '<div class="rounding"><span>Unrounded → rounded (fixed, then variable)</span>',
-                 ''.join(f'<span class="chip">{p}</span>' for p in pieces), '</div>']
-        rest = rest.replace(W_NOTE, '').strip()
-        note = note.replace(REPEATED_NOTE, '').strip()
-        extra = ' '.join(x for x in (W_NOTE if 'W(' in formula else '', rest, note) if x)
+                 '<div class="price"><span class="price-label">Price</span>',
+                 f'<code class="price-val">{formula} <span class="u">varops</span></code></div></div>']
+        symbols = (W_NOTE if 'W(' in formula else '') + (H_NOTE if 'H(' in formula else '')
+        extra = ' '.join(x for x in (symbols, rest.strip()) if x)
         if extra:
             parts.append(f'<p class="note">{extra}</p>')
         return f'<article id="{pid}">' + ''.join(parts)
-    body = re.sub(r'<article id="([^"]+)"><h[34]>([^<]+)</h[34]><p><strong>Rounded implementation candidate:</strong> '
-                  r'<code>(.*?)</code> varops\.\s*(.*?)</p><p class="muted">Coefficient rounding \(fixed, then variable\): '
-                  r'(.*?)\.(?!\d)\s*(.*?)</p>', art_head, body)
+    body = re.sub(r'<article id="([^"]+)"><h[34]>([^<]+)</h[34]><p><strong>Price:</strong> '
+                  r'<code>(.*?)</code> varops\.\s*(.*?)</p>', art_head, body)
 
     # Entries without a fitted candidate (composition checks, pending calibration) keep a plain head.
     body = re.sub(r'<article id="([^"]+)"><h[34]>([^<]+)</h[34]>',
@@ -446,39 +447,23 @@ def restyle(src):
     header = re.sub(r'<nav class="nav".*?</nav>', '', header, flags=re.S)
     diagnostics = re.search(r'<div id="diagnostics"><h2>(.*?)</h2>(.*?)</div><!--/diagnostics-->', header, re.S)
     header = header.replace(diagnostics.group(0), '') if diagnostics else header
-    legend = re.search(r'<div class="legend">(.*?)</div>', header, re.S)
-    header = header.replace(legend.group(0), '') if legend else header
     header = re.sub(r'<table>(.*?)</table>',
-                    lambda m: f'<div class="table-wrap"><table>{m.group(1)}</table></div>', header, flags=re.S)
-
-    legend_items = []
-    if legend:
-        for m in re.finditer(r'<span><span class="swatch( dash| dot| mark)?" style="border-color:(#[0-9a-fA-F]{6})"></span>(.*?)</span>',
-                             legend.group(1)):
-            token = SERIES.get(m.group(2).lower(), '')
-            label = m.group(3)
-            if m.group(1) == ' dot':
-                icon = '<i class="plot-line candidate"></i>'
-            elif m.group(1) == ' mark':
-                icon = f'<i class="plot-mark {token}"></i>'
-            elif m.group(1):
-                icon = f'<i class="plot-mark {token}"></i><i class="plot-line {token}"></i>'
-            else:
-                icon = f'<i class="plot-line {token}"></i>'
-            legend_items.append(f'<span>{icon}{label}</span>')
-        if 'Hollow marks' in legend.group(1):
-            legend_items.append('<span><i class="plot-mark hollow"></i>Hollow marks: excluded diagnostics</span>')
+                    lambda m: f'<div class="table-wrap"><table>{restyle_table_rows(m.group(1))}</table></div>',
+                    header, flags=re.S)
 
     rows = []
     for cid, cname, prims in cats:
         rows.append(f'<tr class="group"><td colspan="3">{cname}</td></tr>')
         for pid, name, price, basis in prims:
             rows.append(f'<tr><td><a href="#{pid}">{name}</a></td><td class="pcol"><code>{price}</code></td>'
-                        f'<td class="basis"><code>{basis}</code></td></tr>')
+                        f'<td class="basis">{f"<code>{basis}</code>" if basis else "—"}</td></tr>')
 
-    sidebar = ['<aside class="sidebar" aria-label="Primitives"><h4>Report</h4><a href="#overview"><span>Overview</span></a>']
+    sidebar = ['<aside class="sidebar" aria-label="Primitives"><h4>Overview</h4><a href="#prices"><span>Prices</span></a>']
+    for anchor, label in (('method', 'How prices are derived'), ('machines', 'Machines')):
+        if f'id="{anchor}"' in header:
+            sidebar.append(f'<a href="#{anchor}"><span>{label}</span></a>')
     if diagnostics:
-        sidebar.append('<a href="#diagnostics"><span>Diagnostics</span></a>')
+        sidebar.append(f'<a href="#diagnostics"><span>{diagnostics.group(1)}</span></a>')
     for cid, cname, prims in cats:
         sidebar.append(f'<h4>{cname}</h4>')
         sidebar += [f'<a href="#{pid}"><span class="p">{name}</span><span class="v">{html.escape(strip_tags(price))}</span></a>'
@@ -486,14 +471,12 @@ def restyle(src):
     sidebar.append('</aside>')
 
     tabs = ''.join(f'<a href="#{cid}">{cname}</a>' for cid, cname, _ in cats)
-    ver = re.search(r'\d+\.\d+\.\d+', title)
 
     out = [
         '<!doctype html><html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width,initial-scale=1">', MARKER,
         f'<title>{title}</title><style>{CSS}</style></head><body>',
-        '<div class="topbar"><div class="brand">Varops calibration',
-        f'<span class="ver">{ver.group(0) if ver else ""}</span></div>' if ver else '</div>',
+        '<div class="topbar"><div class="brand">Varops calibration</div>',
         f'<nav class="tabs" aria-label="Primitive categories">{tabs}</nav>',
         f'<button class="theme-btn" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">{THEME_ICON}</button></div>',
         '<div class="layout">', ''.join(sidebar), '<main>',
@@ -502,13 +485,11 @@ def restyle(src):
         '<div class="chips">' + ''.join(f'<span class="chip">{c}</span>' for c in chips) + '</div>' if chips else '',
         f'<p class="lede">{lede}</p>' if lede else '',
         '</div>',
-        '<div class="card"><div class="card-title">Candidate price schedule</div>',
-        '<div class="table-wrap"><table class="schedule"><thead><tr><th>Primitive</th><th>Rounded candidate (varops)</th>',
-        '<th>Unrounded pricing basis (envelope)</th></tr></thead><tbody>', ''.join(rows), '</tbody></table></div>',
-        f'<p class="footnote">{W_NOTE} {REPEATED_NOTE}</p></div>',
-        '<div class="card"><div class="card-title">Legend</div><div class="legend-grid">', ''.join(legend_items), '</div></div>'
-        if legend_items else '',
-        f'<div class="card prose"><div class="card-title">Calibration notes</div>{header}</div>',
+        '<div class="card" id="prices"><div class="card-title">Prices</div>',
+        '<div class="table-wrap"><table class="schedule"><thead><tr><th>Primitive</th><th>Price (varops)</th>',
+        '<th>Envelope before rounding</th></tr></thead><tbody>', ''.join(rows), '</tbody></table></div>',
+        f'<p class="footnote">{SYMBOLS}</p></div>',
+        header,
         (f'<div class="card prose" id="diagnostics"><div class="card-title">{diagnostics.group(1)}</div>'
          f'{diagnostics.group(2)}</div>') if diagnostics else '',
         '</header>', body, '</main></div>', SCRIPT, '</body></html>',

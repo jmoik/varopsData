@@ -19,30 +19,36 @@ from fit_calibrations import MAX_EPOCH_NOISE, TARGET_FRACTION, candidate_charge,
 # Sections: the BIP 440 primitive categories, then one section per later BIP. A
 # primitive or opcode appears under the BIP that introduced it; groups within a
 # section are headed only when there is more than one.
-BIP440 = "Primitives defined by BIP 440."
-TITLE = "Varops multi-machine calibration"
+TITLE = "Varops calibration"
+BIP440_URL = "https://github.com/jmoik/bips/blob/gsr-full/bip-0440.mediawiki"
+METHODOLOGY_URL = "https://github.com/jmoik/varopsData/blob/master/METHODOLOGY.md"
+GSR_URL = "https://github.com/jmoik/bitcoin/tree/gsr"
 
 SECTIONS = [
     dict(slug="category-interpreter", title="Interpreter",
-         intro=BIP440 + " BIP 441 restores opcodes without adding primitives: each restored opcode is priced entirely from these.",
+         intro="Every instruction pays BASE. The opcodes BIP 441 restores add no primitive: each is priced from the primitives on this page.",
          groups=[("Interpreter", ("F",))]),
-    dict(slug="category-stack", title="Stack and byte processing", intro=BIP440,
+    dict(slug="category-stack", title="Stack and byte processing",
+         intro="Creating, reading and reordering stack values.",
          groups=[("Stack and byte processing", ("PRODUCE", "READ", "MOVE"))]),
-    dict(slug="category-numeric", title="Numeric and bit operations", intro=BIP440,
+    dict(slug="category-numeric", title="Numeric and bit operations",
+         intro="Numbers of any size: preparing operands, the arithmetic itself, and turning results back into bytes.",
          groups=[("Numeric and bit operations", ("PREP", "NORMALIZE", "ARITH", "BIT", "MULCORE", "DIVCORE"))]),
-    dict(slug="category-crypto", title="Hashing and signatures", intro=BIP440,
+    dict(slug="category-crypto", title="Hashing and signatures",
+         intro="Hashes are charged per 64-byte block they process. A signature check has a fixed price.",
          groups=[("Hashing and signatures", ("H256", "H160", "H1", "SIG"))]),
     dict(slug="section-extended-primitives", title="Extended Primitives · OP_CHECKSIGFROMSTACK, OP_TWEAKADD, OP_BYTEREV",
-         intro="Defines one new primitive, TWEAK, for OP_TWEAKADD. OP_CHECKSIGFROMSTACK and OP_BYTEREV are charged from BIP 440 primitives; their checks compare measurements with that composition.",
+         intro="OP_TWEAKADD adds one primitive, TWEAK. OP_CHECKSIGFROMSTACK and OP_BYTEREV are charged with existing primitives; their measurements are compared with that charge.",
          groups=[("Opcodes", ("TWEAK", "CSFS", "BYTEREV"))]),
     dict(slug="section-optx", title="OP_TX",
-         intro="Defines one new primitive, OP_TX_SELECT, for selecting and encoding transaction fields.",
+         intro="OP_TX adds one primitive, OP_TX_SELECT, for selecting and encoding transaction fields.",
          groups=[("OP_TX", ("SELECT",))]),
     dict(slug="section-macros", title="Reusable Macros · OP_MACRO, OP_CALLMACRO",
-         intro="Adds no primitive. Unrolling is charged as BASE per substituted instruction and visited reference, plus WRITE of the unrolled script once per script with declarations. The check compares complete unrolling with that charge.",
+         intro="Macros add no primitive: unrolling costs BASE per substituted instruction and visited reference, plus WRITE of the unrolled script. The measurements are compared with that charge.",
          groups=[("Unrolling", ("UNROLL",))]),
 ]
 # Prices implemented in src/script/varops.h, compared against the joint candidate.
+IMPLEMENTED_AT = 'f86a69bb9d'
 CURRENT_COSTS = {'F': '350', 'PREP': '200 + W(n)', 'PRODUCE': '750 + 8 × W(n)', 'NORMALIZE': '200',
                  'READ': '90 + W(n)', 'ARITH': '150 + 3 × W(n)', 'BIT': '150 + 2 × W(n)', 'MOVE': '150 + 22 × k',
                  'MULCORE': '400 + 6 × u + 120 × v + 29 × u × v', 'DIVCORE': '500 × s + 33 × s × v',
@@ -72,62 +78,61 @@ CHECKS = {
         charged=lambda p: SIGCHECK + SHA256[0] + SHA256[1] * hash_span(64 + p['x']),
         curve=lambda x: SIGCHECK + SHA256[0] + SHA256[1] * hash_span(64 + round(x)),
         xlabel='Message bytes n',
-        models='One BIP 340 verification of an <code>n</code>-byte message, as OP_CHECKSIGFROMSTACK performs it. The challenge hash covers <code>R || P || msg</code> and must use the same SHA256 implementation as OP_SHA256, so its message bytes are covered by the SHA256 primitive.',
-        fixtures='<code>SIG/&lt;n&gt;</code>: complete verification of a valid signature over an <code>n</code>-byte message, <code>n</code> ∈ {0, 32, 64, 128, 1,024, 8,192, 65,536, 262,144, 1,048,576, 4,000,000}.',
-        note='Signature verification uses Core’s SHA256 through libsecp256k1’s compression hook since the 2026-09-28 implementation; measurements collected before then used libsecp256k1’s portable SHA256.'),
+        models='One BIP 340 signature check of an <code>n</code>-byte message. Its challenge hash covers R, P and the message, so the message bytes are charged as SHA256.',
+        fixtures='valid signatures over messages of 0 bytes to 4 MB.'),
     'BYTEREV': dict(
         source='BIT', select=lambda p: p['group'].startswith('byterev'),
         charge='BIT(W(n))',
         charged=lambda p: BIT[0] + BIT[1] * p['x'],
         curve=lambda x: BIT[0] + BIT[1] * x,
-        xlabel='Word-padded bytes W(n)',
-        models='OP_BYTEREV’s word-wise reversal: byte-swap each 64-bit word and reverse the word order in place. No new value is written.',
-        fixtures='<code>BIT/byterev/&lt;n&gt;</code>: the <code>ReverseBytes</code> kernel used by OP_BYTEREV over <code>n</code> bytes, from one word to the 4,000,000-byte element limit.'),
+        xlabel='Bytes rounded up to 8, W(n)',
+        models='Reversing the bytes of a value in place: each 64-bit word is byte-swapped and the word order reversed.',
+        fixtures='OP_BYTEREV’s complete work (pop, reverse, push) on values of 1 byte to 4 MB.'),
     'UNROLL': dict(
         source='UNROLL', select=lambda p: p.get('charged') is not None,
         charge='BASE × units + WRITE(unrolled length)',
         charged=lambda p: unroll_charge(p['units'], p['bytes']) / p['units'],
         xlabel='Unrolled bytes per charged unit',
-        models='Complete evaluation of a script whose macro references all sit in an inactive branch: decoding the references, substituting the bodies, copying their bytes into the unrolled script, and skipping every substituted instruction unexecuted. Units are substituted instructions plus visited references. The charge compared is the complete script’s charge, including its four wrapper opcodes.',
-        fixtures='<code>UNROLL/&lt;shape&gt;/&lt;units&gt;/&lt;bytes&gt;/&lt;charge&gt;</code>: bodies of 1, 16 or 256 OP_NOPs; single pushes of 1 byte to 1,000,000 bytes, referenced 16 times or up to the 4,000,000-byte unrolled limit; reference chains 16 and 256 deep that unroll to nothing.'),
+        models='Evaluating a script whose macro references all sit in an inactive branch: decoding the references, substituting the bodies, copying their bytes into the unrolled script and skipping every instruction. Units are substituted instructions plus visited references; the charge includes the four opcodes around them.',
+        fixtures='bodies of 1, 16 or 256 OP_NOPs; single pushes of 1 byte to 1 MB, referenced 16 times or up to the 4 MB unrolled limit; reference chains 16 and 256 deep that unroll to nothing.'),
 }
 # Fixtures of priced primitives that may not be in every calibration yet.
 FIXTURES = {
-    'SELECT': '<code>SELECT/&lt;kind&gt;/&lt;format&gt;/&lt;records&gt;/&lt;k&gt;</code>: empty witness items (collated and noncollated), weight scan, amount scan, outputs, and all fields of every input, each with <code>k</code> charged units. Only collated output is fitted; noncollated output also pays WRITE per value.',
-    'TWEAK': '<code>TWEAK</code>: one x-only key tweak with a valid key and tweak.',
+    'SELECT': 'empty witness items, weight and amount scans, outputs, and all fields of every input, each with <code>k</code> charged units. Only collated output is fitted; noncollated output also pays WRITE per value.',
+    'TWEAK': 'one x-only key tweak with a valid key and tweak.',
 }
 
 
-# What each primitive models (from the BIP 440 primitive table), shown under its heading.
+# What each primitive pays for (from the BIP 440 primitive table), shown under its heading.
 MODELS = {
-    'F': 'Common per-instruction work: decoding, dispatch, metering and stack-limit checks.',
-    'PREP': 'Take ownership of one numeric operand, pad it to a 64-bit word boundary and set up its word view; charged per operand.',
-    'PRODUCE': 'Allocate, fill and insert one new stack value of <code>n</code> bytes, including its eventual release.',
-    'NORMALIZE': 'Turn a prepared numeric result back into minimal bytes: remove word padding.',
-    'READ': 'Scan bytes without computing a new value: comparisons, zero tests and length conversion.',
-    'ARITH': 'One pass over <code>n</code> bytes of words with a carry or borrow between words: addition and subtraction.',
-    'BIT': 'One pass over <code>n</code> bytes of words without carries, each result word depending on a fixed number of input words: bitwise logic, shifts and word-wise byte reversal (OP_BYTEREV). These measurements predate the word-wise reversal, so they contain no reversal fixtures.',
-    'MOVE': 'Reorder <code>k</code> stack-entry headers without copying their payloads, e.g. OP_ROLL.',
-    'MULCORE': 'Schoolbook multiplication of a <code>u</code>-limb operand by a <code>v</code>-limb one, <code>v</code> ≤ <code>u</code>: one row per limb of the shorter operand, each multiplying the longer one, including scratch storage. Fitted per call, per limb of the longer operand, per row and per limb product.',
-    'DIVCORE': 'Long division or modulo: <code>s</code> quotient rows, each estimating and correcting against the <code>v</code> divisor limbs, including normalization and temporaries.',
-    'H256': 'Core SHA256 of an <code>n</code>-byte message, from initialization to finalization over whole 64-byte blocks.',
-    'H160': 'RIPEMD160 of an <code>n</code>-byte message (at most 520 bytes), from initialization to finalization over whole 64-byte blocks.',
-    'H1': 'SHA1 of an <code>n</code>-byte message (at most 520 bytes), from initialization to finalization over whole 64-byte blocks.',
-    'SIG': 'One BIP340 Schnorr verification, without its challenge hash, which SHA256 charges. The price is fixed at 500,000 by policy; the fitted residual, the verification time less the fitted challenge hash over all measured message sizes, is shown for comparison.',
-    'TWEAK': 'One BIP449 x-only public key tweak (OP_TWEAKADD).',
-    'SELECT': 'One OP_TX selection with <code>k</code> charged units: every planned value and every record scanned for an aggregate field (witness items, weight and amount scans, outputs, input fields), including planning, collated framing and cleanup.',
+    'F': 'The work every instruction does: decoding, dispatch, metering and stack-limit checks.',
+    'PREP': 'Reading one numeric operand into 64-bit words; charged per operand.',
+    'PRODUCE': 'Creating one stack value of <code>n</code> bytes: allocating, filling and inserting it, and eventually releasing it.',
+    'NORMALIZE': 'Turning a numeric result back into minimal bytes.',
+    'READ': 'Scanning bytes without creating a value: comparisons, zero tests and length conversion.',
+    'ARITH': 'One pass over the operands’ words with a carry between words: addition and subtraction.',
+    'BIT': 'One pass over the operands’ words without carries: bitwise logic, shifts and OP_BYTEREV’s byte reversal.',
+    'MOVE': 'Reordering <code>k</code> stack entries without copying their contents, as OP_ROLL does.',
+    'MULCORE': 'Schoolbook multiplication of a <code>u</code>-limb number by a <code>v</code>-limb number (<code>v</code> ≤ <code>u</code>, 64-bit limbs), including scratch space.',
+    'DIVCORE': 'Long division or remainder: <code>s</code> quotient rows, each working through the <code>v</code> limbs of the divisor.',
+    'H256': 'SHA256 of an <code>n</code>-byte message, over whole 64-byte blocks.',
+    'H160': 'RIPEMD160 of a message of at most 520 bytes, over whole 64-byte blocks.',
+    'H1': 'SHA1 of a message of at most 520 bytes, over whole 64-byte blocks.',
+    'SIG': 'One BIP 340 signature check. Its price is fixed at 500,000 varops, which keeps today’s allowance of one signature check per 50 weight units; the challenge hash is charged separately as SHA256.',
+    'TWEAK': 'One BIP 449 x-only public key tweak (OP_TWEAKADD).',
+    'SELECT': 'One OP_TX selection with <code>k</code> charged units: each value selected and each record scanned, including planning, framing and cleanup.',
 }
 
 # Additional explanation shown under a primitive's description.
 NOTES = {
-    'NORMALIZE': 'Offset spans (hollow marks) are a diagnostic, not fitted. Val64 compacts an offset span only when a vector&#39;s storage is not word-aligned, and <code>operator new</code> always aligns it, so script values never take that path. Conversion hands the buffer over in place, whatever its length, so NORMALIZE is fitted and priced as a flat charge with no byte term.',
-    'PRODUCE': 'Since commit eecbd4d4da every producer reserves the word-padded capacity before filling a value, as these fixtures do. At 2dc5b6b0cb, values were instead reallocated when pushed, which made the <code>vector</code> and <code>zero</code> paths up to 58× slower at large sizes and raised the fitted byte rate to 7.7–8.4 on the Apple machines. The shrink-to-empty and shrink-to-one-byte paths are no longer fitted: shortening a value takes an opcode that charges its result&#39;s production, so creating and shortening a value is two productions, which the large-source churn path measures.',
+    'NORMALIZE': 'Hollow marks are a path scripts cannot reach, an unaligned buffer; they are shown but not fitted. A result hands its buffer over in place, whatever its length, so NORMALIZE is a flat charge.',
+    'PRODUCE': 'Shortening a value is not fitted on its own: it takes an opcode that pays for producing its result, so creating and then shortening a value counts as two productions.',
 }
-# Run conditions that qualify the measurements, shown in the header.
-RUN_NOTES = [
-    'The Intel Core i7-7700 has no SHA extensions, so SHA256 runs in software (SSE4/AVX2). Its slowest pre-v2 case is a HASH256 script rather than CHECKSIGVERIFY, and SHA256 costs 37 varops per hashed byte on it, against 8–12 on the machines with SHA extensions. It alone sets the SHA256 byte rate.',
-    'Prepared operands are cycled through a pool of 8 MB, the stack payload limit of one script. The size is a chosen measurement setting, not a proven bound on a script’s working set, which also includes retained capacity, temporaries and other evaluator memory; complete-script benchmarks cover those. With an earlier 64 MiB pool the flats of READ, ARITH, MUL and DIV on the AMD Ryzen 9 9950X (Windows, clang-cl) were far above the other machines (MUL 2,551, DIV 1,294); with the 8 MB pool they are in line with the others.',
-]
+
+def group_digits(formula):
+    """Thousands separators for the whole numbers of a displayed formula."""
+    return re.sub(r'(?<![\d.])\d{5,}(?![\d.])', lambda m: f'{int(m.group(0)):,}', formula)
+
 
 def cost_comparison(joint, family):
     """Implemented price and rounded joint candidate of a priced primitive; no candidate before calibration."""
@@ -288,13 +293,13 @@ def chart(family, points, models, group=None, id_prefix="", candidates=None):
 
     title = f"{display} — {group}" if group is not None else display
     machine_count = len({p['machine_key'] for p in shown})
-    description = ('; '.join(f'{marker}: {label}' for key, label, marker in LEGEND_DESC if any(p['machine_key'] == key for p in shown)) + '. Hollow marks are excluded diagnostics.')
+    description = ('; '.join(f'{marker}: {label}' for key, label, marker in LEGEND_DESC if any(p['machine_key'] == key for p in shown)) + '. Hollow marks are measured but not fitted.')
     if family == 'PRODUCE' and machine_count > 1:
         description = 'Machine is encoded by colour and path by marker shape.'
     if 'envelope' in models:
-        description += ' Solid black is the envelope, the pricing basis: the cheapest curve of the same form covering every machine fit at every chargeable size, without rounding.'
+        description += ' The solid line is the envelope: the cheapest curve of the same form on or above every machine’s fit.'
     if candidates is not None:
-        description += ' The dotted line is the rounded candidate, the charge the schedule applies.'
+        description += ' The dotted line is the price: the envelope rounded up.'
     pieces = [f'<svg viewBox="0 0 {WIDTH} {HEIGHT}" role="img" aria-label="{esc(title)}: {machine_count} machines and {len(models)} fitted cost curves">',
               f'<title>{esc(title)}: normalized varops per measured operation</title>',
               f'<desc>{description}</desc>',
@@ -314,11 +319,12 @@ def chart(family, points, models, group=None, id_prefix="", candidates=None):
             continue
         pieces.append(f'<text x="{px:.2f}" y="{BOTTOM+21}" text-anchor="middle" class="tick">{short(value)}</text>')
         last_tick = px
-    xlabel = ("Quotient steps s" if family == "DIVCORE" else "Charged units k" if family == "SELECT" else
-              "Unrolled bytes per charged unit" if family == "UNROLL" else "Size or item count")
-    pieces.append(f'<text x="{(LEFT+RIGHT)/2:.1f}" y="{HEIGHT-12}" text-anchor="middle" class="axis">{xlabel} · log(1+x)</text>')
+    xlabel = ("Quotient rows s" if family == "DIVCORE" else "Limbs of the longer operand u" if family == "MULCORE" else
+              "Charged units k" if family == "SELECT" else "Stack entries moved k" if family == "MOVE" else
+              "Unrolled bytes per charged unit" if family == "UNROLL" else "Size in bytes")
+    pieces.append(f'<text x="{(LEFT+RIGHT)/2:.1f}" y="{HEIGHT-12}" text-anchor="middle" class="axis">{xlabel} (log scale)</text>')
     ylabel = "Varops per charged unit" if family == "UNROLL" else "Varops per operation"
-    pieces.append(f'<text transform="translate(17 {(TOP+BOTTOM)/2:.1f}) rotate(-90)" text-anchor="middle" class="axis">{ylabel} · log scale</text>')
+    pieces.append(f'<text transform="translate(17 {(TOP+BOTTOM)/2:.1f}) rotate(-90)" text-anchor="middle" class="axis">{ylabel} (log scale)</text>')
     pieces.append(f'<defs><clipPath id="clip-{id_prefix}{family}-{esc(group or "all")}"><rect x="{LEFT}" y="{TOP}" width="{RIGHT-LEFT}" height="{BOTTOM-TOP}"/></clipPath></defs>')
     pieces.append(f'<g clip-path="url(#clip-{id_prefix}{family}-{esc(group or "all")})">')
     for key in models:
@@ -361,18 +367,18 @@ def chart(family, points, models, group=None, id_prefix="", candidates=None):
     pieces.append("</g></svg>")
     legend = ''
     if family == 'PRODUCE':
-        legend = '<p>Colour identifies the machine; marker shape identifies the execution path. Each machine is fitted over all its paths; the solid line is the envelope of those fits.</p><div class="plot-legend">'
+        legend = '<p>Colour is the machine, shape is the path. Each machine is fitted over all its paths.</p><div class="plot-legend">'
         for key, label in MACHINE_NAMES.items():
             if not any(p['machine_key'] == key for p in shown): continue
             legend += f'<span style="color:{COLORS[key]}">● {label}</span>'
         if 'envelope' in models:
-            legend += '<span style="color:#172536">━ Envelope</span>'
+            legend += '<span style="color:#172536">━ Envelope of the fits</span>'
         if candidates is not None:
-            legend += '<span><i class="plot-line candidate" aria-hidden="true"></i>Rounded candidate</span>'
+            legend += '<span><i class="plot-line candidate" aria-hidden="true"></i>Price</span>'
         legend += '</div><div class="plot-legend">'
         for path, (_, _, label) in PRODUCE_MARKERS.items():
             legend += f'<span><svg class="legend-icon" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">{produce_marker(path, 7, 7, "#526174")}</svg>{esc(label)}</span>'
-        legend += '</div><p class="muted">Complete lifetimes include release. For growth and churn, bytes and time are divided by two production events; x is average bytes per event, not final result size. Hover a mark for its machine and fixture.</p>'
+        legend += '</div><p class="muted">Each measurement includes releasing the value. Growth and churn are two productions each, so their size is the average per production. Hover a mark for details.</p>'
     return legend + "".join(pieces)
 
 
@@ -409,7 +415,7 @@ def check_chart(key, points):
 
     pieces = [f'<svg viewBox="0 0 {WIDTH} {HEIGHT}" role="img" aria-label="{esc(title)}: measured work and implemented charge for {len(points)} machine fixtures">',
               f'<title>{esc(title)}: measured varops and the implemented charge</title>',
-              '<desc>Each mark is one machine fixture. The solid line is the implemented charge; marks above it are not covered.</desc>',
+              '<desc>Each mark is one measurement. The solid line is the charge; marks above it cost more than they are charged.</desc>',
               f'<rect x="{LEFT}" y="{TOP}" width="{RIGHT-LEFT}" height="{BOTTOM-TOP}" fill="none" stroke="#cbd5e1"/>']
     for exponent in range(math.floor(math.log10(ymin)), math.ceil(math.log10(ymax)) + 1):
         value = 10 ** exponent
@@ -424,9 +430,9 @@ def check_chart(key, points):
             continue
         pieces.append(f'<text x="{px:.2f}" y="{BOTTOM+21}" text-anchor="middle" class="tick">{short(value)}</text>')
         last_tick = px
-    pieces.append(f'<text x="{(LEFT+RIGHT)/2:.1f}" y="{HEIGHT-12}" text-anchor="middle" class="axis">{esc(spec["xlabel"])} · log(1+x)</text>')
+    pieces.append(f'<text x="{(LEFT+RIGHT)/2:.1f}" y="{HEIGHT-12}" text-anchor="middle" class="axis">{esc(spec["xlabel"])} (log scale)</text>')
     ylabel = "Varops per charged unit" if key == "UNROLL" else "Varops per operation"
-    pieces.append(f'<text transform="translate(17 {(TOP+BOTTOM)/2:.1f}) rotate(-90)" text-anchor="middle" class="axis">{ylabel} · log scale</text>')
+    pieces.append(f'<text transform="translate(17 {(TOP+BOTTOM)/2:.1f}) rotate(-90)" text-anchor="middle" class="axis">{ylabel} (log scale)</text>')
     if 'curve' in spec:
         path = " ".join(f'{"M" if i == 0 else "L"}{xy(x, y)[0]:.2f},{xy(x, y)[1]:.2f}' for i, (x, y) in enumerate(zip(samples, charges)))
         pieces.append(f'<path d="{path}" fill="none" stroke="{COLORS["basis"]}" stroke-width="2.5"/>')
@@ -444,19 +450,41 @@ def check_chart(key, points):
     return ''.join(pieces)
 
 
+def reference_row(artifact):
+    """Summary row of the worst pre-v2 reference case recorded in an artifact."""
+    reference = json.loads(Path(artifact).read_text())['reference']
+    return next((row for row in reference['raw_rows'] if row['Record_Type'] == 'summary'
+                 and row['Name'] == reference['worst_case'] and row['Wall_Min_Seconds']), None)
+
+
 def reference_spread(artifact):
     """Per-round spread of the worst pre-v2 reference case, from the artifact's summary row."""
-    reference = json.loads(Path(artifact).read_text())['reference']
-    row = next((row for row in reference['raw_rows'] if row['Record_Type'] == 'summary'
-                and row['Name'] == reference['worst_case'] and row['Wall_Min_Seconds']), None)
+    row = reference_row(artifact)
     if row is None:
         return None
     low, high = float(row['Wall_Min_Seconds']), float(row['Wall_Max_Seconds'])
     return dict(case=row['Opcode'], rounds=int(row['Samples']), low=low, high=high, spread=high / low - 1)
 
 
-def diagnostics_html(joint, machines, dataset, same_schedule):
-    """Quality gate, fixtures above the charge and run conditions, from the joint fit's diagnostics."""
+def reference_workload(artifact):
+    """The slowest pre-v2 workload of a machine, in plain words."""
+    row = reference_row(artifact)
+    if row is None:
+        return 'not recorded'
+    opcode = row['Opcode'].removeprefix('OP_')
+    if 'CHECKSIG' in opcode:
+        return 'signature checks'
+    size = row.get('Operand_Shape', '').removesuffix('B')
+    return f'{opcode} of {size}-byte values' if size.isdigit() else opcode
+
+
+def size_range(decade):
+    """Sizes of a quality-gate decade: 10^d to 10^(d+1) - 1, and 0 for decade -1."""
+    return '0' if decade < 0 else f'{10 ** decade:,}–{10 ** (decade + 1) - 1:,}'
+
+
+def diagnostics_html(joint, machines, dataset):
+    """Measurements above their price, the fit quality gate and run quality, from the joint fit's diagnostics."""
     diag = joint.get('diagnostics')
     if not diag:
         return ''
@@ -464,26 +492,26 @@ def diagnostics_html(joint, machines, dataset, same_schedule):
     gate = diag['quality_gate']
     limits = gate['quality_gate']
     within = limits['within_factor']
-    parts = ['<div id="diagnostics"><h2>Diagnostics</h2>',
-             '<p>These checks qualify the candidate; they do not change it. A primitive fixture measured above its charge '
-             'is a diagnostic finding. Whether a script can exceed its machine&#39;s pre-v2 reference is established by '
-             'complete-script benchmarks (<code>bench_varops</code>), so the primitive definitions stay as they are '
-             'while these cases are investigated.</p>']
+    parts = ['<div id="diagnostics"><h2>Measurement checks</h2>',
+             '<p>These checks qualify the measurements; they do not change the prices. Whether a script can take '
+             'longer than its machine&#39;s reference is decided by complete-script benchmarks, not by single '
+             'measurements.</p>']
 
-    for name, coverage in diag['charge_coverage'].items():
-        label = ('candidate, identical to the implemented charges' if name == 'candidate' and same_schedule
-                 else name)
-        above = coverage['above_charge']
-        parts.append(f'<h3>Fixtures above the charge · schedule: {esc(label)}</h3>'
-                     f'<p>{len(above):,} of {coverage["checked"]:,} included machine-fixture medians of priced primitives '
-                     'are above their charge. <strong>Measured ÷ charge</strong> uses the normalization of the fits, a full '
-                     f'budget in {TARGET_FRACTION:g}× the machine&#39;s pre-v2 reference time: above 1, a budget spent on the '
-                     'fixture alone would take longer than that.</p>')
-        worst = {}
-        for item in above:
-            worst.setdefault(item['family'], item)
-        parts.append('<div class="table-wrap"><table><thead><tr><th>Primitive</th><th>Fixtures above charge</th>'
-                     '<th>Worst fixture</th><th>Machine</th><th>Measured ÷ charge</th></tr></thead><tbody>')
+    coverage = diag['charge_coverage'].get('candidate') or next(iter(diag['charge_coverage'].values()))
+    above = sorted(coverage['above_charge'], key=lambda item: -item['ratio'])
+    worst = {}
+    for item in above:
+        worst.setdefault(item['family'], item)
+    summary = f'{len(above):,} of {coverage["checked"]:,} measurements cost more than their price'
+    if above:
+        summary += f', at most {above[0]["ratio"]:.2f}×'
+    parts.append(f'<details><summary>{summary}</summary>'
+                 '<p>Measured ÷ price uses the pricing rate, at which a full budget of fitted work takes '
+                 f'{TARGET_FRACTION:g} × the machine&#39;s reference. Above 1, a budget spent on that operation alone '
+                 'would take longer.</p>')
+    if above:
+        parts.append('<div class="table-wrap"><table><thead><tr><th>Primitive</th><th>Above the price</th>'
+                     '<th>Highest</th><th>Machine</th><th>Measured ÷ price</th></tr></thead><tbody>')
         for family, item in worst.items():
             count = sum(other['family'] == family for other in above)
             parts.append(f'<tr><td><a href="#{family}">{esc(DISPLAY.get(family, family))}</a></td><td>{count}</td>'
@@ -491,86 +519,72 @@ def diagnostics_html(joint, machines, dataset, same_schedule):
                          f'<td>{esc(names.get(item["machine"], item["machine"]))}</td>'
                          f'<td>{item["ratio"]:.2f}×</td></tr>')
         parts.append('</tbody></table></div>')
-        if above:
-            parts.append(f'<details><summary>All {len(above)} fixtures above the charge</summary>'
-                         '<div class="table-wrap"><table><thead><tr><th>Fixture</th><th>Machine</th>'
-                         '<th>Measured varops</th><th>Charged varops</th><th>Measured ÷ charge</th></tr></thead><tbody>')
-            for item in above:
-                parts.append(f'<tr><td><code>{esc(item["fixture"])}</code></td>'
-                             f'<td>{esc(names.get(item["machine"], item["machine"]))}</td>'
-                             f'<td>{item["measured_varops"]:,.0f}</td><td>{item["charged_varops"]:,.0f}</td>'
-                             f'<td>{item["ratio"]:.2f}×</td></tr>')
-            parts.append('</tbody></table></div></details>')
+        parts.append(f'<details><summary>All {len(above)} measurements</summary>'
+                     '<div class="table-wrap"><table><thead><tr><th>Measurement</th><th>Machine</th>'
+                     '<th>Measured varops</th><th>Price</th><th>Measured ÷ price</th></tr></thead><tbody>')
+        for item in above:
+            parts.append(f'<tr><td><code>{esc(item["fixture"])}</code></td>'
+                         f'<td>{esc(names.get(item["machine"], item["machine"]))}</td>'
+                         f'<td>{item["measured_varops"]:,.0f}</td><td>{item["charged_varops"]:,.0f}</td>'
+                         f'<td>{item["ratio"]:.2f}×</td></tr>')
+        parts.append('</tbody></table></div></details>')
+    parts.append('</details>')
 
     failures = gate['gate_failures']
     under = [item for item in failures if item['max_above_fit'] > within]
     below = [item for item in failures if item not in under and item['max_below_fit'] > within]
-    one_sided = [item for item in failures if item['rms_above_fit'] > limits['max_rms_factor']]
-    parts.append(f'<h3>Quality gate of the machine fits</h3><p>BIP 440 Appendix A asks each machine&#39;s fit to meet, '
-                 f'within every path and size decade: an RMS factor of at most {limits["max_rms_factor"]:.2f} and at '
-                 f'least {100 * limits["min_within_share"]:g}% of fixtures within {within:g}× of the fit. '
-                 f'{len(failures):,} of {gate["gate_bins"]:,} bins fail. The gate counts both directions. In '
-                 f'{len(under)} failing bins a fixture lies more than {within:g}× above its own machine&#39;s fit, where '
-                 f'the fit under-predicts. Of the other {len(failures) - len(under):,}, {len(below):,} have a fixture more '
-                 f'than {within:g}× below the fit, where it over-predicts and the charge errs on the safe side, and '
-                 f'{len(failures) - len(under) - len(below)} fail on the RMS factor with every fixture within {within:g}× '
-                 f'of the fit. Counting only fixtures above the fit (<em>RMS above the fit</em>), {len(one_sided)} failing '
-                 f'bins exceed {limits["max_rms_factor"]:.2f}. Size decade <em>d</em> holds sizes 10<sup><em>d</em></sup> '
-                 'to 10<sup><em>d</em>+1</sup> − 1 (decade −1 is size 0).</p>')
-    parts.append('<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Bins</th><th>Failing</th>'
-                 f'<th>Fixture more than {within:g}× above the fit</th>'
-                 f'<th>RMS above the fit over {limits["max_rms_factor"]:.2f}</th></tr></thead><tbody>')
+    parts.append(f'<details><summary>Fit quality: {len(under)} of {gate["gate_bins"]:,} size ranges have a measurement '
+                 f'more than {within:g}× above its machine&#39;s fit</summary>'
+                 '<p>BIP 440 asks each machine&#39;s fit to stay close to its measurements in every path and size '
+                 f'decade: a root-mean-square factor of at most {limits["max_rms_factor"]:.2f}, and at least '
+                 f'{100 * limits["min_within_share"]:g}% of measurements within {within:g}× of the fit. '
+                 f'{len(failures):,} ranges miss that target. In {len(below):,} of them measurements lie well below the '
+                 f'fit, where the price errs on the safe side, and {len(failures) - len(under) - len(below)} miss only '
+                 f'the root-mean-square factor. In {len(under)} a measurement lies more than {within:g}× above the fit.</p>')
+    parts.append('<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Size ranges</th>'
+                 f'<th>Missing the target</th><th>More than {within:g}× above the fit</th></tr></thead><tbody>')
     for machine in machines:
         label = machine['meta']['label']
         failing = [item for item in failures if item['machine'] == label]
         parts.append(f'<tr><td>{esc(machine["label"])}</td><td>{gate["bins_by_machine"][label]}</td>'
-                     f'<td>{len(failing)}</td><td>{sum(item in under for item in failing)}</td>'
-                     f'<td>{sum(item in one_sided for item in failing)}</td></tr>')
+                     f'<td>{len(failing)}</td><td>{sum(item in under for item in failing)}</td></tr>')
     parts.append('</tbody></table></div>')
     if under:
-        parts.append(f'<details><summary>The {len(under)} bins with a fixture more than {within:g}× above the fit'
-                     '</summary><div class="table-wrap"><table><thead><tr><th>Primitive</th><th>Path</th><th>Decade</th>'
-                     '<th>Machine</th><th>Fixtures</th><th>RMS factor</th><th>RMS above the fit</th><th>Within</th>'
-                     '<th>Most above the fit</th>'
-                     '</tr></thead><tbody>')
+        parts.append(f'<details><summary>The {len(under)} size ranges</summary><div class="table-wrap"><table><thead>'
+                     '<tr><th>Primitive</th><th>Path</th><th>Sizes</th><th>Machine</th><th>Measurements</th>'
+                     '<th>Most above the fit</th></tr></thead><tbody>')
         for item in sorted(under, key=lambda item: -item['max_above_fit']):
             parts.append(f'<tr><td><a href="#{item["family"]}">{esc(DISPLAY.get(item["family"], item["family"]))}</a></td>'
-                         f'<td><code>{esc(item["group"])}</code></td><td>{item["decade"]}</td>'
+                         f'<td><code>{esc(item["group"])}</code></td><td>{size_range(item["decade"])}</td>'
                          f'<td>{esc(names.get(item["machine"], item["machine"]))}</td><td>{item["fixtures"]}</td>'
-                         f'<td>{item["rms_factor"]:.2f}</td><td>{item["rms_above_fit"]:.2f}</td>'
-                         f'<td>{100 * item["within_share"]:.0f}%</td>'
                          f'<td>{item["max_above_fit"]:.2f}×</td></tr>')
         parts.append('</tbody></table></div></details>')
+    parts.append('</details>')
 
-    parts.append('<h3>Run conditions</h3><p>Each fixture is timed once per pass over all fixtures, each time as the '
-                 'average of a batch of repetitions, and priced at the median of these epochs. Epoch noise is the median '
-                 'over fixtures of how far a fixture&#39;s epochs typically lie from their median: the median absolute '
-                 f'deviation, relative to the median. A run whose epoch noise exceeds {100 * MAX_EPOCH_NOISE:g}% fails its '
-                 'conditions: the runner repeats it, and the fitter rejects it unless an exploratory fit is requested. '
-                 'The threshold is a provisional screening check, not an accuracy guarantee: a machine loaded evenly '
-                 'throughout can pass it. The one-minute load average is shown for information; an idle macOS desktop '
-                 'already reports 1.5–2, and Windows reports none. The last column is the spread of the worst reference '
-                 'case over its rounds at the start of the run.</p>')
-    parts.append('<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Reference (s)</th>'
-                 '<th>Epoch noise</th><th>Median load</th><th>Worst reference case: per-round range</th>'
-                 '</tr></thead><tbody>')
+    noises = [machine['meta']['epoch_noise'] for machine in machines if machine['meta']['epoch_noise'] is not None]
+    epochs = sorted({machine['meta']['epochs'] for machine in machines})
+    passes = f'{epochs[0]}' if len(epochs) == 1 else f'{epochs[0]} to {epochs[-1]}'
+    noise_range = (f'{100 * min(noises):.2f}–{100 * max(noises):.2f}%' if noises else 'not measured')
+    parts.append(f'<details><summary>Repeatability: passes differ by {noise_range} (limit {100 * MAX_EPOCH_NOISE:g}%)'
+                 f'</summary><p>Each measurement is the median of {passes} passes over all primitives. A run is accepted '
+                 'when its passes agree: over all measurements, the median of each one&#39;s median deviation between '
+                 f'passes must stay below {100 * MAX_EPOCH_NOISE:g}%; otherwise the run is repeated. The last column '
+                 'shows how much the slowest reference case varied over its rounds.</p>')
+    parts.append('<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Reference</th>'
+                 '<th>Pass difference</th><th>Slowest reference case over its rounds</th></tr></thead><tbody>')
     for machine in machines:
         meta = machine['meta']
-        conditions = meta.get('conditions')
         spread = reference_spread(meta['file'])
         noise = meta['epoch_noise']
         noise = 'not measured' if noise is None else f'{100 * noise:.2f}%' + (' (fails)' if noise > MAX_EPOCH_NOISE else '')
-        load = conditions.get('median_one_minute_load') if conditions else None
-        load = f'{load:.1f}' if load is not None else ('unavailable' if conditions else 'not recorded')
         rounds = (f'{esc(spread["case"])}, {spread["rounds"]} rounds: {spread["low"]:.3f}–{spread["high"]:.3f} s '
                   f'({100 * spread["spread"]:.1f}%)' if spread else 'not recorded')
-        parts.append(f'<tr><td>{esc(machine["label"])}</td><td>{meta["reference_seconds"]:.3f}</td><td>{noise}</td>'
-                     f'<td>{load}</td><td>{rounds}</td></tr>')
+        parts.append(f'<tr><td>{esc(machine["label"])}</td><td>{meta["reference_seconds"]:.3f} s</td><td>{noise}</td>'
+                     f'<td>{rounds}</td></tr>')
     parts.append('</tbody></table></div>')
     if (dataset / 'reference-csv').exists():
-        parts.append('<p>Recovered per-round reference samples and their provenance are in <code>reference-csv/</code> '
-                     'of the dataset.</p>')
-    parts.append('</div><!--/diagnostics-->')
+        parts.append('<p>The recovered per-round reference samples are in the dataset&#39;s <code>reference-csv/</code>.</p>')
+    parts.append('</details></div><!--/diagnostics-->')
     return ''.join(parts)
 
 
@@ -651,68 +665,81 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
 .chart{margin:14px 0 20px}.chart > svg{display:block;width:100%;height:auto;max-height:540px}.plot-legend span{display:inline-flex;align-items:center;gap:5px}.plot-legend .legend-icon{display:inline-block;width:14px;height:14px;flex:0 0 14px}.tick{font:12px system-ui;fill:#526174}.axis{font:13px system-ui;fill:#172536}
 .table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:8px 10px;text-align:left;border-bottom:1px solid #e2e8f0;vertical-align:top}th{background:#f1f5f9}code{white-space:nowrap;font-size:13px}
 .facet-title{font-size:15px;margin:16px 0 3px;color:#415268}article{scroll-margin-top:20px}.category[hidden]{display:none}@media(max-width:650px){main{padding:10px}header,article{padding:13px}h1{font-size:23px}}
-</style><main><header><h1>Varops · current reduced calibration model</h1>"""]
+</style><main><header><h1>How Tapscript v2 operations are priced</h1>"""]
     heads = sorted({machine['meta']['head'][:10] for machine in machines if machine['meta'].get('head')})
-    commit_chip = (f'commit {heads[0]}' if len(heads) == 1 else 'commits ' + ', '.join(heads)) if heads else 'commit unknown'
-    parts.append(f'<p><strong>{esc(joint.get("model_id", ""))} · {commit_chip} · {len(joint_model)} primitives · report updated 2026-09-30.</strong> Current candidate prices are shown first.</p>')
-    parts.append('<p><strong>Pricing basis: envelope</strong> (solid black) is the cheapest curve of each primitive&#39;s form that stays at or above every machine&#39;s fitted curve at every size the charge applies to. Formally, with feature vector φ(x) ≥ 0 and machine fits θ<sub>m</sub>, it minimizes the weighted mean relative charge Σ<sub>x</sub> w(x)·θ·φ(x) / max<sub>m</sub> θ<sub>m</sub>·φ(x) over the fixtures, with the fits&#39; path-group and size-decade weights, subject to θ·φ(x) ≥ θ<sub>m</sub>·φ(x) for every machine m and every chargeable size x, and θ ≥ 0. Sizes start at zero except where an operation cannot be smaller: a hash always processes at least one 64-byte block, a division has at least one quotient row and one divisor limb, and a multiplication&#39;s shorter operand is at most as long as the longer one. RIPEMD160 and SHA1 take at most 520 bytes; other sizes are unbounded. Where sizes start at zero and are unbounded, covering every machine at size zero needs the largest flat and covering them at large sizes needs the largest rate, so there the envelope takes the largest flat and the largest rate of any machine; it is lower only for DIV, MUL and the hashes. It is unrounded and is the basis of the rounded implementation prices shown below. It covers the individual fitted curves, not necessarily every measurement. SIG remains a fixed policy charge; its comparison curves are diagnostic.</p>')
-    parts.append(f'<p>Fresh {len(machines)}-machine calibration: {sum(len(m["points"]) for m in machines):,} machine-fixture medians; epochs per fixture: {esc(", ".join(str(m["meta"]["epochs"]) for m in machines))}. Each machine is normalized by its own pre-v2 reference: a full 40-billion-varop budget of fitted work is priced to take that reference time. The schedule holds only if complete scripts stay below the reference on every machine. Each machine is fitted independently with equal path-group and size-decade weights and a 100× underprediction penalty. Coefficients remain unrounded; this is not a guaranteed upper bound or whole-script validation.</p>')
-    read_rate = joint['primitives']['READ']['envelope_coefficients'][1]
-    prep_rate = joint['primitives']['PREP']['envelope_coefficients'][1]
-    parts.append(f'<p>The candidate rounds the envelope up, each coefficient on its own. A flat rounds to a multiple of 10 below 100 and of 50 from 100, but never to more than two significant figures: it is the intercept of a fit and moves most between runs, so coarse steps keep it from changing on every refit, at up to 50% more for a flat just above 100. A rate rounds to two significant figures, and at least to a whole varop, which adds at most 10% to any rate of 10 or more. Rates are per byte of the padded length the operation processes, W(n) for PREPARE, WRITE, READ, ARITH and BIT (n rounded up to a multiple of 8 bytes, so W(5) = 8), and H(n) for the hashes (the message plus its padding, rounded up to a multiple of 64 bytes), or per counted item elsewhere. Zero stays zero and exact multiples keep their value. NORMALIZE is a flat charge and SIG remains fixed at 500,000. Every rate is a whole number of varops, so a small fitted rate overcharges large operands most: PREPARE&#39;s {prep_rate:.3g} per byte is charged as 1, READ&#39;s {read_rate:.3g} as {math.ceil(read_rate - 1e-9)}. The table below compares it with the prices implemented in the research implementation and BIP draft; where they differ, the implementation has not been updated. Raw fits remain unrounded; the plots draw the rounded candidate dotted over the unrounded envelope. Whole-script confirmation on every machine remains required.</p>')
-    for note in RUN_NOTES:
-        parts.append(f'<p class="warning">{esc(note)}</p>')
+    same_schedule = all(cost_comparison(joint, family)[2] for family in CURRENT_COSTS)
+    dated = re.match(r'\d{4}-\d{2}-\d{2}', joint_path.parent.name)
+    chips = [f'{len(machines)} machines', f'{sum(len(m["points"]) for m in machines):,} measurements']
+    if dated:
+        chips.append(f'measured {dated.group(0)}')
+    status = (f' These are the prices <a href="{BIP440_URL}">BIP 440</a> specifies and the '
+              f'<a href="{GSR_URL}">gsr branch</a> implements.' if same_schedule else '')
+    parts.append(f'<p><strong>{" · ".join(chips)}</strong> Under <a href="{BIP440_URL}">BIP 440</a>, a transaction '
+                 'spending Tapscript v2 gets a budget of 10,000 varops per weight unit, 40 billion for a full block. Every '
+                 'operation pays BASE plus the primitives below, priced so that on each of these machines a block of the '
+                 'most expensive scripts takes no longer to validate than the slowest block of today&#39;s scripts.'
+                 f'{status}</p>')
+
+    references = [machine['meta']['reference_seconds'] for machine in machines]
+    epochs = sorted({machine['meta']['epochs'] for machine in machines})
+    passes = f'{epochs[0]} passes' if len(epochs) == 1 else f'{epochs[0]} to {epochs[-1]} passes'
+    parts.append('<div class="card prose" id="method"><div class="card-title">How the prices are derived</div><ol class="steps">'
+                 '<li><strong>Reference.</strong> Each machine times the most expensive blocks possible today, such as '
+                 '80,000 signature checks or repeated hashing of 520-byte values. The slowest is that machine&#39;s '
+                 f'reference: {min(references):.1f} to {max(references):.1f} seconds here.</li>'
+                 '<li><strong>Measure.</strong> Every primitive is timed on prepared operands, from empty values to the '
+                 f'4 MB element limit, in {passes}; each measurement is the median.</li>'
+                 '<li><strong>Fit.</strong> Times are converted to varops so that 40 billion varops of fitted work take '
+                 f'{TARGET_FRACTION:g} × the reference. Each machine&#39;s measurements are fitted with the primitive&#39;s '
+                 'formula, penalizing under-estimates 100 times more than over-estimates.</li>'
+                 '<li><strong>Combine.</strong> The envelope is the cheapest formula of the same form that lies on or '
+                 'above every machine&#39;s fit at every size.</li>'
+                 '<li><strong>Round.</strong> Each price rounds the envelope up: rates to two significant figures, flat '
+                 'parts to multiples of 10 below 100 and of 50 from 100. SIG stays at 500,000.</li>'
+                 '<li><strong>Check.</strong> Complete scripts of every opcode run on every machine; prices are accepted '
+                 'only if no block of them takes longer than the reference.</li>'
+                 f'</ol><p>The full method is in <a href="{METHODOLOGY_URL}">METHODOLOGY.md</a>.</p></div>')
+
+    rows = ''.join(f'<tr><td>{esc(machine["label"])}</td><td>{esc(describe(machine["meta"]["file"]))}</td>'
+                   f'<td>{machine["meta"]["reference_seconds"]:.2f} s</td>'
+                   f'<td>{esc(reference_workload(machine["meta"]["file"]))}</td></tr>' for machine in machines)
+    parts.append('<div class="card" id="machines"><div class="card-title">Machines</div><table><thead><tr>'
+                 '<th>Machine</th><th>System</th><th>Reference</th><th>Slowest block today</th></tr></thead>'
+                 f'<tbody>{rows}</tbody></table><div class="plot-legend">'
+                 '<span><i class="plot-line basis" aria-hidden="true"></i>Envelope of the fits</span>'
+                 '<span><i class="plot-line candidate" aria-hidden="true"></i>Price</span>'
+                 '<span><i class="plot-mark hollow" aria-hidden="true"></i>Measured, not fitted</span></div></div>')
+
+    warnings = []
+    if not same_schedule:
+        older = [f'{DISPLAY.get(family, family)} <code>{esc(implemented)}</code> instead of <code>{esc(candidate)}</code>'
+                 for family in CURRENT_COSTS
+                 for implemented, candidate, same in [cost_comparison(joint, family)] if not same]
+        warnings.append('The implementation still charges older prices: ' + '; '.join(older) + '.')
     unmatched = source_check.get("unmatched", [])
     if unmatched:
-        parts.append('<p class="warning">Source verification is incomplete: the M4 benchmark-source discrepancy remains unresolved for this provisional candidate.</p>')
-        parts.append(f'<details><summary>Source provenance: {len(unmatched)} file hashes still need review</summary><p>{esc(source_check.get("note", ""))} Resolve these differences before finalizing the schedule.</p><ul>')
-        for item in unmatched:
-            parts.append(f'<li>{esc(Path(item["machine"]).name)}: <code>{esc(item["path"])}</code></li>')
-        parts.append('</ul><p><a href="source-verification.json">Verification record</a></p></details>')
-    legend = '<div class="legend">'
-    for machine in machines:
-        key = machine['key']
-        shape = {'m1': 'circles', 'm4': 'squares', 'ryzen': 'diamonds', 'intel': 'triangles', 'i7': 'inverted triangles', 'r5': 'left-pointing triangles'}[key]
-        legend += f'<span><span class="swatch mark" style="border-color:{COLORS[key]}"></span>{esc(machine["label"])} ({esc(describe(machine["meta"]["file"]))}) · {shape}</span>'
-    parts.append(legend + '<span><span class="swatch" style="border-color:#172536"></span>Envelope · solid (pricing basis)</span><span><span class="swatch dot" style="border-color:#172536"></span>Rounded candidate · dotted</span><span>Hollow marks: excluded diagnostics</span></div>')
+        warnings.append(f'{len(unmatched)} benchmark source files differ from the recorded commits: '
+                        + ', '.join(f'<code>{esc(item["path"])}</code> ({esc(Path(item["machine"]).name)})' for item in unmatched)
+                        + '. Resolve them before relying on these prices.')
     quick = []
     for machine in machines:
         settings = json.loads(Path(machine['meta']['file']).read_text()).get('measurement_settings')
         # Five epochs at full sample lengths is the adopted calibration setting (2026-09-28).
         if settings and (settings['primitive_epochs'] < 5 or settings['reference_epochs'] < 5 or
                          (settings['sample_ms'], settings['copy_sample_ms']) != (10, 100)):
-            quick.append(f"{machine['label']}: {settings['primitive_epochs']} epochs, "
-                         f"{settings['sample_ms']:g}/{settings['copy_sample_ms']:g} ms samples, "
-                         f"{settings['reference_epochs']} reference epoch(s)")
+            quick.append(f"{machine['label']}: {settings['primitive_epochs']} passes, "
+                         f"{settings['sample_ms']:g}/{settings['copy_sample_ms']:g} ms samples")
     if quick:
-        parts.append('<p class="warning"><strong>Quick runs</strong> (full: at least 5 epochs, 10/100 ms, 5 reference epochs). '
-                     'Use these fits to check the pipeline and the direction of changes, not as prices. ' + esc('; '.join(quick)) + '.</p>')
+        warnings.append('<strong>Short runs.</strong> These measurements show the direction of changes, not final '
+                        'prices: ' + esc('; '.join(quick)) + '.')
     failed = failed_conditions([machine['meta'] for machine in machines])
     if failed:
         labels = {id(machine['meta']): machine['label'] for machine in machines}
-        parts.append('<p class="warning"><strong>Exploratory fit</strong>: these runs failed their measurement conditions '
-                     'and must be repeated before pricing: ' + esc('; '.join(
-                         f"{labels[id(meta)]} (epoch noise {100 * meta['epoch_noise']:.2f}%)" for meta in failed)) + '.</p>')
-    parts.append('<h2 id="comparison">Implemented prices and candidate</h2><div class="table-wrap"><table><thead><tr>'
-                 '<th>Primitive or check</th><th>Implemented charge</th><th>Candidate (rounded envelope) or check</th></tr></thead><tbody>')
-    for section in SECTIONS:
-        parts.append(f'<tr class="table-section"><th colspan="3"><a href="#{section["slug"]}">{esc(section["title"])}</a></th></tr>')
-        for _, families in section["groups"]:
-            for family in families:
-                name = f'<a href="#{family}">{esc(DISPLAY.get(family, family))}</a>'
-                if family in CHECKS:
-                    points = check_points(family, series)
-                    result = (f'Check: up to {max(p["ratio"] for p in points):.3g}× the charge'
-                              if points else 'Check awaiting calibration')
-                    parts.append(f'<tr><td>{name}</td><td><code>{esc(CHECKS[family]["charge"])}</code></td><td>{esc(result)}</td></tr>')
-                    continue
-                implemented, candidate, same = cost_comparison(joint, family)
-                shown = (f'<code>{esc(candidate)}</code>{"" if same else " <strong>differs</strong>"}'
-                         if candidate is not None else 'Awaiting calibration')
-                parts.append(f'<tr><td>{name}</td><td><code>{esc(implemented)}</code></td><td>{shown}</td></tr>')
-    parts.append('</tbody></table></div>')
-    same_schedule = all(cost_comparison(joint, family)[2] for family in CURRENT_COSTS)
-    parts.append(diagnostics_html(joint, machines, joint_path.parent, same_schedule))
+        warnings.append('<strong>Exploratory fit.</strong> These runs were too noisy and must be repeated: ' + esc('; '.join(
+            f"{labels[id(meta)]} (passes differ by {100 * meta['epoch_noise']:.2f}%)" for meta in failed)) + '.')
+    if warnings:
+        parts.append('<div class="card">' + ''.join(f'<p class="warning">{w}</p>' for w in warnings) + '</div>')
+    parts.append(diagnostics_html(joint, machines, joint_path.parent))
     parts.append('<nav class="nav" aria-label="Sections">')
     for section in SECTIONS:
         parts.append(f'<a href="#{section["slug"]}">{esc(section["title"].split(" · ")[0])}</a>')
@@ -723,30 +750,44 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
         legend = ''.join(f'<span><i class="plot-mark {key}" aria-hidden="true"></i>{label}</span>'
                          for key, label, _ in LEGEND_MACHINES if key in present)
         if fits:
-            legend += '<span><i class="plot-line basis" aria-hidden="true"></i>Envelope</span>'
-            legend += '<span><i class="plot-line candidate" aria-hidden="true"></i>Rounded candidate</span>'
+            legend += '<span><i class="plot-line basis" aria-hidden="true"></i>Envelope of the fits</span>'
+            legend += '<span><i class="plot-line candidate" aria-hidden="true"></i>Price</span>'
         else:
-            legend += ('<span><i class="plot-line basis" aria-hidden="true"></i>Implemented charge'
-                       + (f' <code>{esc(charge)}</code>' if charge else '') + '</span>')
+            legend += ('<span><i class="plot-line basis" aria-hidden="true"></i>Charge'
+                       + (f' <code>{esc(group_digits(charge))}</code>' if charge else '') + '</span>')
         return f'<div class="plot-legend" aria-label="Plot legend">{legend}</div>'
+
+    def fitted(family, coefficients):
+        """A fitted formula to three significant figures."""
+        return group_digits(formulas(family, [float(f'{c:.3g}') for c in coefficients]))
+
+    def sha_note():
+        """Why one machine sets SHA256's byte rate, when one machine without SHA extensions does."""
+        rates = {machine['key']: models[machine['key']]['H256'][1] for machine in machines}
+        others = [rate for key, rate in rates.items() if key != 'i7']
+        if 'i7' not in rates or not others or rates['i7'] < max(others):
+            return None
+        return (f'The Intel Core i7-7700 has no SHA extensions, so SHA256 runs in software there: {rates["i7"]:.0f} '
+                f'varops per hashed byte, against {min(others):.0f}–{max(others):.0f} on the other machines. It alone '
+                'sets SHA256&#39;s byte rate.')
 
     def signature_table(pts):
         """OP_CHECKSIG verifies a signature over the 32-byte transaction digest, the only
         message size Bitcoin signs; other sizes belong to OP_CHECKSIGFROMSTACK."""
         span = hash_span(96)
         charge = SIGCHECK + SHA256[0] + SHA256[1] * span
-        out = [f'<p>OP_CHECKSIG verifies a BIP 340 signature over the 32-byte transaction digest, so its challenge hash '
-               f'covers 96 bytes: R, P and the digest. It is charged <code>SIGCHECK + SHA256(96)</code> = 500,000 + '
-               f'{SHA256[0]} + {SHA256[1]} × {span} = {charge:,} varops. The table compares one such verification, '
-               'measured on each machine, with that charge. Other message sizes are verified only by '
+        out = [f'<p>OP_CHECKSIG checks a signature over the 32-byte transaction digest, so its challenge hash covers '
+               f'96 bytes: R, P and the digest. It is charged <code>SIGCHECK + SHA256(96)</code> = 500,000 + '
+               f'{SHA256[0]} + {SHA256[1]} × {span} = {charge:,} varops. The table compares one such check, measured on '
+               'each machine, with that charge. Other message sizes are checked only by '
                '<a href="#CSFS">OP_CHECKSIGFROMSTACK</a>, whose charge grows with the message.</p>',
-               '<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Measured verification (varops)</th>'
-               '<th>Charge (varops)</th><th>Measured / charge</th></tr></thead><tbody>']
+               '<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Measured (varops)</th>'
+               '<th>Charge (varops)</th><th>Measured ÷ charge</th></tr></thead><tbody>']
         for machine in machines:
             own = [p for p in pts if p['machine_key'] == machine['key'] and p['x'] == 32]
             if own:
                 y = own[0]['y']
-                out.append(f'<tr><td>{esc(machine["label"])}</td><td>{y:,.0f}</td><td>{charge:,}</td><td>{y / charge:.3g}</td></tr>')
+                out.append(f'<tr><td>{esc(machine["label"])}</td><td>{y:,.0f}</td><td>{charge:,}</td><td>{y / charge:.2f}×</td></tr>')
         out.append('</tbody></table></div>')
         return out
 
@@ -755,38 +796,41 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
         record = joint['primitives'].get(family)
         out = [f'<article id="{family}"><{tag}>{esc(DISPLAY.get(family, family))}</{tag}>']
         if record is None:
-            out.append(f'<p><strong>Implemented in varops.h:</strong> <code>{esc(CURRENT_COSTS[family])}</code> varops. '
-                       '<strong>Awaiting calibration:</strong> the calibration shown here predates these fixtures.</p>')
-            out.append(f'<p class="model"><strong>Models:</strong> {MODELS[family]}</p>')
-            out.append(f'<p class="muted"><strong>Fixtures:</strong> {FIXTURES[family]}</p></article>')
+            out.append(f'<p><strong>Price:</strong> <code>{esc(group_digits(CURRENT_COSTS[family]))}</code> varops. '
+                       'Not yet measured in this dataset.</p>')
+            out.append(f'<p class="model"><strong>Pays for:</strong> {MODELS[family]}</p>')
+            out.append(f'<p class="muted"><strong>Measured with:</strong> {FIXTURES[family]}</p></article>')
             return out
         candidate = formulas(family, record['candidate_coefficients'], candidate=True)
-        out.append(f'<p><strong>Rounded implementation candidate:</strong> <code>{esc(candidate)}</code> varops. '
-                   f'Implemented in varops.h: <code>{esc(CURRENT_COSTS[family])}</code>. W(n) rounds bytes up to a multiple of eight.</p>')
-        envelope = record['envelope_coefficients']
-        uplift = ', '.join(f'{a:.6g} → {b:g}' for a, b in zip(envelope, record['candidate_coefficients']))
-        out.append(f'<p class="muted">Coefficient rounding (fixed, then variable): {esc(uplift)}. The black curve is the unrounded envelope used for pricing.</p>')
-        out.append(f'<p class="model"><strong>Models:</strong> {MODELS[family]}</p>')
-        if family in NOTES:
-            out.append(f'<p>{NOTES[family]}</p>')
+        implemented = CURRENT_COSTS[family]
+        out.append(f'<p><strong>Price:</strong> <code>{esc(group_digits(candidate))}</code> varops.'
+                   + ('' if implemented == candidate else
+                      f' The implementation still charges <code>{esc(group_digits(implemented))}</code>.') + '</p>')
+        out.append(f'<p class="model"><strong>Pays for:</strong> {MODELS[family]}</p>')
+        note = NOTES.get(family) or (sha_note() if family == 'H256' else None)
+        if note:
+            out.append(f'<p>{note}</p>')
         if family in FIXTURES:
-            out.append(f'<p class="muted"><strong>Fixtures:</strong> {FIXTURES[family]}</p>')
-        out.append('<details open><summary>Fitted costs</summary>')
+            out.append(f'<p class="muted"><strong>Measured with:</strong> {FIXTURES[family]}</p>')
+        out.append('<details open><summary>Measurements and fits</summary>')
         if family == 'SIG':
             out.extend(signature_table(pts))
-        elif family != 'PRODUCE':
+            out.append('</details></article>')
+            return out
+        if family != 'PRODUCE':
             out.append(machine_legend(pts))
-            if family in {"H256", "DIVCORE", "MULCORE", "NORMALIZE"}:
-                for group in sorted({p["group"] for p in pts}):
+            groups = sorted({p["group"] for p in pts})
+            if family in {"H256", "DIVCORE", "MULCORE", "NORMALIZE"} and len(groups) > 1:
+                for group in groups:
                     out.append(f'<div class="facet-title">{esc(group)}</div><div class="chart">{chart(family, pts, family_models(family), group, candidates=candidates)}</div>')
             else:
                 out.append(f'<div class="chart">{chart(family, pts, family_models(family), candidates=candidates)}</div>')
         else:
             out.append(f'<div class="chart">{chart(family, pts, {"envelope": env_model}, candidates=candidates)}</div>')
-        out.append('<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Fitted cost (varops, unrounded)</th></tr></thead><tbody>')
+        out.append('<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Fitted cost (varops)</th></tr></thead><tbody>')
         for machine in machines:
-            out.append(f'<tr><td>{esc(machine["label"])}</td><td><code>{esc(formulas(family, models[machine["key"]][family]))}</code></td></tr>')
-        out.append(f'<tr><td>Envelope (pricing basis)</td><td><code>{esc(formulas(family, env_model[family]))}</code></td></tr></tbody></table></div>')
+            out.append(f'<tr><td>{esc(machine["label"])}</td><td><code>{esc(fitted(family, models[machine["key"]][family]))}</code></td></tr>')
+        out.append(f'<tr><td>Envelope of all machines</td><td><code>{esc(fitted(family, env_model[family]))}</code></td></tr></tbody></table></div>')
         out.append('</details></article>')
         return out
 
@@ -794,25 +838,26 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
         spec = CHECKS[key]
         points = check_points(key, series)
         out = [f'<article id="{key}"><{tag}>{esc(DISPLAY[key])}</{tag}>',
-               f'<p><strong>Charged as:</strong> <code>{esc(spec["charge"])}</code> varops'
+               f'<p><strong>Charged as:</strong> <code>{esc(group_digits(spec["charge"]))}</code> varops'
                + (f' ({esc(spec["composition"])})' if 'composition' in spec else '') + '.</p>',
                f'<p class="model"><strong>Measures:</strong> {spec["models"]}</p>',
-               f'<p class="muted"><strong>Fixtures:</strong> {spec["fixtures"]}</p>']
-        if spec.get('note'):
-            out.append(f'<p class="muted">{spec["note"]}</p>')
+               f'<p class="muted"><strong>Measured with:</strong> {spec["fixtures"]}</p>']
         if not points:
-            out.append('<p><strong>Awaiting calibration:</strong> the calibration shown here predates these fixtures.</p></article>')
+            out.append('<p>Not yet measured in this dataset.</p></article>')
             return out
-        out.append('<details open><summary>Measured work and implemented charge</summary>')
+        out.append('<details open><summary>Measurements and charge</summary>')
         out.append(machine_legend(points, fits=False, charge=spec['charge']))
         out.append(f'<div class="chart">{check_chart(key, points)}</div>')
-        out.append('<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Largest measured / charged</th><th>Fixture</th></tr></thead><tbody>')
+        column = 'Message' if key == 'CSFS' else 'Value' if key == 'BYTEREV' else 'Measurement'
+        out.append(f'<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Highest measured ÷ charge</th><th>{column}</th></tr></thead><tbody>')
         for machine in machines:
             own = [p for p in points if p['machine_key'] == machine['key']]
             if not own:
                 continue
             worst = max(own, key=lambda p: p['ratio'])
-            out.append(f'<tr><td>{esc(machine["label"])}</td><td>{worst["ratio"]:.3g}</td><td><code>{esc(worst["label"])}</code></td></tr>')
+            size = re.search(r'/(\d+)$', worst['label']) if key in {'CSFS', 'BYTEREV'} else None
+            shown = f'{int(size.group(1)):,} bytes' if size else f'<code>{esc(worst["label"])}</code>'
+            out.append(f'<tr><td>{esc(machine["label"])}</td><td>{worst["ratio"]:.2f}×</td><td>{shown}</td></tr>')
         out.append('</tbody></table></div></details></article>')
         return out
 
@@ -832,6 +877,9 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
                 tag = 'h4' if grouped else 'h3'
                 parts.extend(check_article(family, tag) if family in CHECKS else priced_article(family, tag))
         parts.append('</section>')
+    parts.append('<footer class="footer">' + (f'Measured at gsr {", ".join(heads)}. ' if heads else '')
+                 + (f'Prices implemented at gsr {IMPLEMENTED_AT}. ' if same_schedule else '')
+                 + 'Data, code and method: <a href="https://github.com/jmoik/varopsData">jmoik/varopsData</a>.</footer>')
     parts.append("""<script>
 function showCategory(){
   const target=document.getElementById(location.hash.slice(1));

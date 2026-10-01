@@ -163,7 +163,7 @@ Separately, test evaluator rejection paths: budget exhaustion at operation bound
 
 ## Primitives
 
-Calibration model **producer-normalize-v1**, the only implemented schedule. An opcode's charge is `BASE` plus the primitives its formula names (BIP 440 Cost Primitives and Opcode Costs, BIP 441 for the re-enabled opcodes). The prices themselves are in BIP 440, `src/script/varops.h` and the [report](report/joint-calibration.html).
+An opcode's charge is `BASE` plus the primitives its formula names (BIP 440 Cost Primitives and Opcode Costs, BIP 441 for the re-enabled opcodes). The prices themselves are in BIP 440, `src/script/varops.h` and the [report](report/joint-calibration.html).
 
 Notation: `W(n) = 8 ceil(n / 8)` is the word span of `n` bytes, `H(n) = 64 floor((n + 72) / 64)` the bytes a 64-byte-block hash processes, and `u ≥ v` limb counts. Fixture counts are those of one machine in the [`2026-10-01-full-runs`](data/2026-10-01-full-runs/) dataset; raw labels are the names in the artifacts.
 
@@ -262,7 +262,7 @@ Regression checks: `producer_lifetime_accounting` covers initial values, empty v
 
 ### Removed primitives
 
-Earlier models used primitives that producer-normalize-v1 replaced; older datasets and the archive use their names.
+Earlier cost models used other primitives; older datasets and the archive use their names.
 
 | Former | Replaced by |
 | --- | --- |
