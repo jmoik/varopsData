@@ -1,6 +1,6 @@
 # Varops calibration: methodology
 
-The complete method behind the BIP 440 cost primitives. After defining the primitives it follows the order of [BIP 440 Appendix A](https://github.com/jmoik/bips/blob/gsr-full/bip-0440.mediawiki#appendix-a-cost-derivation-methodology), which summarizes it. The [README](README.md) gives the overview and the commands to reproduce a calibration.
+The complete method behind the BIP 440 cost primitives. [BIP 440's Derivation of Costs](https://github.com/jmoik/bips/blob/gsr-full/bip-0440.mediawiki#derivation-of-costs) summarizes it. The [README](README.md) gives the overview and the commands to reproduce a calibration.
 
 ## Primitives
 
@@ -191,7 +191,7 @@ Zero and values already at a step stay unchanged. Coverage of the machines comes
 
 Rates are fitted per byte of `n` and charged per byte of the padded span the operation processes: `W(n)` for PREPARE, WRITE, READ, ARITH and BIT, `H(n)` for the hashes, and per counted item elsewhere. Since `W(n) ≥ n`, this never charges less than the fit. Every rate is a whole number of varops, so PREPARE's rate, fitted far below one varop per byte, is charged well above its fit on large operands.
 
-**SIGCHECK** is exempt from fitting and rounding: it stays 500,000, matching the existing 50-weight-unit signature allowance. Where the reference is itself signature-bound, fitted verification approaches 500,000, so signature-heavy scripts run at about 1.0 times the reference; the budget then admits as many signatures as existing scripts. The benchmarks time uncached production Schnorr verification on valid signatures and separate the modeled challenge-hash contribution; the fitted residual does not replace the policy price. Transaction-message construction is not measured; the fixed allowance covers it by design.
+**SIGCHECK** is exempt from fitting and rounding: it stays 500,000, matching the existing 50-weight-unit signature allowance. Where the reference is itself signature-bound, verification fitted at 1.0 times the reference approaches 500,000, so signature-heavy scripts run at about 1.0 times the reference rather than 0.9; the budget then admits as many signatures as existing scripts. The benchmarks time uncached production Schnorr verification on valid signatures and separate the modeled challenge-hash contribution; the fitted residual does not replace the policy price. Transaction-message construction is not measured; the fixed allowance covers it by design.
 
 Upward rounding is not a guarantee of timing coverage: rounded compositions are checked with complete scripts on every machine, and their overflow bounds verified.
 
@@ -235,5 +235,5 @@ The implementation (gsr `7d0c293b64`) prices every primitive from the six-machin
 
 ### Open items
 
-- Update BIP 440 to these prices; the published draft still lists earlier ones.
+- Publish the BIP 440 update with these prices; the published draft still lists earlier ones.
 - To do before finalizing: add a non-Apple ARM64 machine and a low-end home-node device; run the complete realistic and full-varops suite and its validation on every admitted machine; finalize the WRITE price with complete storage-lifetime and script benchmarks, since buffer-growth measurements depend strongly on allocation history; set and test a separate peak-memory bound.

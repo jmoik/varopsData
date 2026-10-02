@@ -16,7 +16,7 @@ How the costs of Tapleaf 0xC2 operations are measured and priced. [BIP 440](http
 
 Formulas stay simple: a cheap path may be over-charged, and a formula changes only when complete scripts exceed the requirement. Machines are admitted by fixed criteria (release builds of supported platforms, idle, full settings), never by their results.
 
-The details of every step, each primitive's measurements and the acceptance statistics are in [METHODOLOGY.md](METHODOLOGY.md). [BIP 440 Appendix A](https://github.com/jmoik/bips/blob/gsr-full/bip-0440.mediawiki#appendix-a-cost-derivation-methodology) summarizes them.
+The details of every step, each primitive's measurements and the acceptance statistics are in [METHODOLOGY.md](METHODOLOGY.md). [BIP 440's Derivation of Costs](https://github.com/jmoik/bips/blob/gsr-full/bip-0440.mediawiki#derivation-of-costs) summarizes them.
 
 ## Machines
 

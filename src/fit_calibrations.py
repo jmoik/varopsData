@@ -652,7 +652,7 @@ def fit_all(series, penalty):
     return fits
 
 
-# BIP 440 Appendix A quality gate, checked within every size decade of every path.
+# METHODOLOGY.md quality gate, checked within every size decade of every path.
 QUALITY_GATE = dict(max_rms_factor=1.10, within_factor=1.25, min_within_share=0.95)
 
 
