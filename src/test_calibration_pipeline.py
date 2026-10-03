@@ -177,6 +177,18 @@ class CalibrationPipelineTests(unittest.TestCase):
         self.assertEqual(len(result['unmatched']), 1)
         self.assertEqual(result['checked'], 1)
 
+    def test_bench_sources_share_one_commit(self):
+        raw = b'bench\n'
+        bench = dict(head='b' * 40, source_sha256={'bench/bench_varops.cpp': hashlib.sha256(raw).hexdigest()})
+        self.assertIsNone(calibration.check_bench_sources([dict(file='old.json')]))
+        with patch.object(calibration.subprocess, 'check_output', return_value=raw):
+            result = calibration.check_bench_sources([dict(file='a.json', bench=bench), dict(file='b.json', bench=bench)])
+        self.assertEqual((result['unmatched'], result['checked']), ([], 2))
+        with self.assertRaises(ValueError):
+            calibration.check_bench_sources([dict(file='a.json', bench=bench), dict(file='b.json', bench=dict(bench, head='c' * 40))])
+        with self.assertRaises(ValueError):
+            calibration.check_bench_sources([dict(file='a.json', bench=bench), dict(file='old.json')])
+
     def load(self, data):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)/'synthetic.json'

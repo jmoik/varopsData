@@ -71,6 +71,21 @@ def check_source_snapshots(root, machines):
                      'Unmatched hashes require the original source bytes for review.')
 
 
+def check_bench_sources(machines):
+    """Check that every machine ran this repository's benchmarks from one recorded commit.
+
+    None when no artifact records them: runners in the gsr branch built the benchmarks
+    from gsr sources, which source_sha256 covers."""
+    benches = [machine.get('bench') for machine in machines]
+    if not any(benches):
+        return None
+    if not all(benches) or len({bench['head'] for bench in benches}) != 1:
+        raise ValueError('inputs were measured with benchmarks from different varopsData commits')
+    return check_source_snapshots(Path(__file__).resolve().parents[1], [
+        dict(file=machine['file'], head=bench['head'], source_sha256=bench['source_sha256'])
+        for machine, bench in zip(machines, benches)])
+
+
 def word(n):
     return (n + 7) // 8 * 8
 
@@ -195,7 +210,7 @@ def load_calibration(path):
                 # Earlier runners recorded the commit with their local fit.
                 head=data.get("head") or data.get("fitting", {}).get("metadata", {}).get("head"),
                 fixture_count=len(points), reference_seconds=data["normalization"]["local_pre_v2_worst_seconds"],
-                varops_per_nanosecond=rate, source_sha256=data["source_sha256"],
+                varops_per_nanosecond=rate, source_sha256=data["source_sha256"], bench=data.get("bench"),
                 conditions=data.get("conditions"), epoch_noise=epoch_noise(data["primitive_samples"]))
     return points, meta
 
@@ -847,6 +862,10 @@ def main():
     if unmatched and not args.allow_source_mismatch:
         names = ", ".join(sorted({item["path"] for item in unmatched}))
         raise ValueError(f"source differences remain after LF/CRLF normalization: {names}")
+    bench_check = check_bench_sources(machines)
+    if bench_check and bench_check["unmatched"]:
+        names = ", ".join(sorted({item["path"] for item in bench_check["unmatched"]}))
+        raise ValueError(f"benchmark sources differ from their recorded varopsData commit: {names}")
     if any(fixtures != fixture_sets[0] for fixtures in fixture_sets[1:]):
         raise ValueError("inputs have different fixture sets")
     models = independent_models(paths)
@@ -861,7 +880,7 @@ def main():
                   schedule_combination="Envelope of machine curves, each fitted independently from the samples recorded on that machine after same-machine normalization (see envelope_combination); DIVCORE rows are trimmed-length quotient rows, fitted as fixed + step + cell. Round after combining; SIG remains fixed at 500000. Coefficientwise maxima are kept for comparison.",
                   envelope_combination=ENVELOPE,
                   method=f"Per-machine median of raw fixture epochs, normalized so that a full 40-billion-varop budget of fitted work takes {TARGET_FRACTION:g}× the recorded local pre-v2 reference (rate derived from the recorded reference time, whatever normalization the artifact was collected with); equal path-group and size-decade weights; weighted squared log error with a 100× underprediction penalty; nonnegative predefined coefficients; no coefficient rounding. SIG diagnostic fits do not replace the fixed 500000 allowance.",
-                  machines=machines, source_check=source_check,
+                  machines=machines, source_check=source_check, bench_check=bench_check,
                   schedule_rounding=dict(coefficient="flats to a multiple of 10 below 100 and of 50 from 100, and to no more than two significant figures; rates to two significant figures, and at least to a whole varop", sig_policy=500000,
                                          rule="Ceiling each coefficient independently: flats to a multiple of 10 below 100 and of 50 from 100, never to more than two significant figures; rates (per byte of W(n) or H(n) or per counted item) to two significant figures and at least to a whole varop; preserve zero/exact multiples; no refitting.",
                                          status="Installed as provisional research candidate; source discrepancy and multi-machine script confirmation remain open."),

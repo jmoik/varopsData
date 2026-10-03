@@ -4,3 +4,6 @@ __pycache__/
 *.bak*
 # run_calibration.py writes here when run without --output
 primitive-calibration/
+# run_calibration.py writes these when run without --output or --work-dir
+calibration-intermediate/
+varop-calibration.json

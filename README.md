@@ -33,9 +33,11 @@ The current dataset, [`data/2026-10-01-full-runs-one-deduction`](data/2026-10-01
 
 ## Reproduce
 
-On each machine, from a checkout of the `gsr` branch (45–60 minutes):
+On each machine, from a checkout of the `gsr` branch, with this repository checked out beside it (45–60 minutes):
 
-    python3 dev/varops/primitive-calibration/run_calibration.py --output varop-calibration-<machine>-full.json
+    python3 <varopsData>/src/run_calibration.py --output varop-calibration-<machine>-full.json
+
+It builds the benchmarks in `bench/` inside the gsr checkout with Core's own flags (see `bench/README.md`).
 
 Put the artifacts in a new folder under `data/`, then fit, render and test (Python 3, standard library only):
 
@@ -51,7 +53,8 @@ Put the artifacts in a new folder under `data/`, then fit, render and test (Pyth
 | `data/2026-10-01-full-runs-one-deduction/` | Current dataset: full runs on six machines after the one-deduction-per-opcode change; the prices come from its fit. |
 | `data/2026-10-01-full-runs/` | Full runs on five machines (no M4 Pro), before that change. |
 | `report/joint-calibration.html` | The report, rendered from the current dataset. |
-| `src/` | Fitting (`fit_calibrations.py`), the report (`render_joint_calibration.py`, `restyle_report.py`) and tests. |
+| `bench/` | The benchmarks, `bench_varops` (complete scripts) and `bench_varops_primitives` (cost primitives), built into a gsr checkout. |
+| `src/` | The calibration runner (`run_calibration.py`), fitting (`fit_calibrations.py`), the report (`render_joint_calibration.py`, `restyle_report.py`) and tests. |
 | `METHODOLOGY.md` | The full method. |
 
 Earlier datasets, such as the 3-epoch runs of 2026-09-30, remain in the Git history (last in `0f5c9fa`). Each folder in `data/` holds one artifact per machine with every raw sample, the joint fit, the fit log, a source audit and a README with the run details.
