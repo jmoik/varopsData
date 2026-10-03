@@ -41,7 +41,7 @@ Rates are fitted per byte of `n` and charged per byte of `W(n)` or `H(n)` (see [
 - Lock checks pay BASE plus their operands' preparation and scans. PREPARE and NORMALIZE keep their own flats rather than inflating BASE. A fitted rate may be zero.
 - Capacity and cache state are measurement conditions, never charge inputs.
 
-For each opcode the source path (calls, multiplicities, size features, branches, charge timing, storage ownership) is derived before looking at its timing; `bench_varops --coverage-manifest` exports the formula and the primitives of every opcode, and an independent charge calculator in `bench_varops --verify-costs` must agree with the meter. Agreement shows accounting, not timing coverage: complete-script benchmarks check that.
+For each opcode the source path (calls, multiplicities, size features, branches, charge timing, storage ownership) is derived before looking at its timing; `bench_varops --coverage-manifest` exports the formula and the primitives of every opcode. `bench_varops --verify-costs` runs every Tapleaf 0xC2 case at its exact consumed budget and at one varop less, and checks one-to-one and hash sequences against an independent charge calculator. Agreement shows accounting, not timing coverage: complete-script benchmarks check that.
 
 ## Calibration target
 
@@ -51,7 +51,7 @@ For each opcode the source path (calls, multiplicities, size features, branches,
 
 **Scope.** The claim covers script evaluation only: `EvalTapscriptV2` and its final-result check, or `EvalScript` and its clean-stack check for existing versions, including parsing, metering and execution. Transaction and block validation, Taproot commitment checks and signature-cache effects are not timed. Evaluation is serial; parallel block validation and shared-budget contention are outside the claim, and shared-budget accounting is covered by correctness tests.
 
-**The reference.** `T_pre` is the slowest successful workload of the Tapleaf 0xC0 panel that `bench_varops` measures on the same machine and build: 87 complete Tapleaf 0xC0 scripts and 80,000 raw Schnorr verifications. The panel covers signature checks (CHECKSIG, CHECKSIGVERIFY, CHECKSIGADD), repeated hashing of 1- and 520-byte elements (`3DUP` + three hashes), comparisons and arithmetic on 4-byte operands, stack operations, conditionals over 4 MB scripts, pushes and the 1,000-item initial stack. The slowest workload differs by machine: signature checks on some, repeated hashing of 520-byte elements on others (see the [README](README.md#machines)). Calibration runs measure the panel with the candidate build's Tapleaf 0xC0 evaluator. Validation uses a pinned pre-upgrade build for the reference, so a candidate slowdown of existing scripts cannot raise `T_pre` there.
+**The reference.** `T_pre` is the slowest successful workload of the Tapleaf 0xC0 panel that `bench_varops` measures on the same machine and build: 87 complete Tapleaf 0xC0 scripts. 80,000 raw Schnorr verifications are measured beside the panel for comparison and are not part of `T_pre`. The panel covers signature checks (CHECKSIG, CHECKSIGVERIFY, CHECKSIGADD), repeated hashing of 1- and 520-byte elements (`3DUP` + three hashes), comparisons and arithmetic on 4-byte operands, stack operations, conditionals over 4 MB scripts, pushes and the 1,000-item initial stack. The slowest workload differs by machine: signature checks on some, repeated hashing of 520-byte elements on others (see the [README](README.md#machines)). Calibration runs measure the panel with the candidate build's Tapleaf 0xC0 evaluator. Validation uses a pinned pre-upgrade build for the reference, so a candidate slowdown of existing scripts cannot raise `T_pre` there.
 
 **Two benchmark modes.**
 
@@ -66,7 +66,7 @@ For each opcode the source path (calls, multiplicities, size features, branches,
 | Complete script | The evaluator call plus its final-result check (`bench_varops`). | Test composition; accept or reject a schedule. |
 | Script sequence | The sum of the evaluator calls of a feasible multi-script workload, sharing a budget where required. | Cross-script state and budget effects. |
 
-Initial stacks, checkers, transaction context and budgets are prepared outside the timers. Work done inside the evaluator, including unmetered prescanning, is timed.
+Initial stacks, checkers, transaction context and budgets are prepared outside the timers. Work done inside the evaluator is timed. Tapleaf 0xC2 cases are timed through `EvalTapleaf0xC2`, including its unmetered prescanning; Tapleaf 0xC0 cases are timed through `EvalScript`, without the OP_SUCCESSx scan that precedes it.
 
 ## Machine selection
 
@@ -129,7 +129,7 @@ Each item names what is timed, its paths (the path groups that the fit weights e
 **Held-out checks**, measured but not fitted:
 
 - **Macro unrolling**: unrolling of inactive NOP, push and reference-chain bodies, against unrolled bytes per unit. The charge is BASE per substituted instruction or visited reference, plus WRITE of the unrolled script when the script declares macros; the measurements check it rather than price it.
-- **Lifetime checks**: numeric lifetimes from source to result with tight and spare capacity (`numeric`) and retained values under stack pressure (`retained`). They check that WRITE, PREPARE and NORMALIZE compose to cover complete lifetimes.
+- **Lifetime checks**: numeric lifetimes from source to result with tight and spare capacity (`numeric`). They check that WRITE, PREPARE and NORMALIZE compose to cover complete lifetimes.
 
 ## Fitting
 
@@ -147,7 +147,7 @@ Relative error treats small and large operations alike; the 100× penalty keeps 
 
 **Coverage of the charge.** The report lists every included measurement above its rounded charge, as `ratio = measured / charged`; above 1, a full budget of that operation alone would take longer than 0.9 times the reference. A measurement above its charge is a diagnostic finding; only complete scripts establish a limit violation.
 
-**Held-out checks.** Lifetime checks (numeric results with tight and spare capacity, retained values) and macro unrolling are measured but not fitted; they check that the composed charges cover complete lifetimes. `fit_calibrations.py` compares each lifetime with its machine's composed fit and lists those above it (`held_out_lifetimes` in the joint fit's diagnostics).
+**Held-out checks.** Lifetime checks (numeric results with tight and spare capacity) and macro unrolling are measured but not fitted; they check that the composed charges cover complete lifetimes. `fit_calibrations.py` compares each lifetime with its machine's composed fit and lists those above it (`held_out_lifetimes` in the joint fit's diagnostics).
 
 ## Simplicity and revising the basis
 
@@ -199,7 +199,7 @@ Upward rounding is not a guarantee of timing coverage: rounded compositions are 
 
 Primitive benchmarks do not replace complete-script benchmarks. The decisive check is the measured script-evaluation time of whole, feasible workloads under the actual metered evaluator, against the same run's reference.
 
-**The corpus.** `bench_varops` builds stack-neutral sequences repeated to the varops budget or the script-size limit, for every opcode, operand shape and boundary that its generators declare, in realistic and full-varops form. It includes preloaded witness operands, restoration, reusable bodies (macros), OP_TX, short-operand repetition, costly state lifetimes, rejection at operation boundaries, and low-varops work dominated by decoding, inactive regions or prescanning. Each family states its limiting resource; a case need not approach both the weight and the varops limit. Sequences of distinct scripts in one persistent process complement fresh-process runs, so allocator retention is not reset away. `bench_varops --verify-costs` checks every generated script's charge against an independent formula and the exact budget, without timing.
+**The corpus.** `bench_varops` builds stack-neutral sequences repeated to the varops budget or the script-size limit, for every opcode, operand shape and boundary that its generators declare, in realistic and full-varops form. It includes preloaded witness operands, restoration, reusable bodies (macros), OP_TX, short-operand repetition, costly state lifetimes, rejection at operation boundaries, and low-varops work dominated by decoding, inactive regions or prescanning. Each family states its limiting resource; a case need not approach both the weight and the varops limit. Sequences of distinct scripts in one persistent process complement fresh-process runs, so allocator retention is not reset away. `bench_varops --verify-costs` checks every generated Tapleaf 0xC2 script's outcome and exact budget, and the charges of one-to-one and hash sequences against an independent formula, without timing.
 
 **Searches.** A primitive grid can miss a feature region, so two searches complement the corpus:
 

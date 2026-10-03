@@ -308,7 +308,7 @@ def main():
             run(bench, *reference_args, "--file", reference_csv, "--coverage-manifest", composition_csv)
             reference = reference_rows(reference_csv)
             stage("reference")
-            run(primitives, "--reference-csv", reference_csv,
+            run(primitives, "--pre-v2-seconds", repr(reference["seconds"]),
                 "--epochs", str(args.epochs), "--sample-ms", str(args.sample_ms),
                 "--copy-sample-ms", str(args.copy_sample_ms), "--out", measurements_csv)
             stage("primitives")
@@ -336,9 +336,6 @@ def main():
         print(f"WARNING: all {args.attempts} attempts failed the measurement conditions; "
               "repeat this run before using it for pricing", flush=True)
     measurement_metadata, _ = read_csv(measurements_csv)
-    measured_reference = float(measurement_metadata["Reference_Script_Evaluation_Seconds"])
-    if not math.isclose(measured_reference, reference["seconds"], rel_tol=1e-12):
-        raise RuntimeError("the primitive and reference benchmarks selected different times")
     # 40 billion varops over this machine's own pre-v2 reference time. The
     # multi-machine fit applies its own target to the raw nanoseconds and the
     # reference, which the artifact retains.
