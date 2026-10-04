@@ -558,38 +558,39 @@ static uint64_t SuffixCost(const std::vector<valtype>& stack, size_t cleanup_ite
            varops::COST_READ_FIXED + varops::COST_READ * 8;
 }
 
-/**
- * Superseded BIP 441 byte-rate formulas. They only choose sizes for exploratory
- * crossover probes, whose saturation and cost are not asserted (see AddCostCrossovers).
- * They are not charges; candidate costs come from varops.h.
- */
-namespace legacy_sizing {
-constexpr uint64_t COST_FAST{2};
-constexpr uint64_t COST_COPYING{3};
-constexpr uint64_t COST_OTHER{4};
-constexpr uint64_t LengthConversionCost(size_t size) { return varops::WordSpan(size) * COST_FAST; }
-constexpr uint64_t CompareZeroCost(size_t size) { return varops::WordSpan(size) * COST_FAST; }
-constexpr uint64_t UnalignedUpShiftCost(size_t size, size_t prepended) { return varops::WordSpan(size + prepended) * COST_OTHER; }
-constexpr uint64_t WithinCost(size_t a, size_t b, size_t c)
+//! Lock times pass, as in BenchSignatureChecker; sizing evaluates no signatures.
+class SizingChecker final : public BaseSignatureChecker
 {
-    return (std::max(varops::WordSpan(a), varops::WordSpan(b)) + std::max(varops::WordSpan(a), varops::WordSpan(c))) * COST_FAST;
-}
-} // namespace legacy_sizing
+public:
+    bool CheckLockTime(const CScriptNum&) const override { return true; }
+    bool CheckSequence(const CScriptNum&) const override { return true; }
+};
 
-//! BASE per instruction plus a legacy rate per pushed byte. It only sizes
-//! crossover probes; operand work, such as a hash's, is in the probe's cost.
-static uint64_t SequenceExecutionCost(const CScript& sequence)
+//! The evaluator's charge for one `sequence` on `stack`, as CalibrateRepeatVarops
+//! measures it once the case exists.
+static uint64_t SequenceVarops(const CScript& sequence, const std::vector<valtype>& stack)
 {
-    uint64_t cost{0};
-    CScript::const_iterator pc{sequence.begin()};
-    while (pc != sequence.end()) {
-        opcodetype opcode;
-        valtype data;
-        if (!sequence.GetOp(pc, opcode, data)) throw std::runtime_error("invalid benchmark sequence");
-        // Only pushes carry data.
-        cost += varops::BaseCost() + data.size() * legacy_sizing::COST_COPYING;
+    CScript script{sequence};
+    script.insert(script.end(), stack.size(), static_cast<unsigned char>(OP_DROP));
+    script << OP_1;
+    ValtypeStack v2_stack{stack};
+    ScriptExecutionData execdata;
+    varops::Budget budget{TOTAL_VAROPS_BUDGET};
+    ScriptError error{SCRIPT_ERR_UNKNOWN_ERROR};
+    if (!EvalTapleaf0xC2(v2_stack, script, BENCH_SCRIPT_VERIFY_FLAGS, SizingChecker{}, execdata, budget, &error) ||
+        !CheckTapleaf0xC2ScriptResult(v2_stack, budget, &error)) {
+        throw std::runtime_error(strprintf("crossover sizing failed: %s", ScriptErrorString(error)));
     }
-    return cost;
+    return TOTAL_VAROPS_BUDGET - budget.Remaining() - SuffixCost(stack, stack.size());
+}
+
+//! Whether repeating a sequence that costs `sequence_cost` on `stack` fills the
+//! script before the budget, as Materialize decides it.
+static bool ScriptLimited(const CScript& sequence, const std::vector<valtype>& stack, uint64_t sequence_cost)
+{
+    if (sequence.empty() || stack.size() + 1 >= SCRIPT_BYTES) throw std::runtime_error("invalid crossover sequence");
+    const uint64_t script_limit{(SCRIPT_BYTES - stack.size() - 1) / sequence.size()};
+    return sequence_cost == 0 || (TOTAL_VAROPS_BUDGET - SuffixCost(stack, stack.size())) / sequence_cost >= script_limit;
 }
 
 static valtype PaddedNumber(uint64_t value, size_t size)
@@ -659,41 +660,32 @@ static bool InitialStackAllowed(ExecutionDomain domain, const std::vector<valtyp
     return true;
 }
 
-static SaturationBoundaries FindCrossoverPair(size_t sequence_bytes, size_t cleanup_items, size_t maximum,
-                                              const std::function<uint64_t(size_t)>& sequence_cost)
+//! The largest script-limited operand size and the next size, which the budget
+//! limits, for a predicate that holds up to the crossover and fails after it.
+//! Sizes double from 1 before the bisection, so the predicate only sees sizes up
+//! to twice the crossover.
+static SaturationBoundaries FindCrossoverPair(size_t maximum, const std::function<bool(size_t)>& script_limited)
 {
-    if (sequence_bytes == 0 || cleanup_items + 1 >= SCRIPT_BYTES || maximum < 2) {
-        throw std::runtime_error("invalid crossover search bounds");
+    if (maximum < 2) throw std::runtime_error("invalid crossover search bounds");
+    // A new candidate can move the crossover outside the legal size range.
+    // Retain endpoint probes without inventing a transition.
+    if (!script_limited(1)) {
+        return {{{1, SaturationExpectation::VAROPS_BUDGET}, {maximum, SaturationExpectation::VAROPS_BUDGET}}};
     }
-    const uint64_t script_limit{(SCRIPT_BYTES - cleanup_items - 1) / sequence_bytes};
-    const uint64_t suffix_cost{
-        (cleanup_items + 1) * varops::BaseCost() + legacy_sizing::CompareZeroCost(1)};
-    const uint64_t available_budget{TOTAL_VAROPS_BUDGET - suffix_cost};
-    const auto script_limited = [&](size_t size) {
-        const uint64_t cost{sequence_cost(size)};
-        return cost == 0 || available_budget / cost >= script_limit;
-    };
-    if (!script_limited(1) || script_limited(maximum)) {
-        // A new candidate can move the crossover outside the legal size range.
-        // Retain endpoint probes without inventing a transition.
-        const auto bound = [&](size_t size) {
-            return script_limited(size) ? SaturationExpectation::SCRIPT_BYTES : SaturationExpectation::VAROPS_BUDGET;
-        };
-        return {{{1, bound(1)}, {maximum, bound(maximum)}}};
-    }
-
     size_t low{1};
-    size_t high{maximum};
-    while (low < high) {
-        const size_t mid{low + (high - low) / 2};
-        if (script_limited(mid)) {
-            low = mid + 1;
-        } else {
-            high = mid;
+    size_t high{2};
+    while (script_limited(high)) {
+        if (high == maximum) {
+            return {{{1, SaturationExpectation::SCRIPT_BYTES}, {maximum, SaturationExpectation::SCRIPT_BYTES}}};
         }
+        low = high;
+        high = std::min(maximum, 2 * high);
     }
-    return {{{low - 1, SaturationExpectation::SCRIPT_BYTES},
-             {low, SaturationExpectation::VAROPS_BUDGET}}};
+    while (high - low > 1) {
+        const size_t mid{low + (high - low) / 2};
+        (script_limited(mid) ? low : high) = mid;
+    }
+    return {{{low, SaturationExpectation::SCRIPT_BYTES}, {high, SaturationExpectation::VAROPS_BUDGET}}};
 }
 
 static std::string_view SaturationName(SaturationExpectation expectation) { return expectation == SaturationExpectation::SCRIPT_BYTES ? "script-bytes" : "varops-budget"; }
@@ -716,7 +708,7 @@ static void RunBoundarySelfChecks()
               !InitialStackAllowed(ExecutionDomain::PRE_GSR_TAPSCRIPT, {valtype(521)}) &&
               InitialStackAllowed(ExecutionDomain::GSR_TAPLEAF_0XC2, {valtype(521)}),
           "internal initial-stack boundary classification failed");
-    const auto crossover{FindCrossoverPair(1, 1, 10'000, [](size_t size) { return 2 * size; })};
+    const auto crossover{FindCrossoverPair(10'000, [](size_t size) { return size <= 5'000; })};
     Check(crossover[0].first == 5'000 && crossover[1].first == 5'001,
           "internal crossover classification failed");
     Check(6 * MAX_THREE_WAY_ELEMENT_SIZE + 1 <= MAX_TAPLEAF_0XC2_TOTAL_STACK_SIZE &&
@@ -1135,21 +1127,23 @@ static void AddPreAndV2Cases(std::vector<CaseSpec>& specs, opcodetype opcode,
 }
 
 /**
- * Probe sizes around the estimated crossover from script-byte to varops-budget
- * saturation. The estimate only sizes the probes; their saturation and cost are
- * not asserted. A cost that excludes BASE gets the sequence's execution cost added.
+ * Probe both sides of the crossover from script-byte to varops-budget saturation,
+ * with one sequence's charge from the evaluator, and assert each side.
  */
-template <typename Cost, typename Stack, typename Shape>
+template <typename Operands, typename Shape>
 static void AddCostCrossovers(std::vector<CaseSpec>& specs, opcodetype opcode,
                               std::string_view label, std::string_view pattern,
-                              const CScript& sequence, size_t cleanup_items, size_t maximum,
-                              bool cost_includes_base, Cost cost, Stack stack, Shape shape)
+                              const CScript& sequence, size_t maximum, Operands operands, Shape shape)
 {
-    const uint64_t execution_cost{cost_includes_base ? 0 : SequenceExecutionCost(sequence)};
-    const auto total_cost = [&](size_t size) { return execution_cost + cost(size); };
-    for (const auto& boundary : FindCrossoverPair(sequence.size(), cleanup_items, maximum, total_cost)) {
-        AddCase(specs, opcode, HeadlineRole::NEW_GSR, std::string{label}, shape(boundary.first),
-                std::string{pattern}, sequence, stack(boundary.first));
+    const auto script_limited = [&](size_t size) {
+        const std::vector<valtype> stack{operands(size)};
+        return ScriptLimited(sequence, stack, SequenceVarops(sequence, stack));
+    };
+    for (const auto& [size, saturation] : FindCrossoverPair(maximum, script_limited)) {
+        CaseOptions options;
+        options.expected_saturation = saturation;
+        AddCase(specs, opcode, HeadlineRole::NEW_GSR, std::string{label}, shape(size),
+                std::string{pattern}, sequence, FixedStack(operands(size)), std::move(options));
     }
 }
 
@@ -1239,7 +1233,6 @@ static uint64_t OneToOneSequenceCost(opcodetype opcode, size_t size, bool three_
     }
 }
 
-static uint64_t TruthCopyCost(size_t size) { return size * legacy_sizing::COST_COPYING + legacy_sizing::CompareZeroCost(size); }
 static StackFactory OneToOneStack(size_t size, std::string_view pattern, bool three_way) { return FixedStack(std::vector<valtype>(three_way ? 3U : 1U, PatternBytes(size, pattern))); }
 
 static void AddOneToOneSpec(std::vector<CaseSpec>& specs, opcodetype opcode, HeadlineRole role,
@@ -1264,10 +1257,11 @@ static void AddOneToOneCrossovers(std::vector<CaseSpec>& specs, opcodetype opcod
                                   size_t maximum, bool three_way)
 {
     const CScript sequence{OneToOneSequence(opcode, three_way)};
-    const auto cost{[=](size_t size) {
-        return OneToOneSequenceCost(opcode, size, three_way, pattern);
+    const auto script_limited{[&](size_t size) {
+        return ScriptLimited(sequence, std::vector<valtype>(three_way ? 3U : 1U, PatternBytes(size, pattern)),
+                             OneToOneSequenceCost(opcode, size, three_way, pattern));
     }};
-    for (const auto& boundary : FindCrossoverPair(sequence.size(), three_way ? 3 : 1, maximum, cost)) {
+    for (const auto& boundary : FindCrossoverPair(maximum, script_limited)) {
         AddOneToOneSpec(specs, opcode, role, label, boundary.first, std::string{pattern}, three_way);
     }
 }
@@ -1398,7 +1392,8 @@ static void AddStackOpcodeCases(std::vector<CaseSpec>& specs, opcodetype opcode)
     };
     // Grow the stack to its item limit in one execution, then drop the
     // copies. Later repetitions in the same execution would reuse the stack's
-    // capacity, so each execution repeats this only once.
+    // capacity, so each execution grows it once, and executions repeat, as
+    // inputs, until the budget is spent.
     const auto add_growth_case = [&](CScript step, size_t pushed, size_t initial_items) {
         const size_t steps{(MAX_TAPLEAF_0XC2_STACK_SIZE - initial_items) / pushed};
         CScript sequence;
@@ -1407,6 +1402,7 @@ static void AddStackOpcodeCases(std::vector<CaseSpec>& specs, opcodetype opcode)
         if (steps * pushed % 2) sequence << OP_DROP;
         CaseOptions options;
         options.max_repetitions = 1;
+        options.repeat_evaluations = true;
         options.sequence_label = strprintf("%ux(%s)+drops", steps, SequenceOpcodeNames(step));
         AddCase(specs, opcode, HeadlineRole::NEW_GSR, "stack-growth",
                 strprintf("%u-items", initial_items + steps * pushed), "1B-items", std::move(sequence),
@@ -1452,8 +1448,10 @@ static void AddStackOpcodeCases(std::vector<CaseSpec>& specs, opcodetype opcode)
                 "ifdup-false", "520B", "zero", false_sequence,
                 FixedStack({PatternBytes(520, "zero")}));
 
-        AddCostCrossovers(specs, opcode, "ifdup-true-crossover", "late-nonzero", true_sequence, 1, MAX_TAPLEAF_0XC2_STACK_ELEMENT_SIZE, /*cost_includes_base=*/false, TruthCopyCost, [](size_t size) { return FixedStack({PatternBytes(size, "late-nonzero")}); }, FormatBytes);
-        AddCostCrossovers(specs, opcode, "ifdup-false-crossover", "zero", false_sequence, 1, MAX_TAPLEAF_0XC2_STACK_ELEMENT_SIZE, /*cost_includes_base=*/false, TruthCopyCost, [](size_t size) { return FixedStack({PatternBytes(size, "zero")}); }, FormatBytes);
+        AddCostCrossovers(specs, opcode, "ifdup-true-crossover", "late-nonzero", true_sequence, MAX_TAPLEAF_0XC2_STACK_ELEMENT_SIZE,
+                          [](size_t size) { return std::vector<valtype>{PatternBytes(size, "late-nonzero")}; }, FormatBytes);
+        AddCostCrossovers(specs, opcode, "ifdup-false-crossover", "zero", false_sequence, MAX_TAPLEAF_0XC2_STACK_ELEMENT_SIZE,
+                          [](size_t size) { return std::vector<valtype>{PatternBytes(size, "zero")}; }, FormatBytes);
         AddCase(specs, opcode, HeadlineRole::NEW_GSR,
                 "ifdup-true-scale-tail", "4MB", "late-nonzero", true_sequence,
                 FixedStack({PatternBytes(MAX_TAPLEAF_0XC2_STACK_ELEMENT_SIZE, "late-nonzero")}));
@@ -1721,8 +1719,12 @@ static void AddSpliceCases(std::vector<CaseSpec>& specs, opcodetype opcode)
     // Leave room for the script and transaction overhead in a 4 MWU block.
     constexpr size_t funded_data_size{3'950'000};
     const CScript sequence{Ops({OP_2DUP, opcode, OP_DROP})};
+    // A result is copied out of the copied input's buffer once that buffer holds
+    // more than twice its padded length (ValtypeStack::push_back): "mid" keeps the
+    // buffer, and "below-mid", a word shorter, and "quarter" copy.
     for (const auto& [offset, label] : std::vector<std::pair<uint64_t, std::string>>{
-             {0, "zero"}, {1, "one"}, {funded_data_size / 2, "mid"}, {funded_data_size, "end"}, {funded_data_size + 1, "past-end"}}) {
+             {0, "zero"}, {1, "one"}, {funded_data_size / 4, "quarter"}, {funded_data_size / 2 - 8, "below-mid"},
+             {funded_data_size / 2, "mid"}, {funded_data_size, "end"}, {funded_data_size + 1, "past-end"}}) {
         const size_t numeric_size{label == "past-end" ? 521U : 8U};
         AddCase(specs, opcode, HeadlineRole::NEW_GSR,
                 "splice-preserve", FormatBytes(funded_data_size) + ":" + label,
@@ -1778,14 +1780,12 @@ static void AddMulCases(std::vector<CaseSpec>& specs, opcodetype opcode)
         const auto right_size{[ratio](size_t left) {
             return ratio == 0 ? size_t{1} : std::max<size_t>(1, left / ratio);
         }};
-        const auto sequence_cost{[&](size_t left) {
-            return MulSequenceCost(left, right_size(left));
-        }};
         const std::string pattern{ratio == 1 ? "balanced-dense" :
                                   ratio == 0 ? "asymmetric-one-byte" :
                                                strprintf("asymmetric-%u-to-1", ratio)};
-        AddCostCrossovers(specs, opcode, "mul-crossover", pattern, sequence, 2, 2'000'000, /*cost_includes_base=*/true, sequence_cost, [&](size_t left) { return FixedStack({PatternBytes(left, "alternating"),
-                                                                                                                                                PatternBytes(right_size(left), "late-nonzero")}); }, [&](size_t left) { return FormatBytes(left) + "x" + FormatBytes(right_size(left)); });
+        AddCostCrossovers(specs, opcode, "mul-crossover", pattern, sequence, 2'000'000,
+                          [&](size_t left) { return std::vector<valtype>{PatternBytes(left, "alternating"), PatternBytes(right_size(left), "late-nonzero")}; },
+                          [&](size_t left) { return FormatBytes(left) + "x" + FormatBytes(right_size(left)); });
     }
     constexpr size_t tail_left{2'000'000};
     constexpr size_t tail_right{1};
@@ -1937,15 +1937,15 @@ static void AddDivModCases(std::vector<CaseSpec>& specs, opcodetype opcode)
         const auto divisor_size{[&](size_t dividend) {
             return rectangular.ratio == 0 ? size_t{1} : std::max<size_t>(1, dividend / rectangular.ratio);
         }};
-        const auto sequence_cost{[&](size_t dividend) {
-            return DivModSequenceCost(dividend, divisor_size(dividend));
-        }};
-        AddCostCrossovers(specs, opcode, "divmod-crossover", rectangular.name, sequence, 2, 2'000'000, /*cost_includes_base=*/true, sequence_cost, [&](size_t dividend) {
+        AddCostCrossovers(specs, opcode, "divmod-crossover", rectangular.name, sequence, 2'000'000,
+                          [&](size_t dividend) {
                               const size_t size{divisor_size(dividend)};
                               valtype divisor{rectangular.pattern == DivisorPattern::TOP_CLEAR ? DivisorTopClear(size) :
                                               rectangular.pattern == DivisorPattern::TOP_LIMB_ONE ? DivisorTopLimbOne(size) :
                                                                                                    PatternBytes(size, "dense")};
-                              return FixedStack({PatternBytes(dividend, "dense"), std::move(divisor)}); }, [&](size_t dividend) { return FormatBytes(dividend) + "x" + FormatBytes(divisor_size(dividend)); });
+                              return std::vector<valtype>{PatternBytes(dividend, "dense"), std::move(divisor)};
+                          },
+                          [&](size_t dividend) { return FormatBytes(dividend) + "x" + FormatBytes(divisor_size(dividend)); });
     }
     constexpr size_t tail_dividend{65536};
     constexpr size_t tail_divisor{16384};
@@ -1967,21 +1967,6 @@ static void AddDivModCases(std::vector<CaseSpec>& specs, opcodetype opcode)
             VaropsRejection());
 }
 
-static uint64_t ShiftSequenceCost(opcodetype opcode, size_t size, uint64_t shift)
-{
-    const size_t shift_size{Val64(shift).MoveToValtype().size()};
-    const uint64_t copy_cost{(size + shift_size) * legacy_sizing::COST_COPYING};
-    const uint64_t prebytes{shift / 8};
-    if (opcode == OP_RSHIFT) {
-        return copy_cost + legacy_sizing::LengthConversionCost(shift_size) +
-               (prebytes < size ? size - prebytes : 0) * legacy_sizing::COST_COPYING;
-    }
-    if (opcode != OP_LSHIFT) throw std::runtime_error("unsupported shift opcode");
-    return copy_cost + legacy_sizing::LengthConversionCost(shift_size) + prebytes * legacy_sizing::COST_FAST +
-           size * legacy_sizing::COST_COPYING +
-           (shift % 8 == 0 ? 0 : legacy_sizing::UnalignedUpShiftCost(size, prebytes));
-}
-
 static void AddShiftCases(std::vector<CaseSpec>& specs, opcodetype opcode)
 {
     const CScript sequence{Ops({OP_2DUP, opcode, OP_DROP})};
@@ -1994,11 +1979,9 @@ static void AddShiftCases(std::vector<CaseSpec>& specs, opcodetype opcode)
                 FixedStack({PatternBytes(size, "late-nonzero"), Val64(shift).MoveToValtype()}));
     }
     for (uint64_t shift : {8U, 65U}) {
-        const auto sequence_cost{[opcode, shift](size_t size) {
-            return ShiftSequenceCost(opcode, size, shift);
-        }};
-        AddCostCrossovers(specs, opcode, "shift-crossover", shift % 8 == 0 ? "byte-aligned" : "unaligned", sequence, 2, 2'000'000, /*cost_includes_base=*/false, sequence_cost, [=](size_t size) { return FixedStack({PatternBytes(size, "late-nonzero"),
-                                                                                                                                                                                        Val64(shift).MoveToValtype()}); }, [=](size_t size) { return FormatBytes(size) + ":" + strprintf("%ubits", shift); });
+        AddCostCrossovers(specs, opcode, "shift-crossover", shift % 8 == 0 ? "byte-aligned" : "unaligned", sequence, 2'000'000,
+                          [=](size_t size) { return std::vector<valtype>{PatternBytes(size, "late-nonzero"), Val64(shift).MoveToValtype()}; },
+                          [=](size_t size) { return FormatBytes(size) + ":" + strprintf("%ubits", shift); });
     }
     constexpr size_t tail_size{2'000'000};
     constexpr uint64_t tail_shift{1};
@@ -2063,8 +2046,6 @@ static void AddSignatureCases(std::vector<CaseSpec>& specs, opcodetype opcode)
             FixedCase(SCRIPT_ERR_SCHNORR_SIG, 1, 0, "semantic-failure"));
 }
 
-static uint64_t TimelockSequenceCost(size_t size) { return legacy_sizing::LengthConversionCost(size); }
-
 static void AddTimelockCases(std::vector<CaseSpec>& specs, opcodetype opcode)
 {
     const CScript sequence{Ops({opcode})};
@@ -2077,7 +2058,8 @@ static void AddTimelockCases(std::vector<CaseSpec>& specs, opcodetype opcode)
                 "timelock-preserve", FormatBytes(size), "padded-one", sequence,
                 FixedStack({PaddedNumber(1, size)}));
     }
-    AddCostCrossovers(specs, opcode, "timelock-crossover", "padded-one", sequence, 1, MAX_TAPLEAF_0XC2_STACK_ELEMENT_SIZE, /*cost_includes_base=*/false, TimelockSequenceCost, [](size_t size) { return FixedStack({PaddedNumber(1, size)}); }, FormatBytes);
+    AddCostCrossovers(specs, opcode, "timelock-crossover", "padded-one", sequence, MAX_TAPLEAF_0XC2_STACK_ELEMENT_SIZE,
+                      [](size_t size) { return std::vector<valtype>{PaddedNumber(1, size)}; }, FormatBytes);
     AddCase(specs, opcode, HeadlineRole::NEW_GSR,
             "timelock-scale-tail", "4MB", "padded-one", sequence,
             FixedStack({PaddedNumber(1, MAX_TAPLEAF_0XC2_STACK_ELEMENT_SIZE)}));
@@ -2485,7 +2467,8 @@ static void AddControlAndFloorCases(std::vector<CaseSpec>& specs, opcodetype opc
         AddCase(specs, opcode, HeadlineRole::COMMON_V2,
                 "verify-preserve", "520B", "late-nonzero", sequence,
                 FixedStack({PatternBytes(520, "late-nonzero")}));
-        AddCostCrossovers(specs, opcode, "verify-crossover", "late-nonzero", sequence, 1, MAX_TAPLEAF_0XC2_STACK_ELEMENT_SIZE, /*cost_includes_base=*/false, TruthCopyCost, [](size_t size) { return FixedStack({PatternBytes(size, "late-nonzero")}); }, FormatBytes);
+        AddCostCrossovers(specs, opcode, "verify-crossover", "late-nonzero", sequence, MAX_TAPLEAF_0XC2_STACK_ELEMENT_SIZE,
+                          [](size_t size) { return std::vector<valtype>{PatternBytes(size, "late-nonzero")}; }, FormatBytes);
         AddCase(specs, opcode, HeadlineRole::NEW_GSR,
                 "verify-scale-tail", "4MB", "late-nonzero", sequence,
                 FixedStack({PatternBytes(MAX_TAPLEAF_0XC2_STACK_ELEMENT_SIZE, "late-nonzero")}));
@@ -2560,8 +2543,6 @@ static void AddSizeCases(std::vector<CaseSpec>& specs, opcodetype opcode)
     }
 }
 
-static uint64_t WithinSequenceCost(size_t size) { return 3 * size * legacy_sizing::COST_COPYING + legacy_sizing::WithinCost(size, size, size); }
-
 static void AddWithinCases(std::vector<CaseSpec>& specs, opcodetype opcode)
 {
     const CScript sequence{Ops({OP_3DUP, OP_WITHIN, OP_DROP})};
@@ -2570,8 +2551,9 @@ static void AddWithinCases(std::vector<CaseSpec>& specs, opcodetype opcode)
     AddCase(specs, opcode, HeadlineRole::NEW_GSR,
             "within-preserve", "521Bx521Bx521B", "inside-range-padded", sequence,
             FixedStack({PaddedNumber(2, 521), PaddedNumber(1, 521), PaddedNumber(3, 521)}));
-    AddCostCrossovers(specs, opcode, "within-crossover", "inside-range-padded", sequence, 3, MAX_THREE_WAY_ELEMENT_SIZE, /*cost_includes_base=*/false, WithinSequenceCost, [](size_t size) { return FixedStack({PaddedNumber(2, size), PaddedNumber(1, size),
-                                                                                                                                                                                  PaddedNumber(3, size)}); }, [](size_t size) { return FormatBytes(size) + "x" + FormatBytes(size) + "x" + FormatBytes(size); });
+    AddCostCrossovers(specs, opcode, "within-crossover", "inside-range-padded", sequence, MAX_THREE_WAY_ELEMENT_SIZE,
+                      [](size_t size) { return std::vector<valtype>{PaddedNumber(2, size), PaddedNumber(1, size), PaddedNumber(3, size)}; },
+                      [](size_t size) { return FormatBytes(size) + "x" + FormatBytes(size) + "x" + FormatBytes(size); });
     AddCase(specs, opcode, HeadlineRole::NEW_GSR,
             "within-scale-tail",
             FormatBytes(MAX_THREE_WAY_ELEMENT_SIZE) + "x" +
