@@ -25,6 +25,7 @@
 #include <secp256k1.h>
 #include <secp256k1_extrakeys.h>
 #include <secp256k1_schnorrsig.h>
+#include <serialize.h>
 #include <span.h>
 #include <tinyformat.h>
 #include <uint256.h>
@@ -632,6 +633,14 @@ static uint64_t StackPayloadBytes(const std::vector<valtype>& stack)
 
 static uint64_t StackFixtureBytes(const std::vector<valtype>& stack) { return StackPayloadBytes(stack) + uint64_t{stack.size()} * sizeof(valtype); }
 
+//! Witness bytes of the stack items and the control block of an input with this initial stack.
+static uint64_t InputWitnessBytes(const std::vector<valtype>& stack)
+{
+    uint64_t total{TAPROOT_CONTROL_BASE_SIZE + 1};
+    for (const valtype& item : stack) total += GetSizeOfCompactSize(item.size()) + item.size();
+    return total;
+}
+
 static void ReleaseAllocatorCaches()
 {
 #if defined(__APPLE__)
@@ -779,13 +788,15 @@ static EvalOutcome ExecutePrepared(const MaterializedCase& test_case, const Benc
     }
 
     bool success{true};
-    for (ValtypeStack& stack : execution.v2_stacks) {
-        // Each evaluation is a separate input with its own execution data.
+    while (success && !execution.v2_stacks.empty()) {
+        // Each evaluation is a separate input with its own execution data, and
+        // its stack is released before the next, as in input validation.
+        ValtypeStack& stack{execution.v2_stacks.front()};
         ScriptExecutionData execdata{execution.execdata};
         success = EvalTapleaf0xC2(stack, test_case.script, BENCH_SCRIPT_VERIFY_FLAGS,
                                   checker, execdata, *execution.budget, &error);
         if (success) success = CheckTapleaf0xC2ScriptResult(stack, *execution.budget, &error);
-        if (!success) break;
+        execution.v2_stacks.pop_front();
     }
     outcome.success = success;
     outcome.error = error;
@@ -4233,14 +4244,25 @@ static RepeatedMeasurement MeasureRepeated(opcodetype opcode, std::string shape,
         const double budget{double(TOTAL_VAROPS_BUDGET - result.initial)};
         const double charged{double(result.consumed - result.initial)};
         result.projected_sec = result.wall_sec * budget / charged;
-        // A block holds the repeated body either in a direct script, bounded by
-        // the budget and by its weight, or substituted from a macro, which pays
-        // BASE per substituted instruction and writes the unrolled script.
-        const double body_bytes{double(result.repetitions) * double(sequence_bytes)};
-        const double direct_scale{std::min(budget / charged, double(SCRIPT_BYTES) / body_bytes)};
-        const double unroll{double(result.repetitions) * double(instructions) * double(varops::BaseCost()) +
-                            double(varops::WriteCost(static_cast<size_t>(body_bytes)))};
-        result.reachable_sec = result.wall_sec * std::max(direct_scale, budget / (charged + unroll));
+        // A block holds the repeated body either in one direct script, in the
+        // weight its witness leaves, or substituted from macros, which pay BASE
+        // per substituted instruction, write the unrolled script and unroll at
+        // most MAX_TAPLEAF_0XC2_UNROLLED_SIZE per input. Each input carries its
+        // own witness.
+        const double repetitions{double(result.repetitions)};
+        const double sequence_size{double(sequence_bytes)};
+        const double witness{double(InputWitnessBytes(test_case.initial_stack))};
+        const double suffix{double(test_case.initial_stack.size() + 1)};
+        const double direct_repetitions{
+            std::floor(std::max(0.0, double(SCRIPT_BYTES) - witness - suffix) / sequence_size)};
+        const double direct_scale{std::min(budget / charged, direct_repetitions / repetitions)};
+        const double unroll{repetitions * double(instructions) * double(varops::BaseCost()) +
+                            double(varops::WriteCost(static_cast<size_t>(repetitions * sequence_size)))};
+        const double inputs{std::floor(double(SCRIPT_BYTES) / (witness + sequence_size + suffix))};
+        const double unrolled_repetitions{std::floor((MAX_TAPLEAF_0XC2_UNROLLED_SIZE - suffix) / sequence_size)};
+        const double macro_scale{std::min(budget / (charged + unroll),
+                                          inputs * unrolled_repetitions / repetitions)};
+        result.reachable_sec = result.wall_sec * std::max(direct_scale, macro_scale);
         result.ratio = result.projected_sec / options.reference_seconds;
         result.valid = true;
     } catch (const std::exception& exception) {
@@ -4785,7 +4807,8 @@ static bool WriteProgramResults(const Options& options, const std::vector<Progra
                      options.reference_seconds, options.search_budget, options.search_seed,
                      options.search_samples, options.search_seconds, options.search_top, options.stable_rounds)
         << "# projected = wall * (40e9 - initial) / (consumed - initial); reachable = the same work\n"
-        << "# limited by a direct script's weight or by macro unrolling charges; ratio = reachable / reference_seconds\n"
+        << "# limited by the weight one direct script's witness leaves, or by macro unrolling charges and\n"
+        << "# the unrolled size of the inputs whose witnesses fit; ratio = reachable / reference_seconds\n"
         << "phase,lead_opcode,program,sequence,valid,reason,repetitions,varops_consumed,initial_varops,"
            "wall_seconds,projected_full_budget_seconds,reachable_full_block_seconds,ratio,features\n";
     for (const ProgramResult& result : log) {
@@ -4822,8 +4845,9 @@ static void WriteCorpusProgram(const fs::path& directory, const Program& program
 
 //! Keep only the programs that are slowest for some feature, so that reloading
 //! the corpus stays bounded by the number of features. Only the superseded files
-//! this search loaded or wrote are removed: files it did not read, such as those
-//! left at the deadline or unreadable ones, are left alone.
+//! this search loaded or wrote are removed: files it did not measure, such as
+//! those left at the deadline, unreadable ones or those using opcodes outside the
+//! selection, are left alone.
 static size_t TrimCorpus(const fs::path& directory, const std::vector<const Program*>& programs,
                          const std::set<std::string>& seen)
 {
@@ -4921,7 +4945,7 @@ static bool RunProgramSearch(const Options& options, const CryptoFixture& fixtur
             if (entry.is_regular_file()) files.emplace_back(entry.path());
         }
         std::sort(files.begin(), files.end());
-        size_t unreadable{0};
+        size_t unreadable{0}, unselected{0};
         for (const fs::path& path : files) {
             if (Clock::now() >= deadline) break;
             std::ifstream in{path.std_path()};
@@ -4932,12 +4956,19 @@ static bool RunProgramSearch(const Options& options, const CryptoFixture& fixtur
                 ++unreadable;
                 continue;
             }
+            if (!std::ranges::all_of(program->steps, [&](const ProgramStep& step) {
+                    return std::ranges::find(opcodes, step.opcode) != opcodes.end();
+                })) {
+                ++unselected;
+                continue;
+            }
             corpus_seen.insert(fs::PathToString(path.filename()));
             try_program(*program, "corpus");
         }
         if (!options.silent) {
-            std::cout << strprintf("program search: retained %u of %u corpus programs (%u unreadable) in %.0f s\n",
-                                   retained.size(), files.size(), unreadable, elapsed()) << std::flush;
+            std::cout << strprintf("program search: retained %u of %u corpus programs (%u unreadable, %u with "
+                                   "unselected opcodes) in %.0f s\n",
+                                   retained.size(), files.size(), unreadable, unselected, elapsed()) << std::flush;
         }
     }
     if (retained.empty()) {

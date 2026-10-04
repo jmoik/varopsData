@@ -125,7 +125,9 @@ def built_binary(name):
     if cmake_cache().get("CMAKE_CONFIGURATION_TYPES"):
         directory /= "Release"
     binary = directory / f"{name}{'.exe' if os.name == 'nt' else ''}"
-    sources = (*(ROOT / path for path in GSR_SOURCES), *BENCH_SOURCES)
+    # An incremental build relinks a binary only when its own source or the
+    # libraries it links change.
+    sources = (*(ROOT / path for path in GSR_SOURCES), BENCH / f"{name}.cpp")
     newest = max(sources, key=lambda path: path.stat().st_mtime)
     if not binary.exists() or binary.stat().st_mtime < newest.stat().st_mtime:
         raise RuntimeError(f"{binary} is missing or older than {newest}; the build did not produce it")
