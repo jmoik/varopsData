@@ -15,10 +15,10 @@
 #include <key.h>
 #include <primitives/transaction.h>
 #include <pubkey.h>
+#include <script/biguint.h>
 #include <script/interpreter.h>
 #include <script/script.h>
 #include <script/script_error.h>
-#include <script/val64.h>
 #include <script/valtype_stack.h>
 #include <script/varops.h>
 #include <script/verify_flags.h>
@@ -259,11 +259,11 @@ public:
     bool CheckLockTime(const CScriptNum&) const override { return true; }
     bool CheckSequence(const CScriptNum&) const override { return true; }
 
-    std::optional<ScriptTransactionData> GetTransactionData() const override
+    std::optional<op_tx::TxView> GetOpTxView() const override
     {
         if (!m_transaction) return std::nullopt;
         const CTransaction& tx{m_transaction->tx};
-        return ScriptTransactionData{static_cast<uint32_t>(tx.version), tx.vin, tx.vout,
+        return op_tx::TxView{static_cast<uint32_t>(tx.version), tx.vin, tx.vout,
                                      tx.nLockTime, 0, m_transaction->spent_outputs};
     }
 
@@ -1477,11 +1477,11 @@ static void AddStackOpcodeCases(std::vector<CaseSpec>& specs, opcodetype opcode)
     case OP_DEPTH: add_shared_case("depth-drop", Ops({OP_DEPTH, OP_DROP}), {PatternBytes(32, "dense")}); break;
     case OP_PICK: {
         add_shared_case("pick-depth-1", Ops({OP_DUP, OP_PICK, OP_DROP}),
-                        {PatternBytes(32, "dense"), PatternBytes(32, "alternating"), Val64(1).MoveToValtype()});
+                        {PatternBytes(32, "dense"), PatternBytes(32, "alternating"), BigUint(1).MoveToValtype()});
         AddCase(specs, opcode, HeadlineRole::NEW_GSR, "pick-max-depth-one-shot", "32768-items", "heterogeneous-buried", Ops({OP_PICK}), [](const CryptoFixture&) {
                         std::vector<valtype> stack(MAX_TAPLEAF_0XC2_STACK_SIZE - 1, valtype{0x01});
                         stack.front() = PatternBytes(520, "late-nonzero");
-                        stack.push_back(Val64(MAX_TAPLEAF_0XC2_STACK_SIZE - 2).MoveToValtype());
+                        stack.push_back(BigUint(MAX_TAPLEAF_0XC2_STACK_SIZE - 2).MoveToValtype());
                         return stack; }, FixedCase(SCRIPT_ERR_OK, 1, MAX_TAPLEAF_0XC2_STACK_SIZE, "stack-depth"));
         break;
     }
@@ -1502,7 +1502,7 @@ static void AddStackOpcodeCases(std::vector<CaseSpec>& specs, opcodetype opcode)
         AddCase(specs, opcode, HeadlineRole::NEW_GSR, "roll-max-depth-one-shot", "32768-items", "heterogeneous-buried", Ops({OP_ROLL}), [](const CryptoFixture&) {
                         std::vector<valtype> stack(MAX_TAPLEAF_0XC2_STACK_SIZE - 1, valtype{0x01});
                         stack.front() = PatternBytes(520, "late-nonzero");
-                        stack.push_back(Val64(MAX_TAPLEAF_0XC2_STACK_SIZE - 2).MoveToValtype());
+                        stack.push_back(BigUint(MAX_TAPLEAF_0XC2_STACK_SIZE - 2).MoveToValtype());
                         return stack; }, FixedCase(SCRIPT_ERR_OK, 1, MAX_TAPLEAF_0XC2_STACK_SIZE - 1, "stack-depth"));
         break;
     }
@@ -1987,11 +1987,11 @@ static void AddShiftCases(std::vector<CaseSpec>& specs, opcodetype opcode)
         AddCase(specs, opcode, HeadlineRole::NEW_GSR,
                 "shift-preserve", FormatBytes(size) + ":" + strprintf("%ubits", shift),
                 shift % 8 == 0 ? "byte-aligned" : "unaligned", sequence,
-                FixedStack({PatternBytes(size, "late-nonzero"), Val64(shift).MoveToValtype()}));
+                FixedStack({PatternBytes(size, "late-nonzero"), BigUint(shift).MoveToValtype()}));
     }
     for (uint64_t shift : {8U, 65U}) {
         AddCostCrossovers(specs, opcode, "shift-crossover", shift % 8 == 0 ? "byte-aligned" : "unaligned", sequence, 2'000'000,
-                          [=](size_t size) { return std::vector<valtype>{PatternBytes(size, "late-nonzero"), Val64(shift).MoveToValtype()}; },
+                          [=](size_t size) { return std::vector<valtype>{PatternBytes(size, "late-nonzero"), BigUint(shift).MoveToValtype()}; },
                           [=](size_t size) { return FormatBytes(size) + ":" + strprintf("%ubits", shift); });
     }
     constexpr size_t tail_size{2'000'000};
@@ -1999,11 +1999,11 @@ static void AddShiftCases(std::vector<CaseSpec>& specs, opcodetype opcode)
     AddCase(specs, opcode, HeadlineRole::NEW_GSR,
             "shift-scale-tail", FormatBytes(tail_size) + ":1bit", "unaligned", sequence,
             FixedStack({PatternBytes(tail_size, "late-nonzero"),
-                        Val64(tail_shift).MoveToValtype()}));
+                        BigUint(tail_shift).MoveToValtype()}));
     if (opcode == OP_LSHIFT) {
         AddCase(specs, opcode, HeadlineRole::NEW_GSR,
                 "shift-element-reject", "1B:past-4MB", "past-end", Ops({OP_LSHIFT}),
-                FixedStack({valtype{1}, Val64(uint64_t{MAX_TAPLEAF_0XC2_STACK_ELEMENT_SIZE} * 8).MoveToValtype()}),
+                FixedStack({valtype{1}, BigUint(uint64_t{MAX_TAPLEAF_0XC2_STACK_ELEMENT_SIZE} * 8).MoveToValtype()}),
                 FixedCase(SCRIPT_ERR_STACK_ELEMENT_SIZE, 1, 0, "stack-element-limit"));
     }
 }

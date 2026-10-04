@@ -55,8 +55,8 @@ LOAD_INTERVAL_SECONDS = 60
 GSR_SOURCES = (
     "src/script/varops.h",
     "src/script/interpreter.cpp",
-    "src/script/val64.h",
-    "src/script/val64.cpp",
+    "src/script/biguint.h",
+    "src/script/biguint.cpp",
     "src/script/valtype_stack.h",
     "src/script/valtype_stack.cpp",
 )

@@ -22,11 +22,11 @@
 #include <crypto/sha256.h>
 #include <primitives/transaction.h>
 #include <pubkey.h>
+#include <script/biguint.h>
 #include <script/interpreter.h>
 #include <script/op_tx.h>
 #include <script/script.h>
 #include <script/script_error.h>
-#include <script/val64.h>
 #include <script/valtype_stack.h>
 #include <script/varops.h>
 #include <script/verify_flags.h>
@@ -355,7 +355,7 @@ constexpr script_verify_flags FLAGS{SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY | SCRIPT_V
 
 using Bytes = std::vector<unsigned char>;
 
-// Bytes holding `words` limbs of `value`, as the val64 limb kernels take them.
+// Bytes holding `words` limbs of `value`, as the biguint limb kernels take them.
 Bytes LimbBytes(size_t words, uint64_t value)
 {
     Bytes bytes(8 * words);
@@ -530,13 +530,13 @@ struct Frame {
 };
 
 //! Run OP_TX on frame with the arguments the interpreter passes it.
-OpTxResult RunOpTx(Frame& frame, const ValtypeStack& alt, const BaseSignatureChecker& checker, ScriptError* error)
+op_tx::Result RunOpTx(Frame& frame, const ValtypeStack& alt, const BaseSignatureChecker& checker, ScriptError* error)
 {
     const ScriptExecutionData& d{frame.context};
-    const OpTxScriptContext context{d.m_annex_present ? d.m_annex : std::span<const unsigned char>{}, d.m_tapscript,
+    const op_tx::ScriptContext context{d.m_annex_present ? d.m_annex : std::span<const unsigned char>{}, d.m_tapscript,
                                     d.m_tapleaf_hash, d.m_control_block, d.m_taptree_root, d.m_codeseparator_pos};
     varops::Meter meter;
-    return EvalOpTx(frame.stack, alt, checker.GetTransactionData(), context, meter, frame.budget, error);
+    return op_tx::Eval(frame.stack, alt, checker.GetOpTxView(), context, meter, frame.budget, error);
 }
 
 void ScriptSample(Runner& runner, const std::string& label, const CScript& script,
@@ -618,10 +618,10 @@ void MeasurePreparation(Runner& r)
 {
     for (size_t n : Sizes()) {
         const Bytes source = Pattern(n);
-        const size_t cap = r.PoolLimit(2 * WordPaddedCapacity(n) + 256);
+        const size_t cap = r.PoolLimit(2 * biguint::WordPaddedCapacity(n) + 256);
         struct State {
             std::vector<Bytes> bytes;
-            std::vector<Val64> numbers;
+            std::vector<BigUint> numbers;
         };
         auto make = [&](size_t count) {
             State s;
@@ -629,7 +629,7 @@ void MeasurePreparation(Runner& r)
             s.numbers.resize(count);
             for (size_t i = 0; i < count; ++i) {
                 Bytes b = source;
-                b.reserve(WordPaddedCapacity(n));
+                b.reserve(biguint::WordPaddedCapacity(n));
                 s.bytes[i] = std::move(b);
             }
             return s;
@@ -684,16 +684,16 @@ void MeasureProducer(Runner& r)
                           // value, as the interpreter does, so pushing never reallocates.
                           Bytes value;
                           if (mode == "zero") {
-                              value.reserve(WordPaddedCapacity(n));
+                              value.reserve(biguint::WordPaddedCapacity(n));
                               value.resize(n);
                           } else if (mode == "grow") {
                               // As OP_CAT: the first operand is grown once to the result's capacity.
-                              value.reserve(WordPaddedCapacity(n / 2));
+                              value.reserve(biguint::WordPaddedCapacity(n / 2));
                               value.assign(source.begin(), source.begin() + n / 2);
-                              value.reserve(WordPaddedCapacity(n));
+                              value.reserve(biguint::WordPaddedCapacity(n));
                               value.insert(value.end(), source.begin() + n / 2, source.end());
                           } else {
-                              value.reserve(WordPaddedCapacity(n));
+                              value.reserve(biguint::WordPaddedCapacity(n));
                               value.assign(source.begin(), source.end());
                           }
                           Observe(value);
@@ -730,7 +730,7 @@ void MeasureProducer(Runner& r)
             Bytes temporary{large_source};
             // As OP_SUBSTR: the result is copied into a word-padded buffer.
             Bytes result;
-            result.reserve(WordPaddedCapacity(result_size));
+            result.reserve(biguint::WordPaddedCapacity(result_size));
             result.assign(temporary.begin(), temporary.begin() + result_size);
             Observe(temporary);
             stack.push_back(std::move(result));
@@ -738,7 +738,7 @@ void MeasureProducer(Runner& r)
         });
         {
             struct State {
-                std::vector<Val64> numbers;
+                std::vector<BigUint> numbers;
                 std::vector<Bytes> results;
             };
             const std::string label{"NORMALIZE/aligned/" + util::ToString(n)};
@@ -748,7 +748,7 @@ void MeasureProducer(Runner& r)
             // value buffer.
             constexpr size_t MIN_CONVERSIONS{256};
             constexpr size_t LARGE_POOL_BYTES{size_t{1} << 30};
-            const size_t per_state{WordPaddedCapacity(n) + 256};
+            const size_t per_state{biguint::WordPaddedCapacity(n) + 256};
             const size_t conversions{std::max(r.PoolLimit(per_state),
                                               std::min(MIN_CONVERSIONS, r.PoolLimit(per_state, LARGE_POOL_BYTES)))};
             r.Measure(
@@ -775,9 +775,9 @@ void MeasureProducer(Runner& r)
             cycle("PRODUCER_CHECK/numeric/" + std::string(spare ? "spare/" : "tight/") + util::ToString(n),
                   "numeric", 1, n, n, [&] {
                       Bytes bytes;
-                      if (spare) bytes.reserve(WordPaddedCapacity(n) + 16);
+                      if (spare) bytes.reserve(biguint::WordPaddedCapacity(n) + 16);
                       bytes.insert(bytes.end(), source.begin(), source.end());
-                      Val64 number{std::move(bytes)};
+                      BigUint number{std::move(bytes)};
                       stack.push_back(number.MoveToValtype());
                       Observe(stack.Top());
                       stack.pop_back();
@@ -785,11 +785,11 @@ void MeasureProducer(Runner& r)
         }
     }
     for (uint64_t value : {uint64_t{0}, uint64_t{1}, uint64_t{255}, uint64_t{256}, uint64_t{65536}, UINT64_MAX}) {
-        Val64 fixture(value);
+        BigUint fixture(value);
         const size_t n{fixture.MoveToValtype().size()};
         const std::string label{"NORMALIZE/scalar/" + util::ToString(value)};
         struct State {
-            std::vector<Val64> numbers;
+            std::vector<BigUint> numbers;
             std::vector<Bytes> results;
         };
         r.Measure(
@@ -812,7 +812,7 @@ void MeasureProducer(Runner& r)
     }
 }
 
-// READ: Val64 zero/comparison helpers. Full scans are forced by equal/all-zero
+// READ: BigUint zero/comparison helpers. Full scans are forced by equal/all-zero
 // operands. Normalization uses
 // independent padded-zero values because repeating TrimTail would time empties.
 void MeasureTraversal(Runner& r)
@@ -823,14 +823,14 @@ void MeasureTraversal(Runner& r)
             "READ/zero/" + util::ToString(bytes),
             [&] { return LimbBytes(words, 0); },
             [](auto& a, size_t) {
-                const bool v = val64::IsZero(val64::ConstLimbs{a});
+                const bool v = biguint::IsZero(biguint::ConstLimbs{a});
                 Observe(v);
             });
         r.Repeated(
             "READ/compare/" + util::ToString(bytes),
             [&] { return std::pair{LimbBytes(words, 1), LimbBytes(words, 1)}; },
             [](auto& a, size_t) {
-                const int v = val64::Compare(val64::ConstLimbs{a.first}, val64::ConstLimbs{a.second});
+                const int v = biguint::Compare(biguint::ConstLimbs{a.first}, biguint::ConstLimbs{a.second});
                 Observe(v);
             });
         // OP_EQUAL/OP_EQUALVERIFY compare the stack bytes directly; equal values scan fully.
@@ -842,9 +842,9 @@ void MeasureTraversal(Runner& r)
                 Observe(v);
             });
         r.Measure(
-            "READ/trim/" + util::ToString(n), r.PoolLimit(2 * WordPaddedCapacity(n) + 128),
+            "READ/trim/" + util::ToString(n), r.PoolLimit(2 * biguint::WordPaddedCapacity(n) + 128),
             [&](size_t count) {
-                std::vector<Val64> v;
+                std::vector<BigUint> v;
                 v.reserve(count);
                 for (size_t i = 0; i < count; ++i)
                     v.emplace_back(Bytes(n, 0));
@@ -857,7 +857,7 @@ void MeasureTraversal(Runner& r)
     }
 }
 
-// ARITH: val64::Add/Subtract are timed separately on fresh prepared input.
+// ARITH: biguint::Add/Subtract are timed separately on fresh prepared input.
 // A shared affine envelope exposes the kernel's fixed call/loop work instead
 // of folding it into a small-operand per-byte rate. With a one-word b, Add
 // carries through a only on the carry-chain operand and Subtract borrows only on
@@ -883,7 +883,7 @@ void MeasureArithmetic(Runner& r)
                     r.Measure("ARITH/add/" + suffix, capacity, make, [](auto& states, size_t count) {
                         for (size_t i = 0; i < count; ++i) {
                             size_t nonzero = 0;
-                            const bool carry = val64::Add(val64::Limbs{states[i].a}, val64::ConstLimbs{states[i].b}, &nonzero);
+                            const bool carry = biguint::Add(biguint::Limbs{states[i].a}, biguint::ConstLimbs{states[i].b}, &nonzero);
                             Observe(carry);
                             Observe(nonzero);
                         }
@@ -893,7 +893,7 @@ void MeasureArithmetic(Runner& r)
                     r.Measure("ARITH/sub/" + suffix, capacity, make, [](auto& states, size_t count) {
                         for (size_t i = 0; i < count; ++i) {
                             size_t nonzero = 0;
-                            const bool borrow = val64::Subtract(val64::Limbs{states[i].a}, val64::ConstLimbs{states[i].b}, &nonzero);
+                            const bool borrow = biguint::Subtract(biguint::Limbs{states[i].a}, biguint::ConstLimbs{states[i].b}, &nonzero);
                             Observe(borrow);
                             Observe(nonzero);
                         }
@@ -904,20 +904,20 @@ void MeasureArithmetic(Runner& r)
     }
 }
 
-// BIT: no conversions in the timed region. Exercise actual Val64 inversion and
+// BIT: no conversions in the timed region. Exercise actual BigUint inversion and
 // XOR, OP_BYTEREV's work after dispatch (it pops the value, reverses it with the
-// ReverseBytes word kernel and pushes it back, as the interpreter does) and the
-// raw shift kernels. Repetition never shrinks an operand: inversion, XOR and
-// reversal toggle or reorder bits, and the shift kernels keep the view size as
-// bits shift out.
+// biguint::ReverseBytes word kernel and pushes it back, as the interpreter does)
+// and the raw shift kernels. Repetition never shrinks an operand: inversion, XOR
+// and reversal toggle or reorder bits, and the shift kernels keep the view size
+// as bits shift out.
 void MeasureBit(Runner& r)
 {
     for (size_t n : Sizes(1)) {
         r.Repeated(
             "BIT/invert/" + util::ToString(n),
-            [&] { return std::make_unique<Val64>(Pattern(n)); },
+            [&] { return std::make_unique<BigUint>(Pattern(n)); },
             [](auto& v, size_t) {
-                Val64::OpInvert(*v);
+                BigUint::OpInvert(*v);
                 Observe(*v);
             });
         r.Repeated(
@@ -929,18 +929,18 @@ void MeasureBit(Runner& r)
             },
             [](auto& stack, size_t) {
                 valtype value{stack->PopValue()};
-                ReverseBytes(value);
+                biguint::ReverseBytes(value);
                 stack->push_back(std::move(value));
             });
         struct State {
-            Val64 a, b;
+            BigUint a, b;
             explicit State(size_t n) : a(Pattern(n, 1)), b(Pattern(n, 2)) {}
         };
         r.Repeated(
             "BIT/xor/" + util::ToString(n),
             [&] { return std::make_unique<State>(n); },
             [](auto& s, size_t) {
-                Val64::OpXor(s->a, s->b);
+                BigUint::OpXor(s->a, s->b);
                 Observe(s->a);
             });
         for (size_t shift : std::array<size_t, 3>{1, 7, 63}) {
@@ -948,13 +948,13 @@ void MeasureBit(Runner& r)
             // The raw shift helpers preserve the view size even after bits vanish.
             r.Repeated(
                 "BIT/down/" + util::ToString(n) + "/" + util::ToString(shift),
-                [&] { return Pattern(WordPaddedCapacity(n)); },
-                [&](auto& v, size_t) { val64::ShiftDown(val64::Limbs{v}, shift); });
+                [&] { return Pattern(biguint::WordPaddedCapacity(n)); },
+                [&](auto& v, size_t) { biguint::ShiftDown(biguint::Limbs{v}, shift); });
             r.Repeated(
                 "BIT/up/" + util::ToString(n) + "/" + util::ToString(shift),
-                [&] { return Pattern(WordPaddedCapacity(n)); },
+                [&] { return Pattern(biguint::WordPaddedCapacity(n)); },
                 [&](auto& v, size_t) {
-                    const uint64_t carry = val64::ShiftUp(val64::Limbs{v}, static_cast<unsigned>(shift));
+                    const uint64_t carry = biguint::ShiftUp(biguint::Limbs{v}, static_cast<unsigned>(shift));
                     Observe(carry);
                 });
             // As OP_LSHIFT after prepending 64 KiB of zeros: only A's words are shifted.
@@ -963,11 +963,11 @@ void MeasureBit(Runner& r)
                 "BIT/upshift/" + util::ToString(n) + "/" + util::ToString(shift),
                 [&] {
                     Bytes bytes(PREFIX, 0);
-                    const Bytes a{Pattern(WordPaddedCapacity(n))};
+                    const Bytes a{Pattern(biguint::WordPaddedCapacity(n))};
                     bytes.insert(bytes.end(), a.begin(), a.end());
                     return bytes;
                 },
-                [&](auto& v, size_t) { val64::ShiftDown(val64::Limbs{v}.subspan(PREFIX / 8 - 1), shift); });
+                [&](auto& v, size_t) { biguint::ShiftDown(biguint::Limbs{v}.subspan(PREFIX / 8 - 1), shift); });
         }
     }
 }
@@ -1028,7 +1028,7 @@ void MeasureDivision(Runner& r)
                     }
                     for (bool modulo : {false, true}) {
                         struct State {
-                            Val64 a, b;
+                            BigUint a, b;
                             State(Bytes x, Bytes y) : a(std::move(x)), b(std::move(y)) {}
                         };
                         const std::string name{"DIVCORE/" + util::ToString(aw) + "/" + util::ToString(bw) +
@@ -1044,7 +1044,7 @@ void MeasureDivision(Runner& r)
                             },
                             [&](auto& states, size_t count) {
                                 for (size_t i{0}; i < count; ++i) {
-                                    const bool ok{modulo ? Val64::OpMod(states[i]->a, states[i]->b) : Val64::OpDiv(states[i]->a, states[i]->b)};
+                                    const bool ok{modulo ? BigUint::OpMod(states[i]->a, states[i]->b) : BigUint::OpDiv(states[i]->a, states[i]->b)};
                                     if (!ok) throw std::runtime_error("division fixture failed");
                                 }
                             });
@@ -1089,9 +1089,9 @@ void MeasureMultiplication(Runner& r)
                     b = Pattern(v * 8, 29 + v);
                 }
                 struct State {
-                    Val64 a, b, product;
+                    BigUint a, b, product;
                     Bytes product_bytes;
-                    State(const Bytes& x, const Bytes& y) : a(Bytes{x}), b(Bytes{y}), product_bytes(Val64::ProductSize(a, b)) {}
+                    State(const Bytes& x, const Bytes& y) : a(Bytes{x}), b(Bytes{y}), product_bytes(BigUint::ProductSize(a, b)) {}
                 };
                 const std::string name{"MULCORE/" + util::ToString(u) + "/" + util::ToString(v) + "/" + pattern};
                 // Each state holds both operands and the (u + v)-limb product
@@ -1107,7 +1107,7 @@ void MeasureMultiplication(Runner& r)
                     },
                     [&](auto& states, size_t count) {
                         for (size_t i{0}; i < count; ++i) {
-                            states[i]->product = Val64::OpMul(states[i]->a, states[i]->b, std::move(states[i]->product_bytes));
+                            states[i]->product = BigUint::OpMul(states[i]->a, states[i]->b, std::move(states[i]->product_bytes));
                         }
                     });
                 if (++fixtures % 25 == 0) std::cerr << "  MULCORE: " << fixtures << " fixtures measured\n";
@@ -1175,7 +1175,7 @@ void MeasureSignatures(Runner& r, const Crypto& crypto)
         });
 }
 
-// SELECT: complete EvalOpTx lifetimes with collated output, one fixture per kind of
+// SELECT: complete op_tx::Eval lifetimes with collated output, one fixture per kind of
 // counted unit. k is the charged unit count: every planned value (including each
 // witness item count) plus every record scanned for an aggregate field. The whole
 // time, including planning, collated framing, production of the one result and
@@ -1226,7 +1226,7 @@ void MeasureItems(Runner& r)
                     Frame frame(initial, fixture.context);
                     ValtypeStack alt;
                     ScriptError error{SCRIPT_ERR_UNKNOWN_ERROR};
-                    Require(RunOpTx(frame, alt, checker, &error) == OpTxResult::NORMAL,
+                    Require(RunOpTx(frame, alt, checker, &error) == op_tx::Result::NORMAL,
                             "OP_TX fixture failed: " + label);
                     output_entries = frame.stack.size();
                     uint64_t outputs_cost{0};
@@ -1252,7 +1252,7 @@ void MeasureItems(Runner& r)
                         for (size_t i{0}; i < count; ++i) {
                             ScriptError error{SCRIPT_ERR_UNKNOWN_ERROR};
                             auto status = RunOpTx(*v[i], alt, checker, &error);
-                            if (status != OpTxResult::NORMAL || v[i]->stack.size() != output_entries) {
+                            if (status != op_tx::Result::NORMAL || v[i]->stack.size() != output_entries) {
                                 throw std::runtime_error("OP_TX item fixture failed");
                             }
                             while (v[i]->stack.size() != 0)
@@ -1427,23 +1427,23 @@ void ProductionSelfTests()
     Bytes a{LimbBytes(2, 0)}, b{LimbBytes(2, 0)};
     WriteLE64(a.data(), 5);
     WriteLE64(b.data(), 7);
-    const val64::Limbs a_limbs{a};
-    Require(!val64::Add(a_limbs, val64::ConstLimbs{b}) && a_limbs[0] == 12, "Add self-test");
-    Require(!val64::Subtract(a_limbs, val64::ConstLimbs{b}) && a_limbs[0] == 5, "Subtract self-test");
+    const biguint::Limbs a_limbs{a};
+    Require(!biguint::Add(a_limbs, biguint::ConstLimbs{b}) && a_limbs[0] == 12, "Add self-test");
+    Require(!biguint::Subtract(a_limbs, biguint::ConstLimbs{b}) && a_limbs[0] == 5, "Subtract self-test");
     // The measured ARITH chains carry or borrow through every word of a.
     for (size_t words : {1U, 2U, 8U, 65U}) {
         for (bool one_word : {false, true}) {
             ArithOperands borrow{ChainOperands(words, one_word, /*borrow_chain=*/true)};
-            const val64::Limbs difference{borrow.a};
-            Require(!val64::Subtract(difference, val64::ConstLimbs{borrow.b}), "borrow-chain underflow");
+            const biguint::Limbs difference{borrow.a};
+            Require(!biguint::Subtract(difference, biguint::ConstLimbs{borrow.b}), "borrow-chain underflow");
             bool full_chain{difference[words - 1] == 0};
             for (size_t i{0}; i + 1 < words; ++i)
                 full_chain = full_chain && difference[i] == UINT64_MAX;
             Require(full_chain, "full borrow chain not exercised");
 
             ArithOperands carry{ChainOperands(words, one_word, /*borrow_chain=*/false)};
-            const val64::Limbs sum{carry.a};
-            Require(!val64::Add(sum, val64::ConstLimbs{carry.b}), "carry-chain overflow");
+            const biguint::Limbs sum{carry.a};
+            Require(!biguint::Add(sum, biguint::ConstLimbs{carry.b}), "carry-chain overflow");
             full_chain = sum[words - 1] == 0x8000000000000000ULL;
             for (size_t i{0}; i + 1 < words; ++i)
                 full_chain = full_chain && sum[i] == 0;
@@ -1451,9 +1451,9 @@ void ProductionSelfTests()
         }
     }
     Bytes product{LimbBytes(2, 0)};
-    Require(val64::AddMul(val64::Limbs{product}, val64::ConstLimbs{a}, 3) == 0 && val64::ConstLimbs{product}[0] == 15, "AddMul self-test");
-    Val64 x(Bytes{100}), y(Bytes{7});
-    Require(Val64::OpDiv(x, y), "division self-test");
+    Require(biguint::AddMul(biguint::Limbs{product}, biguint::ConstLimbs{a}, 3) == 0 && biguint::ConstLimbs{product}[0] == 15, "AddMul self-test");
+    BigUint x(Bytes{100}), y(Bytes{7});
+    Require(BigUint::OpDiv(x, y), "division self-test");
     Require(x.MoveToValtype() == Bytes{14}, "division result");
     Crypto crypto;
     auto signature = crypto.Sign(Bytes{1, 2, 3});
@@ -1464,7 +1464,7 @@ void ProductionSelfTests()
     Frame frame(initial, f.context);
     ValtypeStack alt;
     ScriptError error{SCRIPT_ERR_UNKNOWN_ERROR};
-    Require(RunOpTx(frame, alt, checker, &error) == OpTxResult::NORMAL, "OP_TX self-test");
+    Require(RunOpTx(frame, alt, checker, &error) == op_tx::Result::NORMAL, "OP_TX self-test");
     Require(frame.stack.size() == 8 && frame.stack.GetTotalSize() == 0, "OP_TX result count");
 }
 
