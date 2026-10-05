@@ -89,18 +89,12 @@ const TranslateFn G_TRANSLATION_FUN{nullptr};
 // Derive these views from the single consensus formulas rather than duplicating prices.
 namespace varops {
 constexpr uint64_t COST_BASE{BaseCost()};
-constexpr uint64_t COST_PREPARE_FIXED{PrepareCost(0)};
-constexpr uint64_t COST_PREPARE_BYTE{(PrepareCost(8) - PrepareCost(0)) / 8};
-constexpr uint64_t COST_OUTPUT_FIXED{OutputCost(0)};
-constexpr uint64_t COST_OUTPUT_BYTE{(OutputCost(8) - OutputCost(0)) / 8};
-constexpr uint64_t COST_COPY_FIXED{WriteCost(0)};
-constexpr uint64_t COST_COPY_BYTE{(WriteCost(8) - WriteCost(0)) / 8};
+constexpr uint64_t COST_WRITE_FIXED{WriteCost(0)};
+constexpr uint64_t COST_WRITE_BYTE{(WriteCost(8) - WriteCost(0)) / 8};
 constexpr uint64_t COST_READ_FIXED{ReadCost(0)};
 constexpr uint64_t COST_READ{(ReadCost(8) - ReadCost(0)) / 8};
 constexpr uint64_t COST_ARITH_FIXED{ArithCost(0)};
 constexpr uint64_t COST_ARITH_BYTE{(ArithCost(8) - ArithCost(0)) / 8};
-constexpr uint64_t COST_BIT_FIXED{BitCost(0)};
-constexpr uint64_t COST_BIT{(BitCost(8) - BitCost(0)) / 8};
 constexpr uint64_t COST_DIV_FIXED{DivCost(0, 0)};
 constexpr uint64_t COST_DIV_STEP{DivCost(1, 0) - DivCost(0, 0)};
 constexpr uint64_t COST_DIV_CELL{DivCost(1, 1) - DivCost(1, 0)};
@@ -112,7 +106,6 @@ constexpr uint64_t COST_H160_FIXED{Ripemd160Cost(0) - 64 * COST_H160_BYTE};
 constexpr uint64_t COST_H1_BYTE{(Sha1Cost(64) - Sha1Cost(0)) / 64};
 constexpr uint64_t COST_H1_FIXED{Sha1Cost(0) - 64 * COST_H1_BYTE};
 constexpr uint64_t COST_MACRO_UNROLL{BaseCost()};
-constexpr uint64_t COST_SCALAR_OUTPUT{ScalarOutputCost()};
 constexpr uint64_t COST_SCALAR_WRITE{WriteCost(8)};
 } // namespace varops
 
@@ -341,7 +334,7 @@ struct EvalOutcome {
 static uint64_t InitialProducerCost(const std::vector<valtype>& stack)
 {
     uint64_t total{0};
-    for (const auto& value : stack) total += varops::COST_COPY_FIXED + varops::COST_COPY_BYTE * varops::WordSpan(value.size());
+    for (const auto& value : stack) total += varops::COST_WRITE_FIXED + varops::COST_WRITE_BYTE * varops::WordSpan(value.size());
     return total;
 }
 
@@ -555,7 +548,6 @@ static uint64_t SuffixCost(const std::vector<valtype>& stack, size_t cleanup_ite
 {
     return InitialProducerCost(stack) + CandidateCleanupCost(stack, cleanup_items) +
            varops::COST_BASE + varops::COST_SCALAR_WRITE +
-           varops::COST_PREPARE_FIXED + varops::COST_PREPARE_BYTE * 8 +
            varops::COST_READ_FIXED + varops::COST_READ * 8;
 }
 
@@ -1166,16 +1158,15 @@ static uint64_t OneToOneSequenceCost(opcodetype opcode, size_t size, bool three_
     const uint64_t transforms{three_way ? 3U : 1U};
     // Independently count complete logical-opcode formulas from whole-varop terms.
     const uint64_t copy_opcode{varops::COST_BASE + transforms *
-        (varops::COST_COPY_FIXED + varops::COST_COPY_BYTE * varops::WordSpan(size))};
+        (varops::COST_WRITE_FIXED + varops::COST_WRITE_BYTE * varops::WordSpan(size))};
     switch (opcode) {
     case OP_NOT:
     case OP_0NOTEQUAL: {
         const bool input_nonzero{pattern != "zero"};
         const size_t output_size{(opcode == OP_NOT ? !input_nonzero : input_nonzero) ? 1U : 0U};
-        const uint64_t target{varops::COST_BASE + varops::COST_PREPARE_FIXED +
-            varops::COST_PREPARE_BYTE * varops::WordSpan(size) +
+        const uint64_t target{varops::COST_BASE +
             varops::COST_READ_FIXED + varops::COST_READ * varops::WordSpan(size) +
-            varops::COST_SCALAR_OUTPUT};
+            varops::COST_SCALAR_WRITE};
         return copy_opcode + transforms * (target + CandidateDropCost(output_size));
     }
     case OP_1ADD:
@@ -1185,10 +1176,10 @@ static uint64_t OneToOneSequenceCost(opcodetype opcode, size_t size, bool three_
         const size_t output_size{low ? (opcode == OP_1SUB ? 0U : 1U) :
                                       (opcode == OP_1SUB && pattern == "late-nonzero" && size != 0 ? size - 1 : size)};
         const uint64_t output_words{varops::WordSpan(output_size)};
-        const uint64_t target{varops::COST_BASE + varops::COST_PREPARE_FIXED +
-            varops::COST_PREPARE_BYTE * words + varops::COST_ARITH_FIXED +
-            varops::COST_ARITH_BYTE * words + varops::COST_OUTPUT_FIXED +
-            varops::COST_OUTPUT_BYTE * output_words};
+        const uint64_t target{varops::COST_BASE + varops::COST_READ_FIXED +
+            varops::COST_READ * words + varops::COST_ARITH_FIXED +
+            varops::COST_ARITH_BYTE * words + varops::COST_WRITE_FIXED +
+            varops::COST_WRITE_BYTE * output_words};
         return copy_opcode + transforms * (target + CandidateDropCost(output_size));
     }
     case OP_INVERT:
@@ -1201,10 +1192,10 @@ static uint64_t OneToOneSequenceCost(opcodetype opcode, size_t size, bool three_
             low && opcode == OP_2MUL ? 1U :
             opcode == OP_2DIV && pattern == "late-nonzero" && size != 0 ? size - 1 : size};
         const uint64_t output_words{varops::WordSpan(output_size)};
-        const uint64_t target{varops::COST_BASE + varops::COST_PREPARE_FIXED +
-            varops::COST_PREPARE_BYTE * words + varops::COST_BIT_FIXED +
-            varops::COST_BIT * words + varops::COST_OUTPUT_FIXED +
-            varops::COST_OUTPUT_BYTE * output_words};
+        const uint64_t target{varops::COST_BASE + varops::COST_READ_FIXED +
+            varops::COST_READ * words + varops::COST_ARITH_FIXED +
+            varops::COST_ARITH_BYTE * words + varops::COST_WRITE_FIXED +
+            varops::COST_WRITE_BYTE * output_words};
         return copy_opcode + transforms * (target + CandidateDropCost(output_size));
     }
     case OP_RIPEMD160:
@@ -1234,8 +1225,8 @@ static uint64_t OneToOneSequenceCost(opcodetype opcode, size_t size, bool three_
             IndependentAdd(hash_q, varops::COST_SHA256_FIXED, 2);
             IndependentAdd(hash_q, varops::COST_SHA256_BYTE, IndependentHashSpan(size) + IndependentHashSpan(32));
         }
-        IndependentAdd(hash_q, varops::COST_COPY_FIXED);
-        IndependentAdd(hash_q, varops::COST_COPY_BYTE, varops::WordSpan(output_size));
+        IndependentAdd(hash_q, varops::COST_WRITE_FIXED);
+        IndependentAdd(hash_q, varops::COST_WRITE_BYTE, varops::WordSpan(output_size));
         const uint64_t hash_opcode{hash_q};
         return copy_opcode + transforms * (hash_opcode + CandidateDropCost(output_size));
     }
@@ -1491,8 +1482,8 @@ static void AddStackOpcodeCases(std::vector<CaseSpec>& specs, opcodetype opcode)
         add_shared_case("roll-depth-1-neutral", roll_one, {PatternBytes(32, "dense"), PatternBytes(32, "alternating")});
         CaseOptions deep_stack_options{};
         // OP_ROLL pays MOVE(k) = 200 + 37k for the k = 1,499 entries it moves, plus READ
-        // and PREPARE of its index; with OP_DEPTH and OP_1SUB a repetition costs about
-        // 4,100 + 37k, or 59,500 varops. Above 30,000 per repetition the full budget
+        // of its index; with OP_DEPTH and OP_1SUB a repetition costs about
+        // 4,200 + 37k, or 59,700 varops. Above 30,000 per repetition the full budget
         // binds before the 4 MB script limit.
         deep_stack_options.expected_saturation = SaturationExpectation::VAROPS_BUDGET;
         AddCase(specs, opcode, HeadlineRole::NEW_GSR, "deep-stack", "1500x4B", "dense",
@@ -1767,13 +1758,13 @@ static uint64_t MulSequenceCost(size_t left, size_t right)
     const uint64_t row_limbs{std::min(left_words, right_words) / 8};
     const size_t output_size{left + right};
     const uint64_t storage{varops::WriteCost(left_words + right_words) - varops::WriteCost(varops::WordSpan(output_size))};
-    return storage + 3 * varops::COST_BASE + 2 * varops::COST_COPY_FIXED +
-           varops::COST_COPY_BYTE * (left_words + right_words) +
-           2 * varops::COST_PREPARE_FIXED +
-           varops::COST_PREPARE_BYTE * (left_words + right_words) +
+    return storage + 3 * varops::COST_BASE + 2 * varops::COST_WRITE_FIXED +
+           varops::COST_WRITE_BYTE * (left_words + right_words) +
+           2 * varops::COST_READ_FIXED +
+           varops::COST_READ * (left_words + right_words) +
            varops::MulCost(rows, row_limbs) +
-           varops::COST_OUTPUT_FIXED +
-           varops::COST_OUTPUT_BYTE * varops::WordSpan(output_size);
+           varops::COST_WRITE_FIXED +
+           varops::COST_WRITE_BYTE * varops::WordSpan(output_size);
 }
 
 static void AddMulCases(std::vector<CaseSpec>& specs, opcodetype opcode)
@@ -1833,14 +1824,12 @@ static uint64_t DivModSequenceCost(size_t dividend, size_t divisor)
     // OP_2DUP, target, OP_DROP. The result is charged at the dividend's padded
     // width, which a quotient or remainder does not reach once trimmed, so the
     // estimate over-states the charge; it only sizes cases.
-    return 3 * varops::COST_BASE + 2 * varops::COST_COPY_FIXED +
-           varops::COST_COPY_BYTE * (dividend_words + divisor_words) +
-           2 * varops::COST_PREPARE_FIXED +
-           varops::COST_PREPARE_BYTE * (dividend_words + divisor_words) +
+    return 3 * varops::COST_BASE + 2 * varops::COST_WRITE_FIXED +
+           varops::COST_WRITE_BYTE * (dividend_words + divisor_words) +
            2 * varops::COST_READ_FIXED + varops::COST_READ * (dividend_words + divisor_words) +
            varops::COST_DIV_FIXED + varops::COST_DIV_STEP * steps +
            varops::COST_DIV_CELL * steps * divisor_limbs +
-           varops::COST_OUTPUT_FIXED + varops::COST_OUTPUT_BYTE * dividend_words;
+           varops::COST_WRITE_FIXED + varops::COST_WRITE_BYTE * dividend_words;
 }
 
 static void AddDivModCases(std::vector<CaseSpec>& specs, opcodetype opcode)
@@ -2164,7 +2153,7 @@ static uint64_t MacroCallUnrollCost(const CScript& body)
         if (!body.GetOp(pc, opcode)) throw std::runtime_error("macro benchmark body does not decode");
         ++instructions;
     }
-    return (instructions + 1) * varops::COST_MACRO_UNROLL + varops::COST_COPY_BYTE * varops::WordSpan(body.size());
+    return (instructions + 1) * varops::COST_MACRO_UNROLL + varops::COST_WRITE_BYTE * varops::WordSpan(body.size());
 }
 
 static void AddFunctionCases(std::vector<CaseSpec>& specs, opcodetype opcode)
@@ -2218,7 +2207,6 @@ static void AddFunctionCases(std::vector<CaseSpec>& specs, opcodetype opcode)
         // Cleanup and final truth checks are outside the calls.
         const uint64_t fixed_cost{
             (3 + stack_items + 1) * varops::COST_BASE +
-            varops::COST_PREPARE_FIXED + varops::COST_PREPARE_BYTE * 8 +
             varops::COST_READ_FIXED + varops::COST_READ * 8};
         const uint64_t call_cost{MacroCallUnrollCost(body) + body_cost};
         const size_t calls{std::min(UnrolledCalls(body), static_cast<size_t>((TOTAL_VAROPS_BUDGET - fixed_cost) / call_cost))};
@@ -2646,7 +2634,7 @@ static std::pair<std::string, std::string> CandidateFormula(opcodetype opcode)
     case OP_IF: return {"BASE, also in an inactive branch", "BASE"};
     case OP_NOP: case OP_CODESEPARATOR: case OP_DROP: case OP_2DROP: case OP_NIP:
         return {"BASE", "BASE"};
-    case OP_VERIFY: return {"BASE + PREPARE(n) + READ(n)", "BASE,PREPARE,READ"};
+    case OP_VERIFY: return {"BASE + READ(n)", "BASE,READ"};
     case OP_MACRO:
         return {"BASE * (substituted instructions + visited references) + WRITE(unrolled length), "
                 "then the unrolled script's charges", "BASE,WRITE"};
@@ -2659,40 +2647,33 @@ static std::pair<std::string, std::string> CandidateFormula(opcodetype opcode)
     case OP_2DUP: case OP_2OVER: return {"BASE + WRITE(n1) + WRITE(n2)", "BASE,WRITE"};
     case OP_3DUP: return {"BASE + WRITE(n1) + WRITE(n2) + WRITE(n3)", "BASE,WRITE"};
     case OP_IFDUP:
-        return {"BASE + PREPARE(n) + READ(n) + WRITE(out) + NORMALIZE, plus WRITE(out) if nonzero",
-                "BASE,PREPARE,READ,WRITE,NORMALIZE"};
-    case OP_DEPTH: case OP_SIZE: return {"BASE + WRITE(8) + NORMALIZE", "BASE,WRITE,NORMALIZE"};
+        return {"BASE + READ(n) + WRITE(out), plus WRITE(out) if nonzero", "BASE,READ,WRITE"};
+    case OP_DEPTH: case OP_SIZE: return {"BASE + WRITE(8)", "BASE,WRITE"};
     case OP_PICK:
-        return {"BASE + PREPARE(index) + READ(index) + WRITE(picked)", "BASE,PREPARE,READ,WRITE"};
+        return {"BASE + READ(index) + WRITE(picked)", "BASE,READ,WRITE"};
     case OP_ROLL:
-        return {"BASE + PREPARE(index) + READ(index) + MOVE(k), k = index value", "BASE,PREPARE,READ,MOVE"};
+        return {"BASE + READ(index) + MOVE(k), k = index value", "BASE,READ,MOVE"};
     case OP_1ADD: case OP_1SUB:
-        return {"BASE + PREPARE(n) + ARITH(n) + WRITE(out) + NORMALIZE", "BASE,PREPARE,ARITH,WRITE,NORMALIZE"};
+        return {"BASE + READ(n) + ARITH(n) + WRITE(out)", "BASE,READ,ARITH,WRITE"};
     case OP_NOT: case OP_0NOTEQUAL:
-        return {"BASE + PREPARE(n) + READ(n) + WRITE(8) + NORMALIZE", "BASE,PREPARE,READ,WRITE,NORMALIZE"};
+        return {"BASE + READ(n) + WRITE(8)", "BASE,READ,WRITE"};
     case OP_INVERT: case OP_2MUL: case OP_2DIV:
-        return {"BASE + PREPARE(n) + BIT(n) + WRITE(out) + NORMALIZE", "BASE,PREPARE,BIT,WRITE,NORMALIZE"};
+        return {"BASE + READ(n) + ARITH(n) + WRITE(out)", "BASE,READ,ARITH,WRITE"};
     case OP_EQUAL: case OP_EQUALVERIFY:
         return {"BASE + WRITE(8), plus READ(n1) if n1 = n2", "BASE,READ,WRITE"};
     case OP_ADD: case OP_SUB:
-        return {"BASE + PREPARE(n1) + PREPARE(n2) + ARITH(max(n1, n2)) + WRITE(out) + NORMALIZE",
-                "BASE,PREPARE,ARITH,WRITE,NORMALIZE"};
+        return {"BASE + READ(n1) + READ(n2) + ARITH(max(n1, n2)) + WRITE(out)", "BASE,READ,ARITH,WRITE"};
     case OP_BOOLAND: case OP_BOOLOR:
-        return {"BASE + PREPARE(n1) + PREPARE(n2) + READ(n1) + READ(n2) + WRITE(8) + NORMALIZE",
-                "BASE,PREPARE,READ,WRITE,NORMALIZE"};
+        return {"BASE + READ(n1) + READ(n2) + WRITE(8)", "BASE,READ,WRITE"};
     case OP_NUMEQUAL: case OP_NUMEQUALVERIFY: case OP_NUMNOTEQUAL: case OP_LESSTHAN:
     case OP_GREATERTHAN: case OP_LESSTHANOREQUAL: case OP_GREATERTHANOREQUAL:
-        return {"BASE + PREPARE(n1) + PREPARE(n2) + READ(max(n1, n2)) + WRITE(8) + NORMALIZE",
-                "BASE,PREPARE,READ,WRITE,NORMALIZE"};
+        return {"BASE + READ(n1) + READ(n2) + WRITE(8)", "BASE,READ,WRITE"};
     case OP_MIN: case OP_MAX:
-        return {"BASE + PREPARE(n1) + PREPARE(n2) + READ(max(n1, n2)) + WRITE(out) + NORMALIZE",
-                "BASE,PREPARE,READ,WRITE,NORMALIZE"};
+        return {"BASE + READ(n1) + READ(n2) + WRITE(out)", "BASE,READ,WRITE"};
     case OP_WITHIN:
-        return {"BASE + PREPARE(n1) + PREPARE(n2) + PREPARE(n3) + READ(max(n1, n2)) + READ(max(n1, n3)) + "
-                "WRITE(8) + NORMALIZE", "BASE,PREPARE,READ,WRITE,NORMALIZE"};
+        return {"BASE + 2 READ(n1) + READ(n2) + READ(n3) + WRITE(8)", "BASE,READ,WRITE"};
     case OP_AND: case OP_OR: case OP_XOR:
-        return {"BASE + PREPARE(n1) + PREPARE(n2) + BIT(max(n1, n2)) + WRITE(out) + NORMALIZE",
-                "BASE,PREPARE,BIT,WRITE,NORMALIZE"};
+        return {"BASE + READ(n1) + READ(n2) + ARITH(max(n1, n2)) + WRITE(out)", "BASE,READ,ARITH,WRITE"};
     case OP_RIPEMD160: return {"BASE + RIPEMD160(n) + WRITE(20)", "BASE,RIPEMD160,WRITE"};
     case OP_SHA1: return {"BASE + SHA1(n) + WRITE(20)", "BASE,SHA1,WRITE"};
     case OP_SHA256: return {"BASE + SHA256(n) + WRITE(32)", "BASE,SHA256,WRITE"};
@@ -2704,31 +2685,28 @@ static std::pair<std::string, std::string> CandidateFormula(opcodetype opcode)
                 "version pays nothing", "BASE,OP_TX_SELECT,WRITE"};
     case OP_CAT: return {"BASE + WRITE(n1 + n2)", "BASE,WRITE"};
     case OP_SUBSTR:
-        return {"BASE + PREPARE(begin) + PREPARE(size) + READ(begin) + READ(size) + WRITE(out)",
-                "BASE,PREPARE,READ,WRITE"};
+        return {"BASE + READ(begin) + READ(size) + WRITE(out)", "BASE,READ,WRITE"};
     case OP_LEFT: case OP_RIGHT:
-        return {"BASE + PREPARE(size) + READ(size) + WRITE(out)", "BASE,PREPARE,READ,WRITE"};
+        return {"BASE + READ(size) + WRITE(out)", "BASE,READ,WRITE"};
     case OP_MUL:
-        return {"BASE + PREPARE(n1) + PREPARE(n2) + MUL(u, v) + WRITE(8(u + v)) + NORMALIZE",
-                "BASE,PREPARE,MUL,WRITE,NORMALIZE"};
+        return {"BASE + READ(n1) + READ(n2) + MUL(u, v) + WRITE(8(u + v))", "BASE,READ,MUL,WRITE"};
     case OP_DIV: case OP_MOD:
-        return {"BASE + PREPARE(n1) + PREPARE(n2) + READ(n1) + READ(n2) + DIV(s, v) + WRITE(out) + NORMALIZE; "
-                "s and v count limbs without trailing zero bytes", "BASE,PREPARE,READ,DIV,WRITE,NORMALIZE"};
+        return {"BASE + READ(n1) + READ(n2) + DIV(s, v) + WRITE(out); "
+                "s and v count limbs without trailing zero bytes", "BASE,READ,DIV,WRITE"};
     case OP_LSHIFT: case OP_RSHIFT:
-        return {"BASE + PREPARE(n1) + PREPARE(bits) + READ(bits) + BIT(n1) + WRITE(out) + NORMALIZE",
-                "BASE,PREPARE,READ,BIT,WRITE,NORMALIZE"};
+        return {"BASE + READ(n1) + READ(bits) + ARITH(n1) + WRITE(out)", "BASE,READ,ARITH,WRITE"};
     case OP_CHECKSIG: case OP_CHECKSIGVERIFY:
         return {"BASE + WRITE(8), plus SIGCHECK + SHA256(96) for a nonempty signature", "BASE,SIGCHECK,SHA256,WRITE"};
     case OP_CHECKSIGADD:
-        return {"BASE + PREPARE(num) + WRITE(out) + NORMALIZE, plus SIGCHECK + SHA256(96) + ARITH(num) "
-                "for a nonempty signature", "BASE,PREPARE,SIGCHECK,SHA256,ARITH,WRITE,NORMALIZE"};
+        return {"BASE + READ(num) + WRITE(out), plus SIGCHECK + SHA256(96) + ARITH(num) "
+                "for a nonempty signature", "BASE,READ,SIGCHECK,SHA256,ARITH,WRITE"};
     case OP_CHECKLOCKTIMEVERIFY: case OP_CHECKSEQUENCEVERIFY:
-        return {"BASE + PREPARE(n) + READ(n) + WRITE(out) + NORMALIZE", "BASE,PREPARE,READ,WRITE,NORMALIZE"};
+        return {"BASE + READ(n) + WRITE(out)", "BASE,READ,WRITE"};
     case OP_CHECKSIGFROMSTACK:
         return {"BASE + WRITE(8), plus SIGCHECK + SHA256(64 + msg) for a nonempty signature",
                 "BASE,SIGCHECK,SHA256,WRITE"};
     case OP_TWEAKADD: return {"BASE + TWEAK + WRITE(32)", "BASE,TWEAK,WRITE"};
-    case OP_BYTEREV: return {"BASE + BIT(n)", "BASE,BIT"};
+    case OP_BYTEREV: return {"BASE + ARITH(n)", "BASE,ARITH"};
     default: throw std::runtime_error("no candidate formula for " + OpcodeName(opcode));
     }
 }

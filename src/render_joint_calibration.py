@@ -14,7 +14,7 @@ from pathlib import Path
 import tempfile
 
 from restyle_report import restyle
-from fit_calibrations import MAX_EPOCH_NOISE, TARGET_FRACTION, candidate_charge, check_source_snapshots, envelope_model, features, formulas, hash_span, failed_conditions, independent_models, load_calibration, predict
+from fit_calibrations import COMPOSED, MAX_EPOCH_NOISE, TARGET_FRACTION, candidate_charge, charged_by, check_source_snapshots, envelope_model, features, formulas, hash_span, failed_conditions, independent_models, load_calibration, predict, priced_model
 
 
 # Sections: the BIP 440 primitive categories, then one section per later BIP. A
@@ -29,11 +29,11 @@ SECTIONS = [
          intro="Every instruction pays BASE. The opcodes BIP 441 restores add no primitive: each is priced from the primitives on this page.",
          groups=[("Interpreter", ("F",))]),
     dict(slug="category-stack", title="Stack and byte processing",
-         intro="Creating, reading and reordering stack values.",
-         groups=[("Stack and byte processing", ("PRODUCE", "READ", "MOVE"))]),
+         intro="Creating, reading and reordering stack values. READ includes converting an operand to a number, WRITE converting a numeric result back to bytes.",
+         groups=[("Stack and byte processing", ("WRITE", "READ", "MOVE"))]),
     dict(slug="category-numeric", title="Numeric and bit operations",
-         intro="Numbers of any size: preparing operands, the arithmetic itself, and turning results back into bytes.",
-         groups=[("Numeric and bit operations", ("PREP", "NORMALIZE", "ARITH", "BIT", "MULCORE", "DIVCORE"))]),
+         intro="Numbers of any size: passes over their words, multiplication and division.",
+         groups=[("Numeric and bit operations", ("ARITH", "MULCORE", "DIVCORE"))]),
     dict(slug="category-crypto", title="Hashing and signatures",
          intro="Hashes are charged per 64-byte block they process. A signature check has a fixed price.",
          groups=[("Hashing and signatures", ("H256", "H160", "H1", "SIG"))]),
@@ -48,31 +48,29 @@ SECTIONS = [
          groups=[("Unrolling", ("UNROLL",))]),
 ]
 # Prices implemented in src/script/varops.h, compared against the joint candidate.
-IMPLEMENTED_AT = '7d0c293b64'
-CURRENT_COSTS = {'F': '350', 'PREP': '200 + W(n)', 'PRODUCE': '800 + 8 × W(n)', 'NORMALIZE': '200',
-                 'READ': '90 + 2 × W(n)', 'ARITH': '150 + 3 × W(n)', 'BIT': '200 + 2 × W(n)', 'MOVE': '200 + 37 × k',
+IMPLEMENTED_AT = '104c1c0dc3'
+CURRENT_COSTS = {'F': '350', 'READ': '290 + 3 × W(n)', 'WRITE': '1000 + 8 × W(n)', 'ARITH': '200 + 3 × W(n)',
+                 'MOVE': '200 + 37 × k',
                  'MULCORE': '400 + 6 × u + 120 × v + 29 × u × v', 'DIVCORE': '510 × s + 33 × s × v',
                  'H256': '300 + 38 × H(n)', 'H160': '60 + 40 × H(n)',
                  'H1': '200 + 24 × H(n)', 'SIG': '500000', 'TWEAK': '170000',
                  'SELECT': '2400 + 270 × k'}
-BASE, WRITE, SHA256, BIT, SIGCHECK = 350, (800, 8), (300, 38), (200, 2), 500_000
-PREPARE, READ = (200, 1), (90, 2)  # per byte of W(n)
-ARITH, MOVE, MUL, NORMALIZE, SELECT = (150, 3), (200, 37), (400, 6, 120, 29), 200, (2400, 270)
+BASE, WRITE, READ, SHA256, SIGCHECK = 350, (1000, 8), (290, 3), (300, 38), 500_000  # rates per byte of W(n), H(n)
+ARITH, MOVE, MUL, SELECT = (200, 3), (200, 37), (400, 6, 120, 29), (2400, 270)
 
 
-def unroll_charge(units, length, base=BASE, write=WRITE, prepare=PREPARE, read=READ, padded=True):
+def unroll_charge(units, length, base=BASE, write=WRITE, read=READ, padded=True):
     """Complete charge of an UNROLL fixture, as bench_varops_primitives composes it: the
     unrolling charge, then OP_0, OP_IF, OP_ENDIF, OP_1 and the final check of its result."""
     span = (lambda n: (n + 7) // 8 * 8) if padded else (lambda n: n)
     def write_cost(n):
         return write[0] + write[1] * span(n)
     return (units * base + write_cost(length) + 4 * base + write_cost(0) + write_cost(8) +
-            prepare[0] + prepare[1] * 8 + read[0] + read[1] * 8)
+            read[0] + read[1] * 8)
 
 # Common opcodes composed from the implemented prices, as the v2 evaluator adds the charges.
-OPCODE_PRIMITIVES = {'BASE': 'F', 'WRITE': 'PRODUCE', 'READ': 'READ', 'MOVE': 'MOVE', 'PREPARE': 'PREP',
-                     'NORMALIZE': 'NORMALIZE', 'ARITH': 'ARITH', 'BIT': 'BIT', 'MUL': 'MULCORE', 'SHA256': 'H256',
-                     'SIG': 'SIG', 'OP_TX_SELECT': 'SELECT'}
+OPCODE_PRIMITIVES = {'BASE': 'F', 'WRITE': 'WRITE', 'READ': 'READ', 'MOVE': 'MOVE', 'ARITH': 'ARITH',
+                     'MUL': 'MULCORE', 'SHA256': 'H256', 'SIG': 'SIG', 'OP_TX_SELECT': 'SELECT'}
 
 
 def opcode_examples():
@@ -80,19 +78,18 @@ def opcode_examples():
     span = lambda n: (n + 7) // 8 * 8
     write = lambda n: WRITE[0] + WRITE[1] * span(n)
     read = lambda n: READ[0] + READ[1] * span(n)
-    prepare = lambda n: PREPARE[0] + PREPARE[1] * span(n)
     sha256 = lambda n: SHA256[0] + SHA256[1] * hash_span(n)
     rows = [
         ('OP_DUP', 'BASE + WRITE(n)', 'a 32-byte value', BASE + write(32)),
         ('OP_EQUAL', 'BASE + READ(n) + WRITE(8), READ only if both sizes are n', 'two 32-byte values',
          BASE + read(32) + write(8)),
-        ('OP_ROLL', 'BASE + READ(m) + PREPARE(m) + MOVE(k), for an m-byte depth k', 'depth 10',
-         BASE + read(1) + prepare(1) + MOVE[0] + MOVE[1] * 10),
-        ('OP_ADD', 'BASE + PREPARE(a) + PREPARE(b) + ARITH(max(a, b)) + WRITE(r) + NORMALIZE',
-         'two 8-byte numbers, 8-byte sum', BASE + 2 * prepare(8) + ARITH[0] + ARITH[1] * 8 + write(8) + NORMALIZE),
-        ('OP_MUL', 'BASE + PREPARE(a) + PREPARE(b) + MUL(u, v) + WRITE(8 × (u + v)) + NORMALIZE', 'two 8-byte numbers',
-         BASE + 2 * prepare(8) + MUL[0] + MUL[1] + MUL[2] + MUL[3] + write(16) + NORMALIZE),
-        ('OP_BYTEREV', 'BASE + BIT(n)', 'a 32-byte value', BASE + BIT[0] + BIT[1] * 32),
+        ('OP_ROLL', 'BASE + READ(m) + MOVE(k), for an m-byte depth k', 'depth 10',
+         BASE + read(1) + MOVE[0] + MOVE[1] * 10),
+        ('OP_ADD', 'BASE + READ(a) + READ(b) + ARITH(max(a, b)) + WRITE(r)',
+         'two 8-byte numbers, 8-byte sum', BASE + 2 * read(8) + ARITH[0] + ARITH[1] * 8 + write(8)),
+        ('OP_MUL', 'BASE + READ(a) + READ(b) + MUL(u, v) + WRITE(8 × (u + v))', 'two 8-byte numbers',
+         BASE + 2 * read(8) + MUL[0] + MUL[1] + MUL[2] + MUL[3] + write(16)),
+        ('OP_BYTEREV', 'BASE + ARITH(n)', 'a 32-byte value', BASE + ARITH[0] + ARITH[1] * 32),
         ('OP_SHA256', 'BASE + SHA256(n) + WRITE(32)', 'a 32-byte value', BASE + sha256(32) + write(32)),
         ('OP_CHECKSIG', 'BASE + SHA256(96) + SIG + WRITE(8), SHA256 and SIG only for a non-empty signature',
          'a valid signature', BASE + sha256(96) + SIGCHECK + write(8)),
@@ -115,9 +112,10 @@ def opcodes_html():
             'at example sizes:</p>'
             '<table><thead><tr><th>Opcode</th><th>Charge</th><th>Example</th><th>Varops</th></tr></thead>'
             f'<tbody>{rows}</tbody></table>'
-            '<p>a and b are operand sizes in bytes and r the size of the result. Numbers produced as results pay '
-            'WRITE + NORMALIZE; booleans and constants pay WRITE(8). Macros add no primitive: unrolling pays BASE per '
-            'substituted instruction and visited reference, plus WRITE of the unrolled script.</p></div>')
+            '<p>a and b are operand sizes in bytes and r the size of the result. Every numeric operand pays READ, '
+            'and every result WRITE of its size; counts, comparison results, booleans and constants pay WRITE(8). '
+            'Macros add no primitive: unrolling pays BASE per substituted instruction and visited reference, plus '
+            'WRITE of the unrolled script.</p></div>')
 
 
 # Opcodes charged from existing primitives. Each measured fixture is divided by
@@ -133,10 +131,10 @@ CHECKS = {
         models='One BIP 340 signature check of an <code>n</code>-byte message. Its challenge hash covers R, P and the message, so the message bytes are charged as SHA256.',
         fixtures='valid signatures over messages of 0 bytes to 4 MB.'),
     'BYTEREV': dict(
-        source='BIT', select=lambda p: p['group'].startswith('byterev'),
-        charge='BIT(W(n))',
-        charged=lambda p: BIT[0] + BIT[1] * p['x'],
-        curve=lambda x: BIT[0] + BIT[1] * x,
+        source=('ARITH', 'BIT'), select=lambda p: p['group'].startswith('byterev'),
+        charge='ARITH(W(n))',
+        charged=lambda p: ARITH[0] + ARITH[1] * p['x'],
+        curve=lambda x: ARITH[0] + ARITH[1] * x,
         xlabel='Bytes rounded up to 8, W(n)',
         models='Reversing the bytes of a value in place: each 64-bit word is byte-swapped and the word order reversed.',
         fixtures='OP_BYTEREV’s complete work (pop, reverse, push) on values of 1 byte to 4 MB.'),
@@ -158,12 +156,9 @@ FIXTURES = {
 # What each primitive pays for (from the BIP 440 primitive table), shown under its heading.
 MODELS = {
     'F': 'The work every instruction does: decoding, dispatch, metering and stack-limit checks.',
-    'PREP': 'Reading one numeric operand into 64-bit words; charged per operand.',
-    'PRODUCE': 'Creating one stack value of <code>n</code> bytes: allocating, filling and inserting it, and eventually releasing it.',
-    'NORMALIZE': 'Turning a numeric result back into minimal bytes.',
-    'READ': 'Scanning bytes without creating a value: comparisons, zero tests and length conversion.',
-    'ARITH': 'One pass over the operands’ words with a carry between words: addition and subtraction.',
-    'BIT': 'One pass over the operands’ words without carries: bitwise logic, shifts and OP_BYTEREV’s byte reversal.',
+    'READ': 'Reading one operand: converting it into 64-bit words and scanning it for comparisons, zero tests and length conversion; charged per operand.',
+    'WRITE': 'Creating one stack value of <code>n</code> bytes: converting a numeric result back to bytes, or allocating and filling a buffer, then inserting it and eventually releasing it.',
+    'ARITH': 'One pass over the operands’ words, with or without a carry between words: addition, subtraction, bitwise logic, shifts and OP_BYTEREV’s byte reversal.',
     'MOVE': 'Reordering <code>k</code> stack entries without copying their contents, as OP_ROLL does.',
     'MULCORE': 'Schoolbook multiplication of a <code>u</code>-limb number by a <code>v</code>-limb number (<code>v</code> ≤ <code>u</code>, 64-bit limbs), including scratch space.',
     'DIVCORE': 'Long division or remainder: <code>s</code> quotient rows, each working through the <code>v</code> limbs of the divisor.',
@@ -177,8 +172,33 @@ MODELS = {
 
 # Additional explanation shown under a primitive's description.
 NOTES = {
-    'NORMALIZE': 'Hollow marks are a path scripts cannot reach, an unaligned buffer; they are shown but not fitted. A result hands its buffer over in place, whatever its length, so NORMALIZE is a flat charge.',
+    'NORMALIZE': 'Hollow marks are a path scripts cannot reach, an unaligned buffer; they are shown but not fitted. A result hands its buffer over in place, whatever its length, so this part is flat.',
     'PRODUCE': 'Shortening a value is not fitted on its own: it takes an opcode that pays for producing its result, so creating and then shortening a value counts as two productions.',
+    'WRITE': 'Shortening a value is not fitted on its own: it takes an opcode that pays for producing its result, so creating and then shortening a value counts as two productions.',
+}
+
+# How a primitive measured in parts is priced from them (fit_calibrations.COMPOSED).
+COMPOSED_TEXT = {
+    'READ': 'This dataset measured READ in two parts: converting an operand into 64-bit words, and scanning it. '
+            'READ is charged once per operand for both, so its price adds the two parts&#39; rounded prices, '
+            '{shares}, and each machine&#39;s curve adds its two fits.',
+    'WRITE': 'This dataset measured WRITE in two parts: producing a value, and converting a numeric result back to '
+             'bytes. WRITE is charged once per value for both, so its price adds the two parts&#39; rounded prices, '
+             '{shares}, and each machine&#39;s curve adds its two fits. A value that is not a number pays for the '
+             'conversion as well.',
+    'ARITH': 'This dataset measured ARITH in two parts: passes with a carry chain and passes without one. An opcode '
+             'makes one kind of pass, so the price takes the larger flat and the larger rate of the two parts&#39; '
+             'rounded prices, {shares}, and each machine&#39;s curve takes the larger flat and rate of its two fits.',
+}
+# Parts of a primitive that a dataset measured separately (fit_calibrations.COMPOSED):
+# what each part times.
+PARTS = {
+    'PREP': ('Converting the operand', 'Taking an operand from its stack bytes into 64-bit words.'),
+    'READ': ('Scanning the operand', 'Comparisons, zero tests and trimming over the operand&#39;s words, and OP_EQUAL&#39;s byte comparison.'),
+    'PRODUCE': ('Producing the value', 'Allocating, filling and inserting a value of <code>n</code> bytes, and eventually releasing it.'),
+    'NORMALIZE': ('Converting a numeric result', 'Turning a numeric result back into minimal bytes.'),
+    'ARITH': ('With a carry chain', 'Addition and subtraction.'),
+    'BIT': ('Without a carry chain', 'Bitwise logic, shifts and OP_BYTEREV&#39;s byte reversal.'),
 }
 
 def group_digits(formula):
@@ -197,7 +217,8 @@ def cost_comparison(joint, family):
 
 def check_points(key, series):
     spec = CHECKS[key]
-    points = [dict(p) for p in series.get(spec['source'], []) if spec['select'](p)]
+    sources = spec['source'] if isinstance(spec['source'], tuple) else (spec['source'],)
+    points = [dict(p) for source in sources for p in series.get(source, []) if spec['select'](p)]
     for p in points:
         p['charged'] = spec['charged'](p)
         p['ratio'] = p['y'] / p['charged']
@@ -207,8 +228,7 @@ def check_points(key, series):
 DISPLAY = {"SELECT": "OP_TX_SELECT", "UNROLL": "Macro unrolling",
            "CSFS": "OP_CHECKSIGFROMSTACK", "BYTEREV": "OP_BYTEREV"}
 # Published primitive names; raw calibration data keeps the original family labels.
-PUBLISHED_NAMES = [(r'\bhashblockspan\(', 'H('), (r'\bF\b', 'BASE'), (r'\bPREP\b', 'PREPARE'), (r'\bPRODUCE\b', 'WRITE'),
-                   (r'\bMULCORE\b', 'MUL'), (r'\bDIVCORE\b', 'DIV'), (r'\bH256\b', 'SHA256'),
+PUBLISHED_NAMES = [(r'\bhashblockspan\(', 'H('), (r'\bF\b', 'BASE'), (r'\bMULCORE\b', 'MUL'), (r'\bDIVCORE\b', 'DIV'), (r'\bH256\b', 'SHA256'),
                    (r'\bH160\b', 'RIPEMD160'), (r'\bH1\b', 'SHA1')]
 
 
@@ -241,6 +261,8 @@ PRODUCE_MARKERS = {
     'grow': ('#70521b', 'plus', 'Grow buffer'),
     'churn': ('#334155', 'cross', 'Large-source churn'),
     'fresh-pages': ('#a16207', 'square', 'Freshly mapped pages'),
+    'numeric': ('#be185d', 'diamond', 'Numeric result'),
+    'scalar': ('#4a3aa7', 'down', 'Count or boolean'),
 }
 
 
@@ -312,7 +334,8 @@ def describe(path):
     return f"{system}, {machine['compiler']}, {sha}"
 
 
-def chart(family, points, models, group=None, id_prefix="", candidates=None):
+def chart(family, points, models, group=None, id_prefix="", candidates=None, price_label="Price",
+          price_note="The dotted line is the price: the envelope rounded up."):
     """candidates, when given, are the rounded candidate coefficients, drawn dotted over the envelope."""
     shown = [p for p in points if group is None or p["group"] == group]
     if not shown:
@@ -346,12 +369,12 @@ def chart(family, points, models, group=None, id_prefix="", candidates=None):
     title = f"{display} — {group}" if group is not None else display
     machine_count = len({p['machine_key'] for p in shown})
     description = ('; '.join(f'{marker}: {label}' for key, label, marker in LEGEND_DESC if any(p['machine_key'] == key for p in shown)) + '. Hollow marks are measured but not fitted.')
-    if family == 'PRODUCE' and machine_count > 1:
+    if family in {'PRODUCE', 'WRITE'} and machine_count > 1:
         description = 'Machine is encoded by colour and path by marker shape.'
     if 'envelope' in models:
         description += ' The solid line is the envelope: the cheapest curve of the same form on or above every machine’s fit.'
     if candidates is not None:
-        description += ' The dotted line is the price: the envelope rounded up.'
+        description += ' ' + price_note
     pieces = [f'<svg viewBox="0 0 {WIDTH} {HEIGHT}" role="img" aria-label="{esc(title)}: {machine_count} machines and {len(models)} fitted cost curves">',
               f'<title>{esc(title)}: normalized varops per measured operation</title>',
               f'<desc>{description}</desc>',
@@ -399,7 +422,7 @@ def chart(family, points, models, group=None, id_prefix="", candidates=None):
             px, py = xy(p["x"], p["y"])
             color = ("#087f8c" if p["group"] == "aligned" else "#dc6b18") if family == "NORMALIZE" and machine_count == 1 else COLORS[key]
             fill = color if p["included"] else "white"
-            if family == "PRODUCE":
+            if family in {"PRODUCE", "WRITE"}:
                 mark = produce_marker(p['group'], round(px, 2), round(py, 2), color if machine_count > 1 else None)
             elif family == "NORMALIZE" and machine_count == 1 and p["group"] == "offset-span":
                 mark = f'<path d="M{px:.2f},{py-3.6:.2f}L{px+3.6:.2f},{py+3:.2f}L{px-3.6:.2f},{py+3:.2f}Z" fill="{fill}" stroke="{color}" stroke-width=".8"/>'
@@ -418,7 +441,7 @@ def chart(family, points, models, group=None, id_prefix="", candidates=None):
             pieces.append(f'<g><title>{esc(key)} · {esc(p.get("label", p["group"]))}: {p["y"]:.6g} varops</title>{mark}</g>')
     pieces.append("</g></svg>")
     legend = ''
-    if family == 'PRODUCE':
+    if family in {'PRODUCE', 'WRITE'}:
         legend = '<p>Colour is the machine, shape is the path. Each machine is fitted over all its paths.</p><div class="plot-legend">'
         for key, label in MACHINE_NAMES.items():
             if not any(p['machine_key'] == key for p in shown): continue
@@ -426,9 +449,10 @@ def chart(family, points, models, group=None, id_prefix="", candidates=None):
         if 'envelope' in models:
             legend += '<span style="color:#172536">━ Envelope of the fits</span>'
         if candidates is not None:
-            legend += '<span><i class="plot-line candidate" aria-hidden="true"></i>Price</span>'
+            legend += f'<span><i class="plot-line candidate" aria-hidden="true"></i>{esc(price_label)}</span>'
         legend += '</div><div class="plot-legend">'
         for path, (_, _, label) in PRODUCE_MARKERS.items():
+            if not any(p['group'] == path for p in shown): continue
             legend += f'<span><svg class="legend-icon" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">{produce_marker(path, 7, 7, "#526174")}</svg>{esc(label)}</span>'
         legend += '</div><p class="muted">Each measurement includes releasing the value. Growth and churn are two productions each, so their size is the average per production. Hover a mark for details.</p>'
     return legend + "".join(pieces)
@@ -539,28 +563,34 @@ SCREEN_DIR = 'worst-case'
 # Opcodes whose complete scripts exercise a primitive most, for the worst complete script beside its
 # measurements. Signature checks are left out of the others: their time is the signature itself.
 SCREEN_OPCODES = {
-    'NORMALIZE': ('OP_ADD', 'OP_SUB', 'OP_MUL', 'OP_DIV', 'OP_MOD', 'OP_1ADD', 'OP_1SUB', 'OP_2MUL', 'OP_2DIV',
-                  'OP_MIN', 'OP_MAX', 'OP_LSHIFT', 'OP_RSHIFT'),
-    'PRODUCE': ('OP_CAT', 'OP_SUBSTR', 'OP_LEFT', 'OP_RIGHT', 'OP_DUP', 'OP_2DUP', 'OP_3DUP', 'OP_OVER', 'OP_2OVER',
-                'OP_PICK', 'OP_TUCK', 'OP_IFDUP', 'OP_PUSHDATA1', 'OP_PUSHDATA2', 'OP_PUSHDATA4', 'OP_LSHIFT'),
-    'BIT': ('OP_BYTEREV', 'OP_INVERT', 'OP_AND', 'OP_OR', 'OP_XOR', 'OP_LSHIFT', 'OP_RSHIFT'),
+    'WRITE': ('OP_CAT', 'OP_SUBSTR', 'OP_LEFT', 'OP_RIGHT', 'OP_DUP', 'OP_2DUP', 'OP_3DUP', 'OP_OVER', 'OP_2OVER',
+              'OP_PICK', 'OP_TUCK', 'OP_IFDUP', 'OP_PUSHDATA1', 'OP_PUSHDATA2', 'OP_PUSHDATA4', 'OP_ADD', 'OP_SUB',
+              'OP_MUL', 'OP_DIV', 'OP_MOD', 'OP_1ADD', 'OP_1SUB', 'OP_2MUL', 'OP_2DIV', 'OP_MIN', 'OP_MAX',
+              'OP_LSHIFT', 'OP_RSHIFT'),
+    'ARITH': ('OP_ADD', 'OP_SUB', 'OP_1ADD', 'OP_1SUB', 'OP_BYTEREV', 'OP_INVERT', 'OP_AND', 'OP_OR', 'OP_XOR',
+              'OP_2MUL', 'OP_2DIV', 'OP_LSHIFT', 'OP_RSHIFT'),
     'DIVCORE': ('OP_DIV', 'OP_MOD'),
     'MULCORE': ('OP_MUL',),
-    'ARITH': ('OP_ADD', 'OP_SUB', 'OP_1ADD', 'OP_1SUB'),
     'MOVE': ('OP_ROLL', 'OP_PICK', 'OP_ROT', 'OP_2ROT'),
     'SELECT': ('OP_TX',),
     'SIG': ('OP_CHECKSIG', 'OP_CHECKSIGVERIFY', 'OP_CHECKSIGADD', 'OP_CHECKSIGFROMSTACK'),
 }
 # Why a primitive's single measurements above the reference do not carry over to complete opcodes.
 ABOVE_REFERENCE_NOTES = {
-    'NORMALIZE': 'Only values of 1 to 4 MB on one machine, at most 180 varops over the flat price; producing such a '
-                 'value pays a WRITE of over 8 million varops.',
-    'PRODUCE': 'Buffer growth and first use of fresh memory pages, which depend on what the allocator did before. '
-               'Complete scripts that build and copy large values stay below the reference.',
-    'BIT': 'Short OP_BYTEREV values on one machine; the complete opcode also pays BASE.',
+    'WRITE': 'Buffer growth and first use of fresh memory pages, which depend on what the allocator did before. '
+             'Complete scripts that build and copy large values stay below the reference.',
+    'ARITH': 'Short OP_BYTEREV values on one machine; the complete opcode also pays BASE.',
     'DIVCORE': 'Divisions of 64 and 128 limbs on the two Intel machines; complete OP_DIV and OP_MOD also pay '
-               'PREPARE, READ, WRITE and NORMALIZE.',
+               'READ and WRITE.',
 }
+
+
+def family_label(family, model_id):
+    """A measured family's name on the page: a part as its primitive and what the part times."""
+    for primitive, (_, parts) in COMPOSED[model_id].items():
+        if family in parts:
+            return f'{DISPLAY.get(primitive, primitive)} · {PARTS[family][0].lower()}'
+    return DISPLAY.get(family, family)
 
 
 def load_screens(dataset):
@@ -629,7 +659,10 @@ def screens_html(screens, machines, dataset, page_dir=None):
              'Tapleaf 0xC2 workload as a complete script, every opcode with its BASE and all its charges, and '
              'projects it to a full 40-billion-varop budget. The result is compared with the slowest Tapleaf 0xC0 '
              f'script on the same machine. Prices of gsr <code>{esc(screens["commit"])}</code>; a case above 1.0× '
-             'is re-measured at a 10% budget over 7 rounds and counts with its slowest round.</p>'
+             'is re-measured at a 10% budget over 7 rounds and counts with its slowest round.'
+             + ('' if IMPLEMENTED_AT.startswith(screens['commit'][:10]) else
+                f' Since then, gsr <code>{IMPLEMENTED_AT}</code> merged PREPARE, NORMALIZE and BIT into READ, WRITE '
+                'and ARITH without lowering any opcode&#39;s charge.') + '</p>'
              '<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Reference</th><th>Worst Tapleaf 0xC2 '
              'script</th><th>× reference</th><th>Scripts above</th></tr></thead><tbody>']
     for machine, screen in rows:
@@ -689,7 +722,7 @@ def diagnostics_html(joint, machines, dataset, page_dir=None):
     over = [item for item in above if item['ratio'] > limit]
     worst = {}
     for item in above:
-        worst.setdefault(item['family'], item)
+        worst.setdefault(item.get('primitive', item['family']), item)
     summary = (f'Single measurements: {len(over):,} of {coverage["checked"]:,} would exceed their machine&#39;s '
                f'reference if a full budget were spent on them alone')
     parts.append(f'<details><summary>{summary}</summary>'
@@ -704,8 +737,8 @@ def diagnostics_html(joint, machines, dataset, page_dir=None):
                      f'<th>Above {limit:.2f}×</th><th>Highest</th><th>Machine</th><th>Measured ÷ price</th>'
                      '<th>Worst complete script</th></tr></thead><tbody>')
         for family, item in worst.items():
-            count = sum(other['family'] == family for other in above)
-            count_over = sum(other['family'] == family for other in over)
+            count = sum(other.get('primitive', other['family']) == family for other in above)
+            count_over = sum(other.get('primitive', other['family']) == family for other in over)
             script = worst_script(screens, family)
             script = (f'{script[0]:.2f}× ({esc(case_label(script[1]))}, {esc(labels.get(script[2], script[2]))})'
                       if script else '–')
@@ -715,7 +748,7 @@ def diagnostics_html(joint, machines, dataset, page_dir=None):
                          f'<td>{item["ratio"]:.2f}×</td><td>{script}</td></tr>')
         parts.append('</tbody></table></div>')
         notes = [(family, note) for family, note in ABOVE_REFERENCE_NOTES.items()
-                 if any(item['family'] == family for item in over)]
+                 if any(item.get('primitive', item['family']) == family for item in over)]
         if notes:
             parts.append('<ul>' + ''.join(f'<li><strong>{esc(DISPLAY.get(family, family))}</strong>: {esc(note)}</li>'
                                           for family, note in notes) + '</ul>')
@@ -756,8 +789,10 @@ def diagnostics_html(joint, machines, dataset, page_dir=None):
         parts.append(f'<details><summary>The {len(under)} size ranges</summary><div class="table-wrap"><table><thead>'
                      '<tr><th>Primitive</th><th>Path</th><th>Sizes</th><th>Machine</th><th>Measurements</th>'
                      '<th>Most above the fit</th></tr></thead><tbody>')
+        charged = charged_by(joint['model_id'])
         for item in sorted(under, key=lambda item: -item['max_above_fit']):
-            parts.append(f'<tr><td><a href="#{item["family"]}">{esc(DISPLAY.get(item["family"], item["family"]))}</a></td>'
+            parts.append(f'<tr><td><a href="#{charged.get(item["family"], item["family"])}">'
+                         f'{esc(family_label(item["family"], joint["model_id"]))}</a></td>'
                          f'<td><code>{esc(item["group"])}</code></td><td>{size_range(item["decade"])}</td>'
                          f'<td>{esc(names.get(item["machine"], item["machine"]))}</td><td>{item["fixtures"]}</td>'
                          f'<td>{item["max_above_fit"]:.2f}×</td></tr>')
@@ -808,10 +843,13 @@ def render(joint_path, output, source_root=None, title=TITLE):
     for meta in joint['machines']:
         # Inputs are recorded relative to the joint fit.
         meta['file'] = str(joint_path.parent / meta['file'])
-    if joint.get("schema") != "varop-joint-fit-v2":
-        raise ValueError("this comparison requires a v2 joint fit")
-    if joint.get("model_id") != "producer-normalize-v1":
-        raise ValueError("this report renders the producer-normalize-v1 model only")
+    if joint.get("schema") != "varop-joint-fit-v3":
+        raise ValueError("this comparison requires a v3 joint fit")
+    model_id = joint.get("model_id")
+    if model_id not in COMPOSED:
+        raise ValueError(f"unknown primitive model: {model_id}")
+    composed = COMPOSED[model_id]
+    charged = charged_by(model_id)
     machines = []
     for meta in joint["machines"]:
         source = Path(meta["file"])
@@ -829,18 +867,23 @@ def render(joint_path, output, source_root=None, title=TITLE):
         for point in points:
             point["machine_key"] = key
         machines.append(dict(meta=meta, points=points, model=model, key=key, label=label))
-    joint_model = {family: tuple(record["envelope_coefficients"])
-                   for family, record in joint["primitives"].items()}
     models = {machine["key"]: machine["model"] for machine in machines}
+    priced = {machine["key"]: priced_model(machine["model"], model_id) for machine in machines}
     series = defaultdict(list)
+    priced_series = defaultdict(list)
     for machine in machines:
         for point in machine["points"]:
             series[point["family"]].append(point)
+            if point["family"] in charged:
+                priced_series[charged[point["family"]]].append(point)
+    # env_model holds the measured families' envelopes, priced_env the priced primitives'.
     env_model = envelope_model(machine_models, series)
-    for family, record in joint['primitives'].items():
-        if 'envelope_coefficients' in record and any(
-                abs(a - b) > 1e-6 * max(1.0, abs(a)) for a, b in zip(record['envelope_coefficients'], env_model[family])):
-            raise ValueError(f'envelope of {family} differs from the joint fit')
+    priced_env = envelope_model([priced[machine["key"]] for machine in machines], priced_series)
+    for records, envelopes in ((joint['primitives'], priced_env), (joint.get('measured_parts', {}), env_model)):
+        for family, record in records.items():
+            if any(abs(a - b) > 1e-6 * max(1.0, abs(a))
+                   for a, b in zip(record['envelope_coefficients'], envelopes[family])):
+                raise ValueError(f'envelope of {family} differs from the joint fit')
 
     candidates = {family: record['candidate_coefficients'] for family, record in joint['primitives'].items()}
 
@@ -889,7 +932,9 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
                  '80,000 signature checks or repeated hashing of 520-byte values. The slowest is that machine&#39;s '
                  f'reference: {min(references):.1f} to {max(references):.1f} seconds here.</li>'
                  '<li><strong>Measure.</strong> Every primitive is timed on prepared operands, from empty values to the '
-                 f'4 MB element limit, in {passes}; each measurement is the median.</li>'
+                 f'4 MB element limit, in {passes}; each measurement is the median.'
+                 + (' This dataset timed READ, WRITE and ARITH in two parts each; their prices compose the parts&#39; '
+                    'prices, as described under each of them.' if composed else '') + '</li>'
                  '<li><strong>Fit.</strong> Times are converted to varops so that 40 billion varops of fitted work take '
                  f'{TARGET_FRACTION:g} × the reference. Each machine&#39;s measurements are fitted with the primitive&#39;s '
                  'formula, penalizing under-estimates 100 times more than over-estimates.</li>'
@@ -946,13 +991,13 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
         parts.append(f'<a href="#{section["slug"]}">{esc(section["title"].split(" · ")[0])}</a>')
     parts.append('</nav></header>')
 
-    def machine_legend(pts, fits=True, charge=None):
+    def machine_legend(pts, fits=True, charge=None, price_label='Price'):
         present = [key for key, _, _ in LEGEND_MACHINES if any(q['machine_key'] == key for q in pts)]
         legend = ''.join(f'<span><i class="plot-mark {key}" aria-hidden="true"></i>{label}</span>'
                          for key, label, _ in LEGEND_MACHINES if key in present)
         if fits:
             legend += '<span><i class="plot-line basis" aria-hidden="true"></i>Envelope of the fits</span>'
-            legend += '<span><i class="plot-line candidate" aria-hidden="true"></i>Price</span>'
+            legend += f'<span><i class="plot-line candidate" aria-hidden="true"></i>{esc(price_label)}</span>'
         else:
             legend += ('<span><i class="plot-line basis" aria-hidden="true"></i>Charge'
                        + (f' <code>{esc(group_digits(charge))}</code>' if charge else '') + '</span>')
@@ -1018,21 +1063,73 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
             out.extend(signature_table(pts))
             out.append('</details></article>')
             return out
-        if family != 'PRODUCE':
-            out.append(machine_legend(pts))
+        out.extend(charts(family, pts, candidates))
+        out.extend(fit_table(family, models, env_model))
+        out.append('</details></article>')
+        return out
+
+    def charts(family, pts, prices, prefix='', price_label='Price',
+               price_note='The dotted line is the price: the envelope rounded up.'):
+        """A family's measurements with its envelope and a dotted price line from prices."""
+        out = []
+        if family not in {'PRODUCE', 'WRITE'}:
+            out.append(machine_legend(pts, price_label=price_label))
             groups = sorted({p["group"] for p in pts})
             if family in {"H256", "DIVCORE", "MULCORE", "NORMALIZE"} and len(groups) > 1:
                 for group in groups:
-                    out.append(f'<div class="facet-title">{esc(group)}</div><div class="chart">{chart(family, pts, family_models(family), group, candidates=candidates)}</div>')
-            else:
-                out.append(f'<div class="chart">{chart(family, pts, family_models(family), candidates=candidates)}</div>')
-        else:
-            out.append(f'<div class="chart">{chart(family, pts, {"envelope": env_model}, candidates=candidates)}</div>')
-        out.append('<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Fitted cost (varops)</th></tr></thead><tbody>')
+                    out.append(f'<div class="facet-title">{esc(group)}</div><div class="chart">'
+                               f'{chart(family, pts, family_models(family), group, prefix, prices, price_label, price_note)}</div>')
+                return out
+        out.append(f'<div class="chart">{chart(family, pts, family_models(family), None, prefix, prices, price_label, price_note)}</div>')
+        return out
+
+    def fit_table(family, curves, envelope, envelope_label='Envelope of all machines'):
+        """Each machine's fitted curve of a family and their envelope."""
+        out = ['<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Fitted cost (varops)</th></tr></thead><tbody>']
         for machine in machines:
-            out.append(f'<tr><td>{esc(machine["label"])}</td><td><code>{esc(fitted(family, models[machine["key"]][family]))}</code></td></tr>')
-        out.append(f'<tr><td>Envelope of all machines</td><td><code>{esc(fitted(family, env_model[family]))}</code></td></tr></tbody></table></div>')
-        out.append('</details></article>')
+            out.append(f'<tr><td>{esc(machine["label"])}</td><td><code>{esc(fitted(family, curves[machine["key"]][family]))}</code></td></tr>')
+        out.append(f'<tr><td>{esc(envelope_label)}</td><td><code>{esc(fitted(family, envelope[family]))}</code></td></tr></tbody></table></div>')
+        return out
+
+    def composed_article(family, tag):
+        """A primitive this dataset measured in parts: its composed fits against its price, then each part."""
+        how, members = composed[family]
+        record = joint['primitives'][family]
+        price = record['candidate_coefficients']
+        candidate = formulas(family, price, candidate=True)
+        implemented = CURRENT_COSTS[family]
+        shares = [joint['measured_parts'][m]['candidate_coefficients'] for m in members]
+        share_text = ' and '.join(f'<code>{esc(group_digits(formulas(m, c, candidate=True)))}</code>'
+                                  for m, c in zip(members, shares))
+        out = [f'<article id="{family}"><{tag}>{esc(DISPLAY.get(family, family))}</{tag}>',
+               f'<p><strong>Price:</strong> <code>{esc(group_digits(candidate))}</code> varops.'
+               + ('' if implemented == candidate else
+                  f' The implementation still charges <code>{esc(group_digits(implemented))}</code>.') + '</p>',
+               f'<p class="model"><strong>Pays for:</strong> {MODELS[family]}</p>']
+        out.append(f'<p>{COMPOSED_TEXT[family].format(shares=share_text)}</p>')
+        # Coefficients and sizes are nonnegative and W(n) >= n, so covering every coefficient covers every size.
+        envelope = priced_env[family]
+        covered = all(e <= c + 1e-9 for e, c in zip(envelope, price))
+        out.append('<details open><summary>Composed fits and price</summary>')
+        out.extend(fit_table(family, priced, priced_env))
+        out.append(f'<p>The envelope {"lies at or below the price at every size" if covered else "exceeds the price"}: '
+                   f'<code>{esc(fitted(family, envelope))}</code> against <code>{esc(group_digits(candidate))}</code>.</p>')
+        out.append('</details>')
+        for m, share in zip(members, shares):
+            title, description = PARTS[m]
+            pts = series[m]
+            out.append(f'<details open><summary>{esc(title)}</summary><p class="model">{description}</p>')
+            note = NOTES.get(m)
+            if note:
+                out.append(f'<p>{note}</p>')
+            if how == 'sum':
+                out.extend(charts(m, pts, {m: share}, f'{family}-', 'Part of the price',
+                                  'The dotted line is this part&#39;s share of the price.'))
+            else:
+                out.extend(charts(m, pts, {m: price}, f'{family}-'))
+            out.extend(fit_table(m, models, env_model))
+            out.append('</details>')
+        out.append('</article>')
         return out
 
     def check_article(key, tag):
@@ -1076,7 +1173,8 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
                 parts.append(f'<h3 class="group-title">{esc(group_title)}</h3>')
             for family in families:
                 tag = 'h4' if grouped else 'h3'
-                parts.extend(check_article(family, tag) if family in CHECKS else priced_article(family, tag))
+                parts.extend(check_article(family, tag) if family in CHECKS else
+                             composed_article(family, tag) if family in composed else priced_article(family, tag))
         parts.append('</section>')
     parts.append('<footer class="footer">' + (f'Measured at gsr {", ".join(heads)}. ' if heads else '')
                  + (f'Prices implemented at gsr {IMPLEMENTED_AT}. ' if same_schedule else '')

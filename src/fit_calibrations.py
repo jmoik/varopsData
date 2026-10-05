@@ -25,10 +25,59 @@ import tempfile
 
 
 CONSTANT = {"F", "SIG", "TWEAK", "NORMALIZE"}
-PRODUCER_ORDER = "F PREP PRODUCE NORMALIZE READ ARITH BIT MOVE MULCORE DIVCORE H256 H160 H1 SIG TWEAK SELECT UNROLL".split()
+# The measured families of each bench_varops_primitives model. read-write-arith-v1
+# times BIP 440's READ, WRITE and ARITH directly. producer-normalize-v1, the model of
+# the recorded runs, timed their parts as families of their own: an operand's
+# conversion (PREP) apart from its scans (READ), producing a value (PRODUCE) apart
+# from converting a numeric result to bytes (NORMALIZE), and word passes without a
+# carry chain (BIT) apart from ARITH.
+FAMILIES = {
+    "read-write-arith-v1": "F READ WRITE ARITH MOVE MULCORE DIVCORE H256 H160 H1 SIG TWEAK SELECT UNROLL".split(),
+    "producer-normalize-v1": "F PREP PRODUCE NORMALIZE READ ARITH BIT MOVE MULCORE DIVCORE H256 H160 H1 SIG TWEAK SELECT UNROLL".split(),
+}
+MODEL_ID = "read-write-arith-v1"
 # Measured compositions of existing primitives: compared against their charge, never priced.
 CHECKS = {"UNROLL"}
-MODEL_ID = "producer-normalize-v1"
+# BIP 440's priced primitives.
+PRICED = "F READ WRITE ARITH MOVE MULCORE DIVCORE H256 H160 H1 SIG TWEAK SELECT".split()
+# How a model's measured families compose a priced primitive: READ pays for both
+# converting and scanning an operand and WRITE for both converting a numeric
+# result and producing it, so their parts add; ARITH covers passes with and
+# without a carry chain, so it takes the larger of the two. Other priced
+# primitives are measured families of the same name.
+COMPOSED = {
+    "read-write-arith-v1": {},
+    "producer-normalize-v1": {"READ": ("sum", ("PREP", "READ")), "WRITE": ("sum", ("PRODUCE", "NORMALIZE")),
+                              "ARITH": ("max", ("ARITH", "BIT"))},
+}
+
+
+def charged_by(model_id):
+    """The priced primitive that charges each measured family of a model."""
+    out = {family: family for family in FAMILIES[model_id] if family in PRICED}
+    for primitive, (_, parts) in COMPOSED[model_id].items():
+        out.update({part: primitive for part in parts})
+    return out
+
+
+def priced_model(model, model_id):
+    """One machine's curves of the priced primitives, composed from its measured fits.
+
+    Every composed part is a fixed term and a rate on W(n); a constant fit has a zero rate."""
+    out = {}
+    for family in PRICED:
+        how, parts = COMPOSED[model_id].get(family, ("sum", (family,)))
+        if any(part not in model for part in parts):
+            continue
+        curves = [model[part] for part in parts]
+        combine = sum if how == "sum" else max
+        out[family] = tuple(combine(curve[i] for curve in curves) for i in range(len(curves[0])))
+    return out
+
+
+def compose_candidates(candidates, model_id):
+    """Rounded prices of the priced primitives from rounded prices of the measured families."""
+    return priced_model({family: tuple(c) for family, c in candidates.items()}, model_id)
 BUDGET_VAROPS = 40_000_000_000
 # BIP 440 measurement condition: a run whose epoch noise exceeds this is repeated,
 # not priced. Load average and reference drift, which earlier runners recorded,
@@ -110,7 +159,7 @@ def fixture(row, producer_manifest=None):
     family = parts[0]
     x, group, included = 1, "measurement", True
     y = float(row["ns_per_execution"])
-    if family in {"PRODUCE", "NORMALIZE"}:
+    if family in {"PRODUCE", "NORMALIZE", "WRITE"}:
         record = producer_manifest[row['probe']]
         count = int(record['items'])
         group = '/'.join(parts[1:-1])
@@ -126,9 +175,10 @@ def fixture(row, producer_manifest=None):
     elif family == "PREP":
         x, group = int(parts[1]), parts[2]
         included = group == "spare"
-    elif family == "ARITH":
+    elif family == "ARITH" and parts[1] in {"add", "sub"}:
+        # ARITH/<add|sub>/<words>/...; the other ARITH and BIT fixtures name bytes.
         x, group = int(parts[2]) * 8, parts[1] + "/" + "/".join(parts[3:])
-    elif family in {"READ", "BIT"}:
+    elif family in {"READ", "BIT", "ARITH"}:
         x, group = word(int(parts[2])), parts[1]
         if len(parts) > 3:
             group += "/" + parts[3]
@@ -168,7 +218,7 @@ def load_calibration(path):
     if data.get("schema") != "varop-calibration-v1":
         raise ValueError(f"{path}: unsupported calibration schema")
     model_id = data.get('model_id')
-    if model_id != MODEL_ID:
+    if model_id not in FAMILIES:
         raise ValueError(f'{path}: unknown costing model {model_id}')
     manifest = {r['probe']: r for r in data.get('producer_manifest', [])}
     normalization = data["normalization"]
@@ -185,7 +235,7 @@ def load_calibration(path):
         name = row["probe"]
         if name.startswith("PRODUCER_CHECK/"):
             continue
-        if name.split("/", 1)[0] not in PRODUCER_ORDER:
+        if name.split("/", 1)[0] not in FAMILIES[model_id]:
             raise ValueError(f"{path}: unknown primitive {name}")
         ns = float(row["ns_per_execution"])
         if not math.isfinite(ns) or ns <= 0:
@@ -203,7 +253,7 @@ def load_calibration(path):
         point["y"] *= rate
         point["machine"] = machine
         points.append(point)
-    if {p["family"] for p in points} != set(PRODUCER_ORDER):
+    if {p["family"] for p in points} != set(FAMILIES[model_id]):
         raise ValueError(f"{path}: missing primitive family")
     meta = dict(file=str(path), model_id=model_id, sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
                 cpu=data["machine"]["cpu"], epochs=epochs,
@@ -595,7 +645,7 @@ def independent_models(paths):
 # Size-dependent rates are priced per byte of the padded length the operation processes:
 # W(n) (whole 8-byte words) for numeric and byte operations, H(n) (whole 64-byte blocks)
 # for the hashes. Fitted byte rates are per byte of n, and W(n) >= n.
-WORD_PRICED = {'PREP', 'PRODUCE', 'READ', 'ARITH', 'BIT'}
+WORD_PRICED = {'PREP', 'PRODUCE', 'READ', 'WRITE', 'ARITH', 'BIT'}
 
 
 def ceil_to(value, step):
@@ -655,7 +705,8 @@ def formulas(family, coeff, candidate=False):
 
 def fit_all(series, penalty):
     fits = {}
-    order = [f for f in PRODUCER_ORDER if f in series and f not in CHECKS]
+    order = [f for f in dict.fromkeys(FAMILIES["producer-normalize-v1"] + FAMILIES[MODEL_ID])
+             if f in series and f not in CHECKS]
     for family in [f for f in order if f != 'SIG'] + [f for f in ('SIG',) if f in order]:
         points = [p for p in series[family] if p["included"]]
         for point in points:
@@ -715,26 +766,30 @@ def quality_gate(series, models, machine_keys, machine_names):
                 gate_failures=gate_failures)
 
 
-def charge_coverage(series, schedule, machine_keys, machine_names):
+def charge_coverage(series, schedule, machine_keys, machine_names, charged=None):
     """Included fixtures measured above the charge of one schedule.
 
-    ratio is measured / charged, with measurements normalized so that a full budget
-    takes TARGET_FRACTION of the machine's pre-v2 reference; above 1, a full budget of
-    that fixture alone would take longer than that. A primitive fixture above its charge is a
-    diagnostic finding; only complete scripts establish a limit violation."""
+    charged maps a measured family to the priced primitive that charges its fixtures
+    (charged_by); by default each family is its own. ratio is measured / charged, with
+    measurements normalized so that a full budget takes TARGET_FRACTION of the
+    machine's pre-v2 reference; above 1, a full budget of that fixture alone would
+    take longer than that. A primitive fixture above its charge is a diagnostic
+    finding; only complete scripts establish a limit violation."""
     above, checked = [], 0
     for family, points in series.items():
-        if family not in schedule:
+        primitive = (charged or {}).get(family, family)
+        if primitive not in schedule:
             continue
         names = dict(zip(machine_keys, machine_names))
         for p in points:
             if not p["included"] or p["machine"] not in names:
                 continue
             checked += 1
-            charge = candidate_charge(family, p, schedule)
+            charge = candidate_charge(primitive, p, schedule)
             if p["y"] > charge:
-                above.append(dict(machine=names[p["machine"]], family=family, fixture=p["label"],
-                                  measured_varops=p["y"], charged_varops=charge, ratio=p["y"] / charge))
+                above.append(dict(machine=names[p["machine"]], family=family, primitive=primitive,
+                                  fixture=p["label"], measured_varops=p["y"], charged_varops=charge,
+                                  ratio=p["y"] / charge))
     above.sort(key=lambda item: -item["ratio"])
     return dict(checked=checked, above_charge=above)
 
@@ -742,9 +797,10 @@ def charge_coverage(series, schedule, machine_keys, machine_names):
 def lifetime_checks(path, model, machine):
     """Held-out lifetimes (PRODUCER_CHECK) measured above one machine's composed fit.
 
-    A numeric result is produced at the word span of its bytes, prepared and
-    normalized; other lifetimes are their production events. ratio is measured /
-    composed; the lifetimes are never fitted."""
+    model holds the machine's priced curves (priced_model). A numeric lifetime
+    produces its bytes, which is a WRITE, then reads them as a number and writes the
+    result at the word span of its bytes; other lifetimes are their WRITE events.
+    ratio is measured / composed; the lifetimes are never fitted."""
     data = json.loads(Path(path).read_text())
     rate = pricing_rate(data["normalization"])
     observations = defaultdict(list)
@@ -760,10 +816,10 @@ def lifetime_checks(path, model, machine):
         if not row["probe"].startswith("PRODUCER_CHECK/"):
             continue
         count, size, numeric = (int(row[k]) for k in ("items", "bytes", "normalize_bytes"))
-        composed = charge("PRODUCE", count, size)
+        composed = charge("WRITE", count, size)
         if row["kind"] == "numeric":
             span = word(numeric)
-            composed += charge("PRODUCE", 1, span) + charge("PREP", 1, span) + charge("NORMALIZE", 1, span)
+            composed += charge("READ", 1, span) + charge("WRITE", 1, span)
         measured = statistics.median(observations[row["probe"]]) * rate
         checked += 1
         if measured > composed:
@@ -845,7 +901,6 @@ def main():
         raise ValueError("inputs were collected from different commits")
     if len({meta['model_id'] for meta in machines}) != 1:
         raise ValueError('cannot combine different costing models; recollect all machines with the frozen candidate')
-    order = [f for f in PRODUCER_ORDER if f in series and f not in CHECKS]
     if args.allow_source_mismatch and args.source_root is None:
         parser.error("--allow-source-mismatch requires --source-root")
     sources = [{name.replace("\\", "/"): digest for name, digest in meta["source_sha256"].items()}
@@ -868,33 +923,66 @@ def main():
         raise ValueError(f"benchmark sources differ from their recorded varopsData commit: {names}")
     if any(fixtures != fixture_sets[0] for fixtures in fixture_sets[1:]):
         raise ValueError("inputs have different fixture sets")
+    model_id = machines[0]['model_id']
     models = independent_models(paths)
-    max_coeff = maximum_coefficients(models)
-    envelope = envelope_model(models, series)
+    measured_envelope = envelope_model(models, series)
+    charged = charged_by(model_id)
+    priced = [priced_model(model, model_id) for model in models]
+    priced_series = defaultdict(list)
+    for family, points in series.items():
+        if family in charged:
+            priced_series[charged[family]].extend(points)
+    max_coeff = maximum_coefficients(priced)
+    envelope = envelope_model(priced, priced_series)
+    order = [family for family in PRICED if family in envelope]
+    composed = COMPOSED[model_id]
+    parts = [part for _, (_, members) in composed.items() for part in members]
+    # A composed primitive's price composes its parts' rounded prices, as varops.h
+    # merges them; its envelope, which covers each machine's composed curve, is
+    # compared with that price.
+    part_candidates = {part: rounded_candidate(part, measured_envelope[part]) for part in parts}
+    part_maxima = {part: rounded_candidate(part, maximum_coefficients(models)[part]) for part in parts}
+    composed_candidates = compose_candidates(part_candidates, model_id)
+    composed_maxima = compose_candidates(part_maxima, model_id)
     status = ("exploratory multi-machine fit with unresolved source differences" if unmatched else
               "exploratory multi-machine fit including runs that failed their measurement conditions" if failed else
               "provisional multi-machine fit, not an accepted consensus schedule")
-    result = dict(schema="varop-joint-fit-v2", status=status,
-                  model_id=machines[0]['model_id'],
+    result = dict(schema="varop-joint-fit-v3", status=status,
+                  model_id=model_id,
                   pricing_basis="envelope",
-                  schedule_combination="Envelope of machine curves, each fitted independently from the samples recorded on that machine after same-machine normalization (see envelope_combination); DIVCORE rows are trimmed-length quotient rows, fitted as fixed + step + cell. Round after combining; SIG remains fixed at 500000. Coefficientwise maxima are kept for comparison.",
+                  schedule_combination="Envelope of machine curves, each fitted independently from the samples recorded on that machine after same-machine normalization (see envelope_combination); DIVCORE rows are trimmed-length quotient rows, fitted as fixed + step + cell. Round after combining; SIG remains fixed at 500000. Coefficientwise maxima are kept for comparison."
+                                       + (" Primitives measured in parts (composed_from) are priced by composing the parts' rounded prices: READ and WRITE add theirs, ARITH takes the larger. Their envelope covers each machine's composed curve and is compared with that price." if composed else ""),
                   envelope_combination=ENVELOPE,
                   method=f"Per-machine median of raw fixture epochs, normalized so that a full 40-billion-varop budget of fitted work takes {TARGET_FRACTION:g}× the recorded local pre-v2 reference (rate derived from the recorded reference time, whatever normalization the artifact was collected with); equal path-group and size-decade weights; weighted squared log error with a 100× underprediction penalty; nonnegative predefined coefficients; no coefficient rounding. SIG diagnostic fits do not replace the fixed 500000 allowance.",
                   machines=machines, source_check=source_check, bench_check=bench_check,
                   schedule_rounding=dict(coefficient="flats to a multiple of 10 below 100 and of 50 from 100, and to no more than two significant figures; rates to two significant figures, and at least to a whole varop", sig_policy=500000,
                                          rule="Ceiling each coefficient independently: flats to a multiple of 10 below 100 and of 50 from 100, never to more than two significant figures; rates (per byte of W(n) or H(n) or per counted item) to two significant figures and at least to a whole varop; preserve zero/exact multiples; no refitting.",
                                          status="Installed as provisional research candidate; source discrepancy and multi-machine script confirmation remain open."),
-                  primitives={})
+                  primitives={}, measured_parts={})
     print("Primitive  Envelope (varops, unrounded)                   Rounded candidate                      Maximum coefficients (unrounded)")
     for family in order:
-        candidate = rounded_candidate(family, envelope[family])
-        result["primitives"][family] = dict(envelope_coefficients=envelope[family],
-                                            candidate_coefficients=candidate,
-                                            candidate_formula=formulas(family, candidate, candidate=True),
-                                            maximum_coefficients=max_coeff[family],
-                                            maximum_candidate_coefficients=rounded_candidate(family, max_coeff[family]),
-                                            notes="SIG is a measured residual; 500000-varop sigops parity is a separate policy decision" if family == "SIG" else "")
+        candidate = (list(composed_candidates[family]) if family in composed else
+                     rounded_candidate(family, envelope[family]))
+        maximum_candidate = (list(composed_maxima[family]) if family in composed else
+                             rounded_candidate(family, max_coeff[family]))
+        record = dict(envelope_coefficients=envelope[family],
+                      candidate_coefficients=candidate,
+                      candidate_formula=formulas(family, candidate, candidate=True),
+                      maximum_coefficients=max_coeff[family],
+                      maximum_candidate_coefficients=maximum_candidate,
+                      notes="SIG is a measured residual; 500000-varop sigops parity is a separate policy decision" if family == "SIG" else "")
+        if family in composed:
+            record.update(composed_from=list(composed[family][1]), composition=composed[family][0])
+        result["primitives"][family] = record
         print(f"{family:<10} {formulas(family, envelope[family]):<48} {formulas(family, candidate, candidate=True):<38} {formulas(family, max_coeff[family])}")
+    if parts:
+        print("Measured in parts:")
+    for part in parts:
+        candidate = part_candidates[part]
+        result["measured_parts"][part] = dict(primitive=charged[part], envelope_coefficients=measured_envelope[part],
+                                              candidate_coefficients=candidate,
+                                              candidate_formula=formulas(part, candidate, candidate=True))
+        print(f"  {part:<8} {formulas(part, measured_envelope[part]):<48} {formulas(part, candidate, candidate=True)}")
     candidates = {family: record["candidate_coefficients"] for family, record in result["primitives"].items()}
     keys = [str(path) for path in paths]
     for meta in machines:
@@ -904,10 +992,10 @@ def main():
     if args.implemented:
         implemented = json.loads(args.implemented.read_text())
         schedules[f"implemented ({implemented['source']})"] = implemented["coefficients"]
-    lifetimes = [lifetime_checks(path, model, label) for path, model, label in zip(paths, models, labels)]
+    lifetimes = [lifetime_checks(path, model, label) for path, model, label in zip(paths, priced, labels)]
     result["diagnostics"] = dict(
         quality_gate=quality_gate(series, models, keys, labels),
-        charge_coverage={name: charge_coverage(series, schedule, keys, labels)
+        charge_coverage={name: charge_coverage(series, schedule, keys, labels, charged)
                          for name, schedule in schedules.items()},
         held_out_lifetimes=dict(checked=sum(checked for checked, _ in lifetimes),
                                 above_fit=sorted((item for _, above in lifetimes for item in above),

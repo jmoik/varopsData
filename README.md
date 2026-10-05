@@ -7,7 +7,7 @@ How the costs of Tapleaf 0xC2 operations are measured and priced. [BIP 440](http
 ## Method
 
 1. **Reference.** On each machine, time a panel of existing (Tapleaf 0xC0) script workloads, such as 80,000 signature checks or repeated hashing of 520-byte elements. The slowest one, `T_pre`, is the reference.
-2. **Primitives.** An operation's cost is a fixed `BASE` plus a few shared primitives: preparing numbers, writing values, reading, arithmetic, bit operations, moving stack entries, multiplication, division, hashing and signature checks. Each has a simple formula in the operand sizes, declared before measuring.
+2. **Primitives.** An operation's cost is a fixed `BASE` plus a few shared primitives: reading operands, writing values, passes over words, moving stack entries, multiplication, division, hashing and signature checks. Each has a simple formula in the operand sizes, declared before measuring.
 3. **Measure.** Time every primitive on prepared operands over a grid of sizes (dense near zero, at word and block boundaries, then up to the 4 MB element limit) in 7 passes, and take the median. A run whose passes disagree by more than 1.5% is repeated.
 4. **Fit.** For each machine, fit each formula to its measurements, penalizing under-prediction 100 times more than over-prediction, so that a full budget of fitted work takes 0.9 × `T_pre`. A quality gate checks the fit at every size decade.
 5. **Combine.** Take the cheapest formula that covers every machine's fit at every size.
@@ -20,7 +20,7 @@ The details of every step, each primitive's measurements and the acceptance stat
 
 ## Machines
 
-The current dataset, [`data/2026-10-01-full-runs-one-deduction`](data/2026-10-01-full-runs-one-deduction/), has full runs on six machines. A non-Apple ARM64 machine and a low-end home-node device are still needed.
+The current dataset, [`data/2026-10-01-full-runs-one-deduction`](data/2026-10-01-full-runs-one-deduction/), has full runs on six machines. It measured READ, WRITE and ARITH in two parts each, from which the fit composes them; the current benchmarks measure them directly. A non-Apple ARM64 machine and a low-end home-node device are still needed.
 
 | Machine | OS | Reference `T_pre` | Slowest existing workload |
 |---|---|---|---|

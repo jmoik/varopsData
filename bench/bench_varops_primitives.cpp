@@ -339,7 +339,7 @@ public:
         Require(out.good(), "cannot open output: " + options.output);
         out << std::setprecision(17)
             << "# Reference_Script_Evaluation_Seconds: " << options.reference_sec << '\n'
-            << "# Primitive_Model: producer-normalize-v1\n"
+            << "# Primitive_Model: read-write-arith-v1\n"
             << "# Max_Probe_Bytes: " << MAX_PROBE_BYTES << '\n'
             << "# Copy_Target_Batch_MS: " << options.copy_epoch_ms << '\n'
             << "# Epochs: " << options.epochs << '\n';
@@ -612,39 +612,12 @@ void MeasureFixed(Runner& r)
     }
 }
 
-// PREP: directly call the production ownership/conversion path. Operands carry
-// the word-padding capacity every stack value is given.
-void MeasurePreparation(Runner& r)
-{
-    for (size_t n : Sizes()) {
-        const Bytes source = Pattern(n);
-        const size_t cap = r.PoolLimit(2 * biguint::WordPaddedCapacity(n) + 256);
-        struct State {
-            std::vector<Bytes> bytes;
-            std::vector<BigUint> numbers;
-        };
-        auto make = [&](size_t count) {
-            State s;
-            s.bytes.resize(count);
-            s.numbers.resize(count);
-            for (size_t i = 0; i < count; ++i) {
-                Bytes b = source;
-                b.reserve(biguint::WordPaddedCapacity(n));
-                s.bytes[i] = std::move(b);
-            }
-            return s;
-        };
-        r.Measure("PREP/" + util::ToString(n) + "/spare", cap, make, [](auto& s, size_t c) {
-            for (size_t i = 0; i < c; ++i)
-                s.numbers[i].MoveFromValtype(std::move(s.bytes[i]));
-        });
-    }
-}
-
-// Producer lifetime model: complete creation/use/destruction is timed together.
-// NORMALIZE isolates numeric materialization; no insertion or destruction occurs
-// inside its timer. Sizes/counts describe semantic values, never capacity.
-void MeasureProducer(Runner& r)
+// WRITE: complete lifetimes of produced stack values, creation, use and
+// destruction timed together. A numeric result is converted from its number
+// (MoveToValtype), pushed and released, as the interpreter's numeric opcodes
+// produce it; other values are copied or built into a word-padded buffer.
+// Sizes/counts describe semantic values, never capacity.
+void MeasureWrite(Runner& r)
 {
     const auto cycle = [&](const std::string& label, const std::string& kind,
                            size_t items, size_t bytes, size_t numeric_bytes, auto work) {
@@ -663,17 +636,17 @@ void MeasureProducer(Runner& r)
     }
     std::sort(sizes.begin(), sizes.end());
     sizes.erase(std::unique(sizes.begin(), sizes.end()), sizes.end());
-    // The source every PRODUCE/churn fixture shortens, near the element size limit.
+    // The source every WRITE/churn fixture shortens, near the element size limit.
     const Bytes large_source{Pattern(3'998'900)};
     for (const size_t n : sizes) {
         const Bytes source{Pattern(n)};
         ValtypeStack stack;
         MakeRoom(stack, 8);
         // Shrinking needs an opcode, which charges its result's production
-        // separately; PRODUCE/churn measures that pair.
+        // separately; WRITE/churn measures that pair.
         for (const std::string mode : {"stack", "vector", "zero", "grow"}) {
             // Growth funds both the original value and its enlarged replacement.
-            cycle("PRODUCE/" + mode + "/" + util::ToString(n), "produce",
+            cycle("WRITE/" + mode + "/" + util::ToString(n), "write",
                   mode == "grow" ? 2 : 1, mode == "grow" ? n + n / 2 : n, 0, [&] {
                       if (mode == "stack") {
                           stack.push_back(source);
@@ -707,7 +680,7 @@ void MeasureProducer(Runner& r)
         // lifetime pays the page faults, kernel zeroing and unmapping. Warm reuse is
         // the stack mode above; this bounds allocators that return large blocks to the OS.
         if (n >= 16384) {
-            cycle("PRODUCE/fresh-pages/" + util::ToString(n), "produce", 1, n, 0, [&] {
+            cycle("WRITE/fresh-pages/" + util::ToString(n), "write", 1, n, 0, [&] {
 #ifdef _WIN32
                 void* pages{VirtualAlloc(nullptr, n, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)};
                 Require(pages != nullptr, "fresh-page allocation failed");
@@ -726,7 +699,7 @@ void MeasureProducer(Runner& r)
         // Source and result are both funded: never attribute freeing a 4 MB
         // source to the size of a one-byte result.
         const size_t result_size{std::min(n, large_source.size())};
-        cycle("PRODUCE/churn/" + util::ToString(n), "produce", 2, large_source.size() + result_size, 0, [&] {
+        cycle("WRITE/churn/" + util::ToString(n), "write", 2, large_source.size() + result_size, 0, [&] {
             Bytes temporary{large_source};
             // As OP_SUBSTR: the result is copied into a word-padded buffer.
             Bytes result;
@@ -737,38 +710,33 @@ void MeasureProducer(Runner& r)
             stack.pop_back();
         });
         {
-            struct State {
-                std::vector<BigUint> numbers;
-                std::vector<Bytes> results;
-            };
-            const std::string label{"NORMALIZE/aligned/" + util::ToString(n)};
-            // Conversion takes the same few nanoseconds at every size, so a timed epoch
-            // needs many conversions. Where the pool holds fewer than 256 values
-            // (above about 31 KB), allow up to 1 GiB. Each state holds one
-            // value buffer.
-            constexpr size_t MIN_CONVERSIONS{256};
+            const std::string label{"WRITE/numeric/" + util::ToString(n)};
+            // A numeric result's lifetime takes tens of nanoseconds up to the sizes
+            // where releasing its buffer dominates, so a timed epoch needs many
+            // results. Where the pool holds fewer than 256 values (above about
+            // 31 KB), allow up to 1 GiB. Each number holds one value buffer.
+            constexpr size_t MIN_RESULTS{256};
             constexpr size_t LARGE_POOL_BYTES{size_t{1} << 30};
             const size_t per_state{biguint::WordPaddedCapacity(n) + 256};
-            const size_t conversions{std::max(r.PoolLimit(per_state),
-                                              std::min(MIN_CONVERSIONS, r.PoolLimit(per_state, LARGE_POOL_BYTES)))};
+            const size_t results{std::max(r.PoolLimit(per_state),
+                                          std::min(MIN_RESULTS, r.PoolLimit(per_state, LARGE_POOL_BYTES)))};
             r.Measure(
-                label, conversions,
+                label, results,
                 [&](size_t count) {
-                    State state;
-                    state.numbers.resize(count);
-                    state.results.resize(count);
+                    std::vector<BigUint> numbers(count);
                     // Copy one pattern rather than regenerating it for every value.
                     for (size_t i = 0; i < count; ++i)
-                        state.numbers[i].MoveFromValtype(Bytes{source});
-                    return state;
+                        numbers[i].MoveFromValtype(Bytes{source});
+                    return numbers;
                 },
-                [](auto& state, size_t count) {
+                [&](auto& numbers, size_t count) {
                     for (size_t i = 0; i < count; ++i) {
-                        state.results[i] = state.numbers[i].MoveToValtype();
-                        Observe(state.results[i]);
+                        stack.push_back(numbers[i].MoveToValtype());
+                        Observe(stack.Top());
+                        stack.pop_back();
                     }
                 });
-            r.Manifest(label, "normalize", 1, 0, n);
+            r.Manifest(label, "write", 1, n, n);
         }
         // These are held-out composition checks, not more fit constraints.
         for (const bool spare : {false, true}) {
@@ -784,54 +752,99 @@ void MeasureProducer(Runner& r)
                   });
         }
     }
+    // Counts, comparison results, constants and booleans, which pay WRITE(8).
+    ValtypeStack stack;
+    MakeRoom(stack, 8);
     for (uint64_t value : {uint64_t{0}, uint64_t{1}, uint64_t{255}, uint64_t{256}, uint64_t{65536}, UINT64_MAX}) {
         BigUint fixture(value);
         const size_t n{fixture.MoveToValtype().size()};
-        const std::string label{"NORMALIZE/scalar/" + util::ToString(value)};
-        struct State {
-            std::vector<BigUint> numbers;
-            std::vector<Bytes> results;
-        };
+        const std::string label{"WRITE/scalar/" + util::ToString(value)};
         r.Measure(
             label, r.PoolLimit(512),
             [&](size_t count) {
-                State state;
-                state.results.resize(count);
-                state.numbers.reserve(count);
+                std::vector<BigUint> numbers;
+                numbers.reserve(count);
                 for (size_t i = 0; i < count; ++i)
-                    state.numbers.emplace_back(value);
-                return state;
+                    numbers.emplace_back(value);
+                return numbers;
             },
-            [](auto& state, size_t count) {
+            [&](auto& numbers, size_t count) {
                 for (size_t i = 0; i < count; ++i) {
-                    state.results[i] = state.numbers[i].MoveToValtype();
-                    Observe(state.results[i]);
+                    stack.push_back(numbers[i].MoveToValtype());
+                    Observe(stack.Top());
+                    stack.pop_back();
                 }
             });
-        r.Manifest(label, "normalize", 1, 0, n);
+        r.Manifest(label, "write", 1, n, n);
     }
 }
 
-// READ: BigUint zero/comparison helpers. Full scans are forced by equal/all-zero
-// operands. Normalization uses
-// independent padded-zero values because repeating TrimTail would time empties.
-void MeasureTraversal(Runner& r)
+// READ: an operand's conversion to a number together with the scan an opcode
+// makes of it, timed as the interpreter runs them. Operands carry the
+// word-padding capacity every stack value is given. READ/convert only takes
+// the operand from its stack bytes (MoveFromValtype), as for an operand whose
+// pass ARITH charges; READ/zero, READ/compare and READ/trim then scan it in
+// full: an all-zero operand tested for zero or trimmed, and an operand compared
+// with an equal one. READ/equal-bytes is OP_EQUAL's comparison of two stack
+// values, which reads their bytes without converting them.
+void MeasureRead(Runner& r)
 {
-    for (size_t n : Sizes(1)) {
-        const size_t words = (n + 7) / 8, bytes = words * 8;
-        r.Repeated(
-            "READ/zero/" + util::ToString(bytes),
-            [&] { return LimbBytes(words, 0); },
-            [](auto& a, size_t) {
-                const bool v = biguint::IsZero(biguint::ConstLimbs{a});
+    for (size_t n : Sizes()) {
+        const auto operands = [n](const Bytes& source, size_t count) {
+            std::vector<Bytes> bytes(count);
+            for (auto& b : bytes) {
+                b.reserve(biguint::WordPaddedCapacity(n));
+                b.assign(source.begin(), source.end());
+            }
+            return bytes;
+        };
+        struct State {
+            std::vector<Bytes> bytes;
+            std::vector<BigUint> numbers;
+        };
+        const auto make = [&](const Bytes& source) {
+            return [&operands, source](size_t count) {
+                return State{operands(source, count), std::vector<BigUint>(count)};
+            };
+        };
+        const size_t cap = r.PoolLimit(2 * biguint::WordPaddedCapacity(n) + 256);
+        r.Measure("READ/convert/" + util::ToString(n), cap, make(Pattern(n)), [](auto& s, size_t c) {
+            for (size_t i = 0; i < c; ++i)
+                s.numbers[i].MoveFromValtype(std::move(s.bytes[i]));
+        });
+        if (n == 0) continue;
+        r.Measure("READ/zero/" + util::ToString(n), cap, make(Bytes(n, 0)), [](auto& s, size_t c) {
+            for (size_t i = 0; i < c; ++i) {
+                s.numbers[i].MoveFromValtype(std::move(s.bytes[i]));
+                const bool v = s.numbers[i].IsZero();
                 Observe(v);
-            });
-        r.Repeated(
-            "READ/compare/" + util::ToString(bytes),
-            [&] { return std::pair{LimbBytes(words, 1), LimbBytes(words, 1)}; },
-            [](auto& a, size_t) {
-                const int v = biguint::Compare(biguint::ConstLimbs{a.first}, biguint::ConstLimbs{a.second});
-                Observe(v);
+            }
+        });
+        r.Measure("READ/trim/" + util::ToString(n), cap, make(Bytes(n, 0)), [](auto& s, size_t c) {
+            for (size_t i = 0; i < c; ++i) {
+                s.numbers[i].MoveFromValtype(std::move(s.bytes[i]));
+                s.numbers[i].TrimTrailingZeros();
+            }
+        });
+        struct CompareState {
+            std::vector<Bytes> bytes;
+            std::vector<BigUint> numbers, others;
+        };
+        r.Measure(
+            "READ/compare/" + util::ToString(n), r.PoolLimit(3 * biguint::WordPaddedCapacity(n) + 256),
+            [&](size_t count) {
+                CompareState s{operands(Pattern(n), count), std::vector<BigUint>(count), {}};
+                s.others.reserve(count);
+                for (size_t i = 0; i < count; ++i)
+                    s.others.emplace_back(Bytes{s.bytes[i]});
+                return s;
+            },
+            [](auto& s, size_t c) {
+                for (size_t i = 0; i < c; ++i) {
+                    s.numbers[i].MoveFromValtype(std::move(s.bytes[i]));
+                    const int v = s.numbers[i].Compare(s.others[i]);
+                    Observe(v);
+                }
             });
         // OP_EQUAL/OP_EQUALVERIFY compare the stack bytes directly; equal values scan fully.
         r.Repeated(
@@ -841,23 +854,11 @@ void MeasureTraversal(Runner& r)
                 const bool v = a.first == a.second;
                 Observe(v);
             });
-        r.Measure(
-            "READ/trim/" + util::ToString(n), r.PoolLimit(2 * biguint::WordPaddedCapacity(n) + 128),
-            [&](size_t count) {
-                std::vector<BigUint> v;
-                v.reserve(count);
-                for (size_t i = 0; i < count; ++i)
-                    v.emplace_back(Bytes(n, 0));
-                return v;
-            },
-            [](auto& v, size_t count) {
-                for (size_t i = 0; i < count; ++i)
-                    v[i].TrimTrailingZeros();
-            });
     }
 }
 
-// ARITH: biguint::Add/Subtract are timed separately on fresh prepared input.
+// ARITH: passes over 64-bit words, with or without a carry chain, fitted as
+// one family. biguint::Add/Subtract are timed separately on fresh prepared input.
 // A shared affine envelope exposes the kernel's fixed call/loop work instead
 // of folding it into a small-operand per-byte rate. With a one-word b, Add
 // carries through a only on the carry-chain operand and Subtract borrows only on
@@ -904,24 +905,24 @@ void MeasureArithmetic(Runner& r)
     }
 }
 
-// BIT: no conversions in the timed region. Exercise actual BigUint inversion and
-// XOR, OP_BYTEREV's work after dispatch (it pops the value, reverses it with the
+// ARITH without a carry chain: no conversions in the timed region. Exercise
+// actual BigUint inversion and XOR, OP_BYTEREV's work after dispatch (it pops the value, reverses it with the
 // biguint::ReverseBytes word kernel and pushes it back, as the interpreter does)
 // and the raw shift kernels. Repetition never shrinks an operand: inversion, XOR
 // and reversal toggle or reorder bits, and the shift kernels keep the view size
 // as bits shift out.
-void MeasureBit(Runner& r)
+void MeasureBitwise(Runner& r)
 {
     for (size_t n : Sizes(1)) {
         r.Repeated(
-            "BIT/invert/" + util::ToString(n),
+            "ARITH/invert/" + util::ToString(n),
             [&] { return std::make_unique<BigUint>(Pattern(n)); },
             [](auto& v, size_t) {
                 BigUint::OpInvert(*v);
                 Observe(*v);
             });
         r.Repeated(
-            "BIT/byterev/" + util::ToString(n),
+            "ARITH/byterev/" + util::ToString(n),
             [&] {
                 auto stack = std::make_unique<ValtypeStack>();
                 stack->push_back(Pattern(n));
@@ -937,7 +938,7 @@ void MeasureBit(Runner& r)
             explicit State(size_t n) : a(Pattern(n, 1)), b(Pattern(n, 2)) {}
         };
         r.Repeated(
-            "BIT/xor/" + util::ToString(n),
+            "ARITH/xor/" + util::ToString(n),
             [&] { return std::make_unique<State>(n); },
             [](auto& s, size_t) {
                 BigUint::OpXor(s->a, s->b);
@@ -947,11 +948,11 @@ void MeasureBit(Runner& r)
             // Whole-word-sized values avoid introducing representation padding.
             // The raw shift helpers preserve the view size even after bits vanish.
             r.Repeated(
-                "BIT/down/" + util::ToString(n) + "/" + util::ToString(shift),
+                "ARITH/down/" + util::ToString(n) + "/" + util::ToString(shift),
                 [&] { return Pattern(biguint::WordPaddedCapacity(n)); },
                 [&](auto& v, size_t) { biguint::ShiftDown(biguint::Limbs{v}, shift); });
             r.Repeated(
-                "BIT/up/" + util::ToString(n) + "/" + util::ToString(shift),
+                "ARITH/up/" + util::ToString(n) + "/" + util::ToString(shift),
                 [&] { return Pattern(biguint::WordPaddedCapacity(n)); },
                 [&](auto& v, size_t) {
                     const uint64_t carry = biguint::ShiftUp(biguint::Limbs{v}, static_cast<unsigned>(shift));
@@ -960,7 +961,7 @@ void MeasureBit(Runner& r)
             // As OP_LSHIFT after prepending 64 KiB of zeros: only A's words are shifted.
             constexpr size_t PREFIX{65536};
             r.Repeated(
-                "BIT/upshift/" + util::ToString(n) + "/" + util::ToString(shift),
+                "ARITH/upshift/" + util::ToString(n) + "/" + util::ToString(shift),
                 [&] {
                     Bytes bytes(PREFIX, 0);
                     const Bytes a{Pattern(biguint::WordPaddedCapacity(n))};
@@ -1061,7 +1062,7 @@ void MeasureDivision(Runner& r)
 // Operand preparation and the zeroed product buffer happen before timing, since
 // the interpreter charges the product's WRITE separately; the product is kept
 // alive until after timing, so its release and final byte conversion also stay
-// with PRODUCE and NORMALIZE.
+// with WRITE.
 void MeasureMultiplication(Runner& r)
 {
     constexpr size_t max_limbs{MAX_PROBE_BYTES / 8};
@@ -1331,7 +1332,7 @@ void MeasureUnroll(Runner& r)
         // OP_1 and the final check of its result.
         const uint64_t expected{units * varops::BaseCost() + varops::WriteCost(bytes + INACTIVE_WRAPPER_BYTES) +
                                 4 * varops::BaseCost() + varops::WriteCost(0) + varops::WriteCost(8) +
-                                varops::PrepareCost(1) + varops::ReadCost(1)};
+                                varops::ReadCost(1)};
         Require(charged == expected, "macro fixture charge mismatch: " + shape);
         const std::string label{"UNROLL/" + shape + "/" + util::ToString(units) + "/" +
                                 util::ToString(bytes + INACTIVE_WRAPPER_BYTES) + "/" + util::ToString(charged)};
@@ -1377,7 +1378,7 @@ void Help()
                  "                      FILE.samples.csv, the producer manifest FILE.produce.csv\n"
                  "  --epochs N          Measured epochs per fixture, one per pass over all fixtures (default 7)\n"
                  "  --sample-ms MS      Target timed duration per epoch (default 10)\n"
-                 "  --copy-sample-ms MS Target duration for producer lifetime fixtures (default 100)\n"
+                 "  --copy-sample-ms MS Target duration for WRITE lifetime fixtures (default 100)\n"
                  "  --self-test         Check the production helper fixtures, then exit\n";
 }
 
@@ -1485,9 +1486,9 @@ int main(int argc, char** argv)
         std::cerr << "Reference: " << options.reference_sec << " s (Script evaluation only).\n";
         Runner runner(options);
         Crypto crypto;
-        runner.RunPasses({[&] { MeasureFixed(runner); }, [&] { MeasureProducer(runner); },
-                          [&] { MeasurePreparation(runner); }, [&] { MeasureTraversal(runner); },
-                          [&] { MeasureArithmetic(runner); }, [&] { MeasureBit(runner); },
+        runner.RunPasses({[&] { MeasureFixed(runner); }, [&] { MeasureWrite(runner); },
+                          [&] { MeasureRead(runner); },
+                          [&] { MeasureArithmetic(runner); }, [&] { MeasureBitwise(runner); },
                           [&] { MeasureMove(runner); }, [&] { MeasureMultiplication(runner); },
                           [&] { MeasureDivision(runner); }, [&] { MeasureHashes(runner); },
                           [&] { MeasureSignatures(runner, crypto); }, [&] { MeasureItems(runner); },

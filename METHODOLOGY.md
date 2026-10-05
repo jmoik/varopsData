@@ -11,12 +11,9 @@ Notation: `n` is a size in bytes, `W(n) = 8 ceil(n / 8)` its span in 64-bit word
 | Primitive | Formula | What it models |
 | --- | --- | --- |
 | `BASE` | `a` | The work every instruction does: decoding, dispatch, metering and stack-limit checks. |
-| `PREPARE(n)` | `a + b W(n)` | Reading one numeric operand into 64-bit words; charged per operand. |
-| `WRITE(n)` | `a + b W(n)` | Creating one stack value of `n` bytes: allocating, filling and inserting it, and eventually releasing it. |
-| `NORMALIZE` | `a` | Turning a numeric result back into minimal bytes. |
-| `READ(n)` | `a + b W(n)` | Scanning bytes without creating a value: comparisons, zero tests and length conversion. |
-| `ARITH(n)` | `a + b W(n)` | One pass over the operands' words with a carry between words: addition and subtraction. |
-| `BIT(n)` | `a + b W(n)` | One pass over the operands' words without carries: bitwise logic, shifts and OP_BYTEREV's byte reversal. |
+| `READ(n)` | `a + b W(n)` | Reading one operand: converting it into 64-bit words and scanning it for comparisons, zero tests and length conversion; charged per operand. |
+| `WRITE(n)` | `a + b W(n)` | Creating one stack value of `n` bytes: converting a numeric result back to bytes, or allocating and filling a buffer, then inserting it and eventually releasing it. |
+| `ARITH(n)` | `a + b W(n)` | One pass over the operands' words, with or without a carry between words: addition, subtraction, bitwise logic, shifts and OP_BYTEREV's byte reversal. |
 | `MOVE(k)` | `a + b k` | Reordering `k` stack entries without copying their contents, as OP_ROLL does. |
 | `MUL(u, v)` | `a + b u + c v + d u v` | Schoolbook multiplication, one row per limb of the shorter operand, including scratch space. |
 | `DIV(s, v)` | `a + b s + c s v` | Long division or remainder: `s` quotient rows, each working through the `v` limbs of the divisor, including normalization and temporaries. |
@@ -32,13 +29,13 @@ Rates are fitted per byte of `n` and charged per byte of `W(n)` or `H(n)` (see [
 ### Composition rules
 
 - **Lifetimes.** WRITE includes eventual release. Initial witness values pay WRITE once after the immediate-success prescan, including empty values. Moves, drops and in-place shrinkage are not new producers; an opcode that shortens a value pays WRITE for its result.
-- **Numeric results** pay `WRITE(W(n)) + NORMALIZE`. MUL charges WRITE and PREPARE of its full product span and WRITE of a scratch row before execution, and only NORMALIZE at output. DIV includes its internal temporary storage.
-- **Small results.** A count or numeric comparison costs `WRITE(8) + NORMALIZE` whatever its encoded length; a constant or boolean written directly costs `WRITE(8)`.
+- **Numeric operands and results.** Every numeric operand pays READ, and every numeric result WRITE of its bytes. MUL charges WRITE of its full product span before multiplying; its scratch storage is part of MUL. DIV includes its internal temporary storage.
+- **Small results.** A count, comparison result, constant or boolean costs `WRITE(8)` whatever its encoded length.
 - **No separate allocation charge.** Required allocation and growth belong to the producing operation, including scratch storage; they are never omitted or charged twice.
 - **Hashes compose.** HASH256 is `SHA256(n) + SHA256(32)`, HASH160 is `SHA256(n) + RIPEMD160(32)`, plus BASE and the digest's WRITE.
-- **Final result check**: `PREPARE + READ` of the remaining element, once per script.
+- **Final result check**: `READ` of the remaining element, once per script.
 - **Macros.** Unrolled instructions in inactive branches pay nothing when reached, so the unrolling charge covers their substitution, copying and skipping. `bench_varops` evaluates such scripts repeatedly against one shared budget, as inputs of one transaction, because one script unrolls at most 4 MB.
-- Lock checks pay BASE plus their operands' preparation and scans. PREPARE and NORMALIZE keep their own flats rather than inflating BASE. A fitted rate may be zero.
+- Lock checks pay BASE plus READ of their operand. READ and WRITE keep their own flats rather than inflating BASE. A fitted rate may be zero.
 - Capacity and cache state are measurement conditions, never charge inputs.
 
 For each opcode the source path (calls, multiplicities, size features, branches, charge timing, storage ownership) is derived before looking at its timing; `bench_varops --coverage-manifest` exports the formula and the primitives of every opcode. `bench_varops --verify-costs` runs every Tapleaf 0xC2 case at its exact consumed budget and at one varop less, and checks one-to-one and hash sequences against an independent charge calculator. Agreement shows accounting, not timing coverage: complete-script benchmarks check that.
@@ -103,20 +100,19 @@ The sample grid follows the operation, not its expected use: dense near zero, at
 Each item names what is timed, its paths (the path groups that the fit weights equally) and its range. Unless stated otherwise the benchmark calls the production helper on prepared operands, which are outside the timer.
 
 - **BASE**: Tapleaf 0xC2 evaluation and final-result checking of 256, 1,024, 4,096 and 16,384 instructions that pay only BASE, followed by OP_1, divided by the executed instruction count. Paths: NOPs, upgradable NOPs, CODESEPARATOR, alternating ELSE, and flat and nested IF/ENDIF in an inactive branch. Parsing and prescanning are included; entry and finalization are amortized. Skipped instructions are timed but not fitted, since serialized weight funds them.
-- **PREPARE**: production value conversion of 0 to 4,000,000 bytes on values with word-padded capacity, the state in which every stack value is written. Fitted and charged per byte of `W(n)`.
+- **READ**: an operand's conversion into 64-bit words together with the scan an opcode makes of it, timed as the interpreter runs them, on values with word-padded capacity, the state in which every stack value is written. Paths: conversion alone (`convert`, 0 to 4,000,000 bytes), as for an operand whose pass ARITH charges; conversion followed by a zero test of an all-zero operand (`zero`), a comparison with an equal operand (`compare`) or trimming of an all-zero operand (`trim`), from 1 to 4,000,000 bytes, forcing full scans; and byte comparisons of equal values as OP_EQUAL performs them, which convert nothing (`equal-bytes`).
 - **WRITE**: complete finite creation, insertion and release cycles, 0 to 4,000,000 bytes, with 100 ms batches. Paths:
   - `stack`: copying a prepared value onto the stack and releasing it;
   - `vector`: building a value in a word-padded buffer, as producers do, then inserting and releasing it;
   - `zero`: zero-initialized values;
   - `grow`: a value grown once to its result's capacity, as OP_CAT does (both values are counted);
   - `churn`: a large temporary source (about 4 MB) and a small result copied out of it, as OP_SUBSTR or a shortening opcode does (both are counted);
-  - `fresh-pages`: from 16 KiB, every value on freshly mapped pages, so each lifetime pays page faults, kernel zeroing and unmapping; this bounds allocators that return large blocks to the operating system.
+  - `fresh-pages`: from 16 KiB, every value on freshly mapped pages, so each lifetime pays page faults, kernel zeroing and unmapping; this bounds allocators that return large blocks to the operating system;
+  - `numeric`: a numeric result converted to bytes, which hands its buffer over in place, then inserted and released;
+  - `scalar`: counts and booleans of 0 to 8 bytes, converted, inserted and released.
 
   Sizes include allocator-transition neighbours (±1, 8 and 16 bytes around 65,536 and other thresholds). Immutable source data is prepared outside the timer; mutable allocations and their destruction are inside. Shortening a value takes an opcode that pays for its result, so creating and shortening a value is two writes; `churn` measures that pair and no single-write shrink is fitted.
-- **NORMALIZE**: production numeric-to-byte conversion of prepared aligned spans up to the element size limit (`aligned`) and of scalar results (`scalar`). The returned bytes are retained until after timing; allocation, stack insertion and destruction are outside. The time does not grow with the result's length, because conversion hands the buffer over in place, so NORMALIZE is fitted as a flat.
-- **READ**: zero tests on all-zero spans (`zero`), word comparisons of equal spans (`compare`), byte comparisons of equal values as OP_EQUAL performs them (`equal-bytes`) and normalization of zero-padded values (`trim`), from 1 byte to 4,000,000 bytes, forcing full scans.
-- **ARITH**: `biguint::Add` and `biguint::Subtract` (`add`, `sub`) on fresh prepared operands of 1 to 500,000 words, with an equal-length or one-word second operand and full carry and borrow chains. Prepared input and destination storage are outside the timer.
-- **BIT**: invert and XOR kernels (`invert`, `xor`), up and down shifts by 1, 7 and 63 bits (`up`, `down`), OP_UPSHIFT's shift of the operand's words after a 64 KiB zero prefix (`upshift`), and OP_BYTEREV's complete work after dispatch: pop, word-wise reversal and push (`byterev`), across sizes. Repeated mutation must not turn a measurement into a cheaper all-zero path.
+- **ARITH**: `biguint::Add` and `biguint::Subtract` (`add`, `sub`) on fresh prepared operands of 1 to 500,000 words, with an equal-length or one-word second operand and full carry and borrow chains; and passes without a carry chain: invert and XOR kernels (`invert`, `xor`), up and down shifts by 1, 7 and 63 bits (`up`, `down`), OP_UPSHIFT's shift of the operand's words after a 64 KiB zero prefix (`upshift`), and OP_BYTEREV's complete work after dispatch: pop, word-wise reversal and push (`byterev`), across sizes. Prepared input and destination storage are outside the timer. Repeated mutation must not turn a measurement into a cheaper all-zero path.
 - **MOVE**: production stack rotation at depths 1, 2, 8, 32, 128, 1,024, 8,192 and 32,767, over empty and nonempty entries; payload bytes are not copied.
 - **MUL**: complete prepared multiplications with shorter-operand widths of 1 to 16,384 limbs and longer-operand widths up to the 4,000,000-byte element limit, on all-ones operands (maximal carry chains) and random operands. The zeroed product buffer is created before timing, because the product's WRITE pays for it; internal scratch storage is inside the timer. The per-row term `c v` is each row's call overhead: one schoolbook row per limb of the shorter operand.
 - **DIV**: complete prepared division and modulo (DIV and MOD) across divisor widths of 1 to 1,024 limbs, operand ratios and normalization patterns (`normalized`, `top-one`), and dividends up to the element size limit for 1-, 2- and 64-limb divisors. `s = max(1, u − v + 2)` quotient rows and `v` divisor limbs over limbs without trailing zero bytes, as BIP 441 specifies them, not measured loop counts. The bundled measurement includes normalization and temporary storage, so overlapping multiplication or storage work is not added again. The `b s` term covers per-row quotient estimation and correction; measurements with many rows at small `v` identify it.
@@ -129,7 +125,7 @@ Each item names what is timed, its paths (the path groups that the fit weights e
 **Held-out checks**, measured but not fitted:
 
 - **Macro unrolling**: unrolling of inactive NOP, push and reference-chain bodies, against unrolled bytes per unit. The charge is BASE per substituted instruction or visited reference, plus WRITE of the unrolled script when the script declares macros; the measurements check it rather than price it.
-- **Lifetime checks**: numeric lifetimes from source to result with tight and spare capacity (`numeric`). They check that WRITE, PREPARE and NORMALIZE compose to cover complete lifetimes.
+- **Lifetime checks**: numeric lifetimes from source to result with tight and spare capacity (`numeric`). They check that WRITE, READ and WRITE again compose to cover complete lifetimes: producing the source bytes, reading them as a number and writing the result.
 
 ## Fitting
 
@@ -180,6 +176,8 @@ over the primitive's measurements, with the fitting weights, subject to `theta .
 
 Where sizes start at zero and are unbounded, the envelope equals the coefficientwise maximum; it is lower only where the domain is restricted. Constant primitives use the maximum. The envelope covers every machine's fitted curve, not every measurement. Adding a machine adds constraints, so the envelope never falls below any admitted machine's curve. It is not the coefficientwise maximum in general, which over-charges where machines differ in flat and rate.
 
+**Primitives measured in parts.** The current dataset was recorded with an earlier benchmark model, `producer-normalize-v1`, which timed READ, WRITE and ARITH in two parts each: converting an operand (PREPARE) apart from scanning it, producing a value apart from converting a numeric result to bytes (NORMALIZE, a flat), and passes without a carry chain (BIT) apart from ARITH. `fit_calibrations.py` fits every part on every machine and composes each machine's curve (`COMPOSED`, `priced_model`): READ and WRITE are charged once for both of their parts, so their parts' fits add; an opcode makes either kind of ARITH pass, so ARITH takes the larger flat and the larger rate of its two. The price composes the parts' rounded prices the same way, and the envelope of the composed curves is reported against it; it lies below the price at every size. The current benchmark model, `read-write-arith-v1`, times each of them directly.
+
 ## Rounding
 
 After combining, round each coefficient upward on its own (`rounded_candidate`):
@@ -189,7 +187,7 @@ After combining, round each coefficient upward on its own (`rounded_candidate`):
 
 Zero and values already at a step stay unchanged. Coverage of the machines comes from the envelope, not from rounding. Do not refit after rounding: retain the unrounded fits and report the rounding uplift, especially for small rates. For example, a combined MUL fit of `360.9 + 5.23 u + 118.2 v + 28.20 u v` becomes `400 + 6 u + 120 v + 29 u v`, RIPEMD160's flat of `50.7` becomes `60`, and TWEAK's `168,023` becomes `170,000`.
 
-Rates are fitted per byte of `n` and charged per byte of the padded span the operation processes: `W(n)` for PREPARE, WRITE, READ, ARITH and BIT, `H(n)` for the hashes, and per counted item elsewhere. Since `W(n) ≥ n`, this never charges less than the fit. Every rate is a whole number of varops, so PREPARE's rate, fitted far below one varop per byte, is charged well above its fit on large operands.
+Rates are fitted per byte of `n` and charged per byte of the padded span the operation processes: `W(n)` for READ, WRITE and ARITH, `H(n)` for the hashes, and per counted item elsewhere. Since `W(n) ≥ n`, this never charges less than the fit. Every rate is a whole number of varops, so a rate fitted far below one varop per byte, such as that of converting an operand, is charged well above its fit on large operands.
 
 **SIGCHECK** is exempt from fitting and rounding: it stays 500,000, matching the existing 50-weight-unit signature allowance. Where the reference is itself signature-bound, verification fitted at 1.0 times the reference approaches 500,000, so signature-heavy scripts run at about 1.0 times the reference rather than 0.9; the budget then admits as many signatures as existing scripts. The benchmarks time uncached production Schnorr verification on valid signatures and separate the modeled challenge-hash contribution; the fitted residual does not replace the policy price. Transaction-message construction is not measured; the fixed allowance covers it by design.
 
@@ -231,9 +229,10 @@ A schedule passes only if every candidate interval's upper end is at most 1; a l
 
 ### Current prices
 
-The implementation (gsr `7d0c293b64`) prices every primitive from the six-machine full-run envelope of [`2026-10-01-full-runs-one-deduction`](data/2026-10-01-full-runs-one-deduction/); each dataset's README records what changed since the one before. Earlier datasets remain in the Git history.
+The implementation (gsr `104c1c0dc3`) prices every primitive from the six-machine full-run envelope of [`2026-10-01-full-runs-one-deduction`](data/2026-10-01-full-runs-one-deduction/); READ, WRITE and ARITH compose the prices of their measured parts (see [Primitives measured in parts](#combining-machines)). Each dataset's README records what changed since the one before. Earlier datasets remain in the Git history.
 
 ### Open items
 
 - Publish the BIP 440 update with these prices; the published draft still lists earlier ones.
+- Recollect every machine with `read-write-arith-v1`, which times READ, WRITE and ARITH directly rather than in parts.
 - To do before finalizing: add a non-Apple ARM64 machine and a low-end home-node device; run the complete realistic and full-varops suite and its validation on every admitted machine; finalize the WRITE price with complete storage-lifetime and script benchmarks, since buffer-growth measurements depend strongly on allocation history; set and test a separate peak-memory bound.

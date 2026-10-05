@@ -12,20 +12,26 @@ import fit_calibrations as calibration
 from fit_calibrations import maximum_coefficients
 
 
-def artifact():
-    probes = ['F/nop/256', 'PREP/9/spare', 'PRODUCE/grow/9', 'NORMALIZE/scalar/256',
-              'READ/zero/16', 'ARITH/sub/2/equal/borrow-chain', 'BIT/invert/16',
+def artifact(model_id=calibration.MODEL_ID):
+    shared = ['F/nop/256', 'READ/zero/16', 'ARITH/sub/2/equal/borrow-chain',
               'MOVE/8/empty', 'MULCORE/2/1/ones', 'DIVCORE/9/2/div/normalized',
               'H256/core/32', 'H160/32', 'H1/32', 'SIG/32', 'TWEAK',
               'SELECT/weight-scan/collated/128/131', 'UNROLL/push-520/15296/3999908/36744848']
+    if model_id == 'producer-normalize-v1':
+        probes = shared + ['PREP/9/spare', 'PRODUCE/grow/9', 'NORMALIZE/scalar/256', 'BIT/invert/16']
+        manifest = [dict(probe='PRODUCE/grow/9', kind='produce', items='2', bytes='13', normalize_bytes='0'),
+                    dict(probe='NORMALIZE/scalar/256', kind='normalize', items='1', bytes='0', normalize_bytes='2')]
+    else:
+        probes = shared + ['READ/convert/9', 'WRITE/grow/9', 'WRITE/scalar/256', 'ARITH/invert/16']
+        manifest = [dict(probe='WRITE/grow/9', kind='write', items='2', bytes='13', normalize_bytes='0'),
+                    dict(probe='WRITE/scalar/256', kind='write', items='1', bytes='2', normalize_bytes='2')]
     rate = 20.0
-    return dict(schema='varop-calibration-v1', model_id=calibration.MODEL_ID,
+    return dict(schema='varop-calibration-v1', model_id=model_id,
                 normalization=dict(varops_per_nanosecond=rate,
                                    target_fraction_of_local_pre_v2_worst=1.0,
                                    local_pre_v2_worst_seconds=2.0),
                 machine=dict(cpu='synthetic'), source_sha256={}, head='synthetic',
-                producer_manifest=[dict(probe='PRODUCE/grow/9', kind='produce', items='2', bytes='13', normalize_bytes='0'),
-                                   dict(probe='NORMALIZE/scalar/256', kind='normalize', items='1', bytes='0', normalize_bytes='2')],
+                producer_manifest=manifest,
                 primitive_samples=[dict(probe=probe, epoch=epoch, ns_per_execution=100 + epoch,
                                         normalized_varops_per_execution=(100 + epoch)*rate)
                                    for probe in probes for epoch in range(3)])
@@ -105,7 +111,8 @@ class CalibrationPipelineTests(unittest.TestCase):
     def test_candidate_charge_uses_pricing_units(self):
         c = {'PRODUCE': [680, 7], 'PREP': [180, 1], 'H256': [280, 38], 'MOVE': [180, 23], 'SIG': [500000, 0],
              'MULCORE': [340, 5, 110, 29], 'F': [310, 0]}
-        # WRITE and PREPARE are charged on W(n), hashes on the block span.
+        # WRITE and READ are charged on W(n), hashes on the block span.
+        self.assertEqual(calibration.candidate_charge('WRITE', dict(x=9, group='g'), dict(WRITE=[680, 7])), 680 + 7 * 16)
         self.assertEqual(calibration.candidate_charge('PRODUCE', dict(x=9, group='g'), c), 680 + 7 * 16)
         self.assertEqual(calibration.candidate_charge('PREP', dict(x=9, group='spare'), c), 180 + 16)
         self.assertEqual(calibration.candidate_charge('H256', dict(x=56, group='g'), c), 280 + 38 * 128)
@@ -203,13 +210,51 @@ class CalibrationPipelineTests(unittest.TestCase):
 
     def test_all_families_and_median(self):
         points, meta = self.load(artifact())
-        self.assertEqual({p['family'] for p in points}, set(calibration.PRODUCER_ORDER))
+        self.assertEqual({p['family'] for p in points}, set(calibration.FAMILIES[calibration.MODEL_ID]))
         self.assertEqual(meta['model_id'], calibration.MODEL_ID)
+        by_label = {p['label']: p for p in points}
+        # A grown value is two WRITE events: its size is the average per event.
+        self.assertEqual(by_label['WRITE/grow/9']['x'], 6.5)
+        self.assertAlmostEqual(by_label['WRITE/grow/9']['y'], 1010 / 0.9)
+        self.assertEqual((by_label['WRITE/scalar/256']['x'], by_label['WRITE/scalar/256']['group']), (2, 'scalar'))
+        self.assertEqual((by_label['READ/convert/9']['x'], by_label['READ/convert/9']['group']), (16, 'convert'))
+        self.assertIn('borrow-chain', by_label['ARITH/sub/2/equal/borrow-chain']['group'])
+        self.assertEqual((by_label['ARITH/invert/16']['x'], by_label['ARITH/invert/16']['group']), (16, 'invert'))
+
+    def test_recorded_model_families(self):
+        # The recorded runs measured READ, WRITE and ARITH in parts.
+        points, meta = self.load(artifact('producer-normalize-v1'))
+        self.assertEqual({p['family'] for p in points}, set(calibration.FAMILIES['producer-normalize-v1']))
+        self.assertEqual(meta['model_id'], 'producer-normalize-v1')
         by_name = {p['family']: p for p in points}
         self.assertEqual(by_name['PRODUCE']['x'], 6.5)
         self.assertAlmostEqual(by_name['PRODUCE']['y'], 1010 / 0.9)
         self.assertEqual(by_name['NORMALIZE']['v'], 8)
-        self.assertIn('borrow-chain', by_name['ARITH']['group'])
+
+    def test_composed_primitives(self):
+        # The recorded parts compose BIP 440's READ, WRITE and ARITH: READ and WRITE
+        # add their parts, ARITH takes the larger of ARITH and BIT.
+        parts = {'F': (350, 0), 'PREP': (200, 1), 'READ': (90, 2), 'PRODUCE': (800, 8), 'NORMALIZE': (200, 0),
+                 'ARITH': (150, 3), 'BIT': (200, 2), 'MOVE': (200, 37)}
+        priced = calibration.priced_model(parts, 'producer-normalize-v1')
+        self.assertEqual(priced, {'F': (350, 0), 'READ': (290, 3), 'WRITE': (1000, 8), 'ARITH': (200, 3),
+                                  'MOVE': (200, 37)})
+        self.assertEqual(calibration.compose_candidates({k: list(v) for k, v in parts.items()}, 'producer-normalize-v1'),
+                         priced)
+        # A model that measures them directly is its own composition.
+        direct = {'READ': (290, 3), 'WRITE': (1000, 8), 'ARITH': (200, 3)}
+        self.assertEqual(calibration.priced_model(direct, calibration.MODEL_ID), direct)
+        charged = calibration.charged_by('producer-normalize-v1')
+        self.assertEqual({part: charged[part] for part in ('PREP', 'READ', 'PRODUCE', 'NORMALIZE', 'ARITH', 'BIT')},
+                         {'PREP': 'READ', 'READ': 'READ', 'PRODUCE': 'WRITE', 'NORMALIZE': 'WRITE',
+                          'ARITH': 'ARITH', 'BIT': 'ARITH'})
+        # A part's fixture is checked against the price of the primitive that charges it.
+        pts = [dict(family='NORMALIZE', machine='m', group='scalar', x=2, c=1, v=8, y=1100, included=True,
+                    label='NORMALIZE/scalar/256')]
+        coverage = calibration.charge_coverage({'NORMALIZE': pts}, {'WRITE': [1000, 8]}, ['m'], ['M'], charged)
+        self.assertEqual(coverage['checked'], 1)
+        self.assertEqual(coverage['above_charge'][0]['primitive'], 'WRITE')
+        self.assertEqual(coverage['above_charge'][0]['charged_varops'], 1000 + 8 * 8)
 
     def test_fixed_groups(self):
         fixed = calibration.fixture(dict(probe='F/else/256', ns_per_execution=2570))
@@ -226,21 +271,21 @@ class CalibrationPipelineTests(unittest.TestCase):
                                 (1, 2): (1, 1, 2), (1, 9): (1, 1, 9)})
 
     def test_lifetime_checks(self):
-        # A numeric result of 9 bytes: one production event plus PRODUCE, PREP and
-        # NORMALIZE at its 16-byte word span.
+        # A numeric result of 9 bytes: one WRITE event, then READ and WRITE at its
+        # 16-byte word span.
         data = artifact()
         probe = 'PRODUCER_CHECK/numeric/tight/9'
         data['producer_manifest'].append(dict(probe=probe, kind='numeric', items='1', bytes='9', normalize_bytes='9'))
         recorded = data['normalization']['varops_per_nanosecond']
         data['primitive_samples'] += [dict(probe=probe, epoch=epoch, ns_per_execution=20,
                                            normalized_varops_per_execution=20 * recorded) for epoch in range(3)]
-        model = {'PRODUCE': (100, 2), 'PREP': (50, 1), 'NORMALIZE': (30, 0)}
+        model = {'WRITE': (100, 2), 'READ': (50, 1)}
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)/'synthetic.json'
             path.write_text(json.dumps(data))
             checked, above = calibration.lifetime_checks(path, model, 'm')
         self.assertEqual(checked, 1)
-        composed = (100 + 2 * 9) + (100 + 2 * 16) + (50 + 16) + 30
+        composed = (100 + 2 * 9) + (50 + 16) + (100 + 2 * 16)
         self.assertAlmostEqual(above[0]['composed_varops'], composed)
         self.assertAlmostEqual(above[0]['ratio'], 20 * 40 / (2.0 * 0.9) / composed)
 
@@ -277,7 +322,7 @@ class CalibrationPipelineTests(unittest.TestCase):
                 point['machine'] = machine
                 series[p['family']].append(point)
         fits = calibration.fit_all(series, 100)
-        self.assertEqual(set(fits), set(calibration.PRODUCER_ORDER) - calibration.CHECKS)
+        self.assertEqual(set(fits), set(calibration.FAMILIES[calibration.MODEL_ID]) - calibration.CHECKS)
         self.assertEqual(len(fits['DIVCORE']), 3)
 
     def test_divcore_per_row_term(self):
@@ -352,12 +397,15 @@ class CalibrationPipelineTests(unittest.TestCase):
                 self.assertGreaterEqual(charge + 1e-6, calibration.predict('MULCORE', point, model['MULCORE'], {}))
         self.assertLessEqual(envelope[2], 50)
 
-    def test_word_byte_reversal_is_fitted_as_bit(self):
-        # OP_BYTEREV's word kernel is a BIT path over the word span.
-        point = calibration.fixture(dict(probe='BIT/byterev/61', ns_per_execution=1))
-        self.assertTrue(point['included'])
-        self.assertEqual(point['x'], 64)
-        self.assertTrue(calibration.fixture(dict(probe='BIT/xor/64', ns_per_execution=1))['included'])
+    def test_word_byte_reversal_is_fitted_as_arith(self):
+        # OP_BYTEREV's word kernel is an ARITH path over the word span (BIT in the recorded runs).
+        for family in ('ARITH', 'BIT'):
+            point = calibration.fixture(dict(probe=f'{family}/byterev/61', ns_per_execution=1))
+            self.assertTrue(point['included'])
+            self.assertEqual((point['x'], point['group']), (64, 'byterev'))
+            self.assertTrue(calibration.fixture(dict(probe=f'{family}/xor/64', ns_per_execution=1))['included'])
+        shift = calibration.fixture(dict(probe='ARITH/down/61/7', ns_per_execution=1))
+        self.assertEqual((shift['x'], shift['group']), (64, 'down/7'))
 
 
     def test_select_and_unroll_units(self):
