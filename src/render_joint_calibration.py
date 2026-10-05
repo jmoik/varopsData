@@ -48,7 +48,7 @@ SECTIONS = [
          groups=[("Unrolling", ("UNROLL",))]),
 ]
 # Prices implemented in src/script/varops.h, compared against the joint candidate.
-IMPLEMENTED_AT = 'fae30159ae'
+IMPLEMENTED_AT = '31112e7296'
 CURRENT_COSTS = {'F': '350', 'READ': '300 + 3 × W(n)', 'WRITE': '1000 + 8 × W(n)', 'ARITH': '200 + 3 × W(n)',
                  'MOVE': '200 + 37 × k',
                  'MULCORE': '400 + 6 × u + 120 × v + 29 × u × v', 'DIVCORE': '510 × s + 33 × s × v',
@@ -88,7 +88,7 @@ def opcode_examples():
          'two 8-byte numbers, 8-byte sum', BASE + 2 * read(8) + ARITH[0] + ARITH[1] * 8 + write(8)),
         ('OP_MUL', 'BASE + READ(a) + READ(b) + MUL(u, v) + WRITE(8 × (u + v))', 'two 8-byte numbers',
          BASE + 2 * read(8) + MUL[0] + MUL[1] + MUL[2] + MUL[3] + write(16)),
-        ('OP_BYTEREV', 'BASE + ARITH(n)', 'a 32-byte value', BASE + ARITH[0] + ARITH[1] * 32),
+        ('OP_BYTEREV', 'BASE + ARITH(n) + WRITE(n)', 'a 32-byte value', BASE + ARITH[0] + ARITH[1] * 32 + write(32)),
         ('OP_SHA256', 'BASE + HASH(n) + WRITE(32)', 'a 32-byte value', BASE + hash_cost(32) + write(32)),
         ('OP_HASH160', 'BASE + HASH(n) + HASH(32) + WRITE(20)', 'a 33-byte public key',
          BASE + hash_cost(33) + hash_cost(32) + write(20)),
@@ -133,9 +133,9 @@ CHECKS = {
         fixtures='valid signatures over messages of 0 bytes to 4 MB.'),
     'BYTEREV': dict(
         source=('ARITH', 'BIT'), select=lambda p: p['group'].startswith('byterev'),
-        charge='ARITH(W(n))',
-        charged=lambda p: ARITH[0] + ARITH[1] * p['x'],
-        curve=lambda x: ARITH[0] + ARITH[1] * x,
+        charge='ARITH(W(n)) + WRITE(n)',
+        charged=lambda p: ARITH[0] + ARITH[1] * p['x'] + WRITE[0] + WRITE[1] * p['x'],
+        curve=lambda x: ARITH[0] + ARITH[1] * x + WRITE[0] + WRITE[1] * x,
         xlabel='Bytes rounded up to 8, W(n)',
         models='Reversing the bytes of a value in place: each 64-bit word is byte-swapped and the word order reversed.',
         fixtures='OP_BYTEREV’s complete work (pop, reverse, push) on values of 1 byte to 4 MB.'),
@@ -590,7 +590,7 @@ SCREEN_OPCODES = {
 ABOVE_REFERENCE_NOTES = {
     'WRITE': 'Buffer growth and first use of fresh memory pages, which depend on what the allocator did before. '
              'Complete scripts that build and copy large values stay below the reference.',
-    'ARITH': 'Short OP_BYTEREV values on one machine; the complete opcode also pays BASE.',
+    'ARITH': 'Short OP_BYTEREV values on one machine; the complete opcode also pays BASE and WRITE.',
     'DIVCORE': 'Divisions of 64 and 128 limbs on the two Intel machines; complete OP_DIV and OP_MOD also pay '
                'READ and WRITE.',
 }
@@ -674,8 +674,10 @@ def screens_html(screens, machines, dataset, page_dir=None):
              'is re-measured at a 10% budget over 7 rounds and counts with its slowest round.'
              + ('' if IMPLEMENTED_AT.startswith(screens['commit'][:10]) else
                 f' Since then, gsr <code>{IMPLEMENTED_AT}</code> merged PREPARE, NORMALIZE and BIT into READ, WRITE '
-                'and ARITH and the three hash prices into HASH, and rounded READ&#39;s flat up to 300, without '
-                'lowering any opcode&#39;s charge.') + '</p>'
+                'and ARITH and the three hash prices into HASH, rounded READ&#39;s flat up to 300 and charges '
+                'OP_BYTEREV&#39;s result WRITE, none of which lowers a charge. It also dropped OP_EQUALVERIFY&#39;s '
+                'WRITE, as it produces no value; re-screened on the Apple M4 Pro, its worst script takes 0.60× '
+                'the reference.') + '</p>'
              '<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Reference</th><th>Worst Tapleaf 0xC2 '
              'script</th><th>× reference</th><th>Scripts above</th></tr></thead><tbody>']
     for machine, screen in rows:

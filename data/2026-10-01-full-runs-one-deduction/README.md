@@ -37,6 +37,12 @@ rounded prices, ARITH and HASH take the larger flat and rate of theirs, and a co
 Every opcode keeps its composition, so none is charged less than before, and each merged price lies above the
 envelope of its parts; for HASH, that envelope covers every machine and every hash function.
 
+gsr `31112e7296` changes two compositions: OP_BYTEREV pays WRITE for its result, and OP_EQUALVERIFY, which
+produces no value, no longer pays WRITE(8). Only the second lowers a charge. Its complete scripts were re-screened
+on the M4 Pro at that commit, with small equal values added (`worst-case/m4-equalverify-screen-31112e7296.csv`,
+`bench_varops --case-filter /OP_EQUALVERIFY/ --sample-budget-percent 2 --epochs 1`): the worst, 8- and 32-byte
+values, take 0.60x the reference.
+
 ```
 Primitive  Envelope (varops, unrounded)                   Rounded candidate                      Maximum coefficients (unrounded)
 F          305.528                                          350                                    305.528

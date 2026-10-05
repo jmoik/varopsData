@@ -1322,6 +1322,15 @@ static void AddBinaryDataCases(std::vector<CaseSpec>& specs, opcodetype opcode, 
                          FormatBytes(size) + "x" + FormatBytes(size), pattern,
                          sequence, FixedStack({first, second}));
     }
+    if (opcode == OP_EQUALVERIFY && !restored) {
+        // OP_EQUALVERIFY writes nothing, so small values are where its charge is lowest
+        // against the work: BASE and READ's flat.
+        for (const size_t size : {size_t{0}, size_t{1}, size_t{8}, size_t{32}}) {
+            const valtype value{PatternBytes(size, "alternating")};
+            AddCase(specs, opcode, HeadlineRole::NEW_GSR, "binary-preserve",
+                    FormatBytes(size) + "x" + FormatBytes(size), "equal", sequence, FixedStack({value, value}));
+        }
+    }
     const std::vector<size_t> v2_sizes{restored ? std::vector<size_t>{1, maximum} :
                                                  std::vector<size_t>{maximum}};
     for (size_t size : v2_sizes) {
@@ -2644,8 +2653,10 @@ static std::pair<std::string, std::string> CandidateFormula(opcodetype opcode)
         return {"BASE + READ(n) + WRITE(8)", "BASE,READ,WRITE"};
     case OP_INVERT: case OP_2MUL: case OP_2DIV:
         return {"BASE + READ(n) + ARITH(n) + WRITE(out)", "BASE,READ,ARITH,WRITE"};
-    case OP_EQUAL: case OP_EQUALVERIFY:
+    case OP_EQUAL:
         return {"BASE + WRITE(8), plus READ(n1) if n1 = n2", "BASE,READ,WRITE"};
+    case OP_EQUALVERIFY:
+        return {"BASE, plus READ(n1) if n1 = n2", "BASE,READ"};
     case OP_ADD: case OP_SUB:
         return {"BASE + READ(n1) + READ(n2) + ARITH(max(n1, n2)) + WRITE(out)", "BASE,READ,ARITH,WRITE"};
     case OP_BOOLAND: case OP_BOOLOR:
@@ -2690,7 +2701,7 @@ static std::pair<std::string, std::string> CandidateFormula(opcodetype opcode)
         return {"BASE + WRITE(8), plus SIGCHECK + HASH(64 + msg) for a nonempty signature",
                 "BASE,SIGCHECK,HASH,WRITE"};
     case OP_TWEAKADD: return {"BASE + TWEAK + WRITE(32)", "BASE,TWEAK,WRITE"};
-    case OP_BYTEREV: return {"BASE + ARITH(n)", "BASE,ARITH"};
+    case OP_BYTEREV: return {"BASE + ARITH(n) + WRITE(n)", "BASE,ARITH,WRITE"};
     default: throw std::runtime_error("no candidate formula for " + OpcodeName(opcode));
     }
 }

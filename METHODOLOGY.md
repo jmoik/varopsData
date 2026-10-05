@@ -26,9 +26,9 @@ Rates are fitted per byte of `n` and charged per byte of `W(n)` or `H(n)` (see [
 
 ### Composition rules
 
-- **Lifetimes.** WRITE includes eventual release. Initial witness values pay WRITE once after the immediate-success prescan, including empty values. Moves, drops and in-place shrinkage are not new producers; an opcode that shortens a value pays WRITE for its result.
+- **Lifetimes.** WRITE includes eventual release. Initial witness values pay WRITE once after the immediate-success prescan, including empty values. Moves, drops and in-place shrinkage are not new producers; an opcode that shortens a value pays WRITE for its result, and so does OP_BYTEREV, which reverses its value in place.
 - **Numeric operands and results.** Every numeric operand pays READ, and every numeric result WRITE of its bytes. MUL charges WRITE of its full product span before multiplying; its scratch storage is part of MUL. DIV includes its internal temporary storage.
-- **Small results.** A count, comparison result, constant or boolean costs `WRITE(8)` whatever its encoded length.
+- **Small results.** A count, comparison result, constant or boolean costs `WRITE(8)` whatever its encoded length. OP_EQUALVERIFY leaves no result and pays no WRITE.
 - **No separate allocation charge.** Required allocation and growth belong to the producing operation, including scratch storage; they are never omitted or charged twice.
 - **Hashes compose.** OP_SHA256, OP_RIPEMD160 and OP_SHA1 pay `HASH(n)`; OP_HASH160 and OP_HASH256 pay `HASH(n) + HASH(32)`, the second pass hashing the 32-byte SHA256 digest. Each also pays BASE and the digest's WRITE.
 - **Final result check**: `READ` of the remaining element, once per script.
@@ -229,7 +229,7 @@ A schedule passes only if every candidate interval's upper end is at most 1; a l
 
 ### Current prices
 
-The implementation (gsr `fae30159ae`) prices every primitive from the six-machine full-run envelope of [`2026-10-01-full-runs-one-deduction`](data/2026-10-01-full-runs-one-deduction/); READ, WRITE, ARITH and HASH compose the prices of their measured parts (see [Combining machines](#combining-machines)). Each dataset's README records what changed since the one before. Earlier datasets remain in the Git history.
+The implementation (gsr `31112e7296`) prices every primitive from the six-machine full-run envelope of [`2026-10-01-full-runs-one-deduction`](data/2026-10-01-full-runs-one-deduction/); READ, WRITE, ARITH and HASH compose the prices of their measured parts (see [Combining machines](#combining-machines)). Each dataset's README records what changed since the one before. Earlier datasets remain in the Git history.
 
 ### Open items
 
