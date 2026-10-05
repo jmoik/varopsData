@@ -48,7 +48,7 @@ SECTIONS = [
          groups=[("Unrolling", ("UNROLL",))]),
 ]
 # Prices implemented in src/script/varops.h, compared against the joint candidate.
-IMPLEMENTED_AT = '31112e7296'
+IMPLEMENTED_AT = '0e999bbe39'
 CURRENT_COSTS = {'F': '350', 'READ': '300 + 3 × W(n)', 'WRITE': '1000 + 8 × W(n)', 'ARITH': '200 + 3 × W(n)',
                  'MOVE': '200 + 37 × k',
                  'MULCORE': '400 + 6 × u + 120 × v + 29 × u × v', 'DIVCORE': '510 × s + 33 × s × v',
@@ -675,9 +675,11 @@ def screens_html(screens, machines, dataset, page_dir=None):
              + ('' if IMPLEMENTED_AT.startswith(screens['commit'][:10]) else
                 f' Since then, gsr <code>{IMPLEMENTED_AT}</code> merged PREPARE, NORMALIZE and BIT into READ, WRITE '
                 'and ARITH and the three hash prices into HASH, rounded READ&#39;s flat up to 300 and charges '
-                'OP_BYTEREV&#39;s result WRITE, none of which lowers a charge. It also dropped OP_EQUALVERIFY&#39;s '
-                'WRITE, as it produces no value; re-screened on the Apple M4 Pro, its worst script takes 0.60× '
-                'the reference.') + '</p>'
+                'OP_BYTEREV&#39;s result WRITE, none of which lowers a charge. It also dropped WRITE where no '
+                'value is produced: the results of OP_EQUALVERIFY, OP_NUMEQUALVERIFY and OP_CHECKSIGVERIFY, and '
+                'the operand that OP_CHECKLOCKTIMEVERIFY, OP_CHECKSEQUENCEVERIFY and OP_IFDUP leave on the stack. '
+                'Re-screened on the Apple M4 Pro, the worst of their scripts, OP_CHECKSIGVERIFY&#39;s, takes '
+                '0.69× the reference.') + '</p>'
              '<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Reference</th><th>Worst Tapleaf 0xC2 '
              'script</th><th>× reference</th><th>Scripts above</th></tr></thead><tbody>']
     for machine, screen in rows:

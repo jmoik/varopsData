@@ -1322,9 +1322,9 @@ static void AddBinaryDataCases(std::vector<CaseSpec>& specs, opcodetype opcode, 
                          FormatBytes(size) + "x" + FormatBytes(size), pattern,
                          sequence, FixedStack({first, second}));
     }
-    if (opcode == OP_EQUALVERIFY && !restored) {
-        // OP_EQUALVERIFY writes nothing, so small values are where its charge is lowest
-        // against the work: BASE and READ's flat.
+    if (verify_opcode && !restored) {
+        // OP_EQUALVERIFY and OP_NUMEQUALVERIFY write nothing, so small values are where
+        // their charge is lowest against the work: BASE and READ's flat.
         for (const size_t size : {size_t{0}, size_t{1}, size_t{8}, size_t{32}}) {
             const valtype value{PatternBytes(size, "alternating")};
             AddCase(specs, opcode, HeadlineRole::NEW_GSR, "binary-preserve",
@@ -2641,7 +2641,7 @@ static std::pair<std::string, std::string> CandidateFormula(opcodetype opcode)
     case OP_2DUP: case OP_2OVER: return {"BASE + WRITE(n1) + WRITE(n2)", "BASE,WRITE"};
     case OP_3DUP: return {"BASE + WRITE(n1) + WRITE(n2) + WRITE(n3)", "BASE,WRITE"};
     case OP_IFDUP:
-        return {"BASE + READ(n) + WRITE(out), plus WRITE(out) if nonzero", "BASE,READ,WRITE"};
+        return {"BASE + READ(n), plus WRITE(n) if nonzero", "BASE,READ,WRITE"};
     case OP_DEPTH: case OP_SIZE: return {"BASE + WRITE(8)", "BASE,WRITE"};
     case OP_PICK:
         return {"BASE + READ(index) + WRITE(picked)", "BASE,READ,WRITE"};
@@ -2661,9 +2661,10 @@ static std::pair<std::string, std::string> CandidateFormula(opcodetype opcode)
         return {"BASE + READ(n1) + READ(n2) + ARITH(max(n1, n2)) + WRITE(out)", "BASE,READ,ARITH,WRITE"};
     case OP_BOOLAND: case OP_BOOLOR:
         return {"BASE + READ(n1) + READ(n2) + WRITE(8)", "BASE,READ,WRITE"};
-    case OP_NUMEQUAL: case OP_NUMEQUALVERIFY: case OP_NUMNOTEQUAL: case OP_LESSTHAN:
+    case OP_NUMEQUAL: case OP_NUMNOTEQUAL: case OP_LESSTHAN:
     case OP_GREATERTHAN: case OP_LESSTHANOREQUAL: case OP_GREATERTHANOREQUAL:
         return {"BASE + READ(n1) + READ(n2) + WRITE(8)", "BASE,READ,WRITE"};
+    case OP_NUMEQUALVERIFY: return {"BASE + READ(n1) + READ(n2)", "BASE,READ"};
     case OP_MIN: case OP_MAX:
         return {"BASE + READ(n1) + READ(n2) + WRITE(out)", "BASE,READ,WRITE"};
     case OP_WITHIN:
@@ -2690,13 +2691,15 @@ static std::pair<std::string, std::string> CandidateFormula(opcodetype opcode)
                 "s and v count limbs without trailing zero bytes", "BASE,READ,DIV,WRITE"};
     case OP_LSHIFT: case OP_RSHIFT:
         return {"BASE + READ(n1) + READ(bits) + ARITH(n1) + WRITE(out)", "BASE,READ,ARITH,WRITE"};
-    case OP_CHECKSIG: case OP_CHECKSIGVERIFY:
+    case OP_CHECKSIG:
         return {"BASE + WRITE(8), plus SIGCHECK + HASH(96) for a nonempty signature", "BASE,SIGCHECK,HASH,WRITE"};
+    case OP_CHECKSIGVERIFY:
+        return {"BASE, plus SIGCHECK + HASH(96) for a nonempty signature", "BASE,SIGCHECK,HASH"};
     case OP_CHECKSIGADD:
         return {"BASE + READ(num) + WRITE(out), plus SIGCHECK + HASH(96) + ARITH(num) "
                 "for a nonempty signature", "BASE,READ,SIGCHECK,HASH,ARITH,WRITE"};
     case OP_CHECKLOCKTIMEVERIFY: case OP_CHECKSEQUENCEVERIFY:
-        return {"BASE + READ(n) + WRITE(out)", "BASE,READ,WRITE"};
+        return {"BASE + READ(n)", "BASE,READ"};
     case OP_CHECKSIGFROMSTACK:
         return {"BASE + WRITE(8), plus SIGCHECK + HASH(64 + msg) for a nonempty signature",
                 "BASE,SIGCHECK,HASH,WRITE"};

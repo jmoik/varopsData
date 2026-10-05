@@ -43,6 +43,16 @@ on the M4 Pro at that commit, with small equal values added (`worst-case/m4-equa
 `bench_varops --case-filter /OP_EQUALVERIFY/ --sample-budget-percent 2 --epochs 1`): the worst, 8- and 32-byte
 values, take 0.60x the reference.
 
+gsr `0e999bbe39` charges WRITE only for values an opcode produces: OP_NUMEQUALVERIFY and OP_CHECKSIGVERIFY no
+longer pay WRITE(8) for a result they consume, and OP_CHECKLOCKTIMEVERIFY, OP_CHECKSEQUENCEVERIFY and OP_IFDUP no
+longer pay WRITE for the operand they leave on the stack. Each opcode's complete scripts were re-screened on the
+M4 Pro at that commit, with small equal values added for OP_NUMEQUALVERIFY
+(`worst-case/m4-no-write-screens-0e999bbe39/`, `bench_varops --case-filter /<opcode>/ --sample-budget-percent 2
+--epochs 1`). The worst take 0.69x the reference (OP_CHECKSIGVERIFY, a signature check), 0.56x
+(OP_NUMEQUALVERIFY, 32-byte values), 0.31x (OP_CHECKLOCKTIMEVERIFY and OP_CHECKSEQUENCEVERIFY, 521 bytes) and
+0.20x (OP_IFDUP). Other sessions loaded the machine: the reference took 2.37 s instead of 1.59 s, and the
+Schnorr baseline was slower by the same factor.
+
 ```
 Primitive  Envelope (varops, unrounded)                   Rounded candidate                      Maximum coefficients (unrounded)
 F          305.528                                          350                                    305.528
