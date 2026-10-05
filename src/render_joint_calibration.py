@@ -48,7 +48,7 @@ SECTIONS = [
          groups=[("Unrolling", ("UNROLL",))]),
 ]
 # Prices implemented in src/script/varops.h, compared against the joint candidate.
-IMPLEMENTED_AT = '26ed8d63da'
+IMPLEMENTED_AT = '0b644f0761'
 CURRENT_COSTS = {'F': '350', 'READ': '300 + 3 × W(n)', 'WRITE': '1000 + 8 × W(n)', 'ARITH': '200 + 3 × W(n)',
                  'MOVE': '200 + 37 × k',
                  'MULCORE': '400 + 6 × u + 120 × v + 29 × u × v', 'DIVCORE': '510 × s + 33 × s × v',
@@ -82,8 +82,8 @@ def opcode_examples():
         ('OP_DUP', 'BASE + WRITE(n)', 'a 32-byte value', BASE + write(32)),
         ('OP_EQUAL', 'BASE + READ(n) + WRITE(8), READ only if both sizes are n', 'two 32-byte values',
          BASE + read(32) + write(8)),
-        ('OP_ROLL', 'BASE + READ(m) + MOVE(k), for an m-byte depth k', 'depth 10',
-         BASE + read(1) + MOVE[0] + MOVE[1] * 10),
+        ('OP_ROLL', 'BASE + READ(m) + MOVE(k + 1), for an m-byte depth k', 'depth 10',
+         BASE + read(1) + MOVE[0] + MOVE[1] * 11),
         ('OP_ADD', 'BASE + READ(a) + READ(b) + ARITH(max(a, b)) + WRITE(r)',
          'two 8-byte numbers, 8-byte sum', BASE + 2 * read(8) + ARITH[0] + ARITH[1] * 8 + write(8)),
         ('OP_MUL', 'BASE + READ(a) + READ(b) + MUL(u, v) + WRITE(8 × (u + v))', 'two 8-byte numbers',
@@ -160,7 +160,7 @@ MODELS = {
     'READ': 'Reading one operand: converting it into 64-bit words and scanning it for comparisons, zero tests and length conversion; charged per operand.',
     'WRITE': 'Creating one stack value of <code>n</code> bytes: converting a numeric result back to bytes, or allocating and filling a buffer, then inserting it and eventually releasing it.',
     'ARITH': 'One pass over the operands’ words, with or without a carry between words: addition, subtraction, bitwise logic, shifts and OP_BYTEREV’s byte reversal.',
-    'MOVE': 'Reordering <code>k</code> stack entries without copying their contents, as OP_ROLL does.',
+    'MOVE': 'Taking the top <code>k</code> entries off a stack and putting back some or all of them, in any order and on either stack, without copying their contents.',
     'MULCORE': 'Schoolbook multiplication of a <code>u</code>-limb number by a <code>v</code>-limb number (<code>v</code> ≤ <code>u</code>, 64-bit limbs), including scratch space.',
     'DIVCORE': 'Long division or remainder: <code>s</code> quotient rows, each working through the <code>v</code> limbs of the divisor.',
     'HASH': 'One SHA256, RIPEMD160 or SHA1 pass over an <code>n</code>-byte message, in whole 64-byte blocks. RIPEMD160 and SHA1 take at most 520 bytes.',

@@ -973,8 +973,9 @@ void MeasureBitwise(Runner& r)
     }
 }
 
-// MOVE: real stack.Roll(depth), with payloads held constant. This moves owning
-// headers, not payload bytes. Test empty and one-byte elements.
+// MOVE: real stack.Roll(depth), which takes the top depth + 1 entries off and
+// puts them back, with payloads held constant. This moves owning headers, not
+// payload bytes. Test empty and one-byte elements.
 void MeasureMove(Runner& r)
 {
     for (size_t d : std::initializer_list<size_t>{1, 2, 8, 32, 128, 1024, 8192, 32767}) {

@@ -189,7 +189,8 @@ def fixture(row, producer_manifest=None):
         if len(parts) > 3:
             group += "/" + parts[3]
     elif family == "MOVE":
-        x, group = int(parts[1]), parts[2]
+        # MOVE/<depth>/...: rolling from depth takes depth + 1 entries off and puts them back.
+        x, group = int(parts[1]) + 1, parts[2]
     elif family == "MULCORE":
         # MULCORE/<u>/<v>/<pattern>: u rows of v limbs each.
         x, group = int(parts[1]), f"v={int(parts[2])}"

@@ -1475,7 +1475,7 @@ static void AddStackOpcodeCases(std::vector<CaseSpec>& specs, opcodetype opcode)
         roll_one << OP_1 << OP_ROLL << OP_SWAP;
         add_shared_case("roll-depth-1-neutral", roll_one, {PatternBytes(32, "dense"), PatternBytes(32, "alternating")});
         CaseOptions deep_stack_options{};
-        // OP_ROLL pays MOVE(k) = 200 + 37k for the k = 1,499 entries it moves, plus READ
+        // OP_ROLL pays MOVE(k) = 200 + 37k for the k = 1,500 entries it moves, plus READ
         // of its index; with OP_DEPTH and OP_1SUB a repetition costs about
         // 4,200 + 37k, or 59,700 varops. Above 30,000 per repetition the full budget
         // binds before the 4 MB script limit.
@@ -2626,18 +2626,19 @@ static std::pair<std::string, std::string> CandidateFormula(opcodetype opcode)
     case OP_0: case OP_PUSHDATA1: case OP_PUSHDATA2: case OP_PUSHDATA4:
         return {"BASE + WRITE(n)", "BASE,WRITE"};
     case OP_IF: return {"BASE, also in an inactive branch", "BASE"};
-    case OP_NOP: case OP_CODESEPARATOR: case OP_DROP: case OP_2DROP: case OP_NIP:
+    case OP_NOP: case OP_CODESEPARATOR: case OP_DROP: case OP_2DROP:
         return {"BASE", "BASE"};
     case OP_VERIFY: return {"BASE + READ(n)", "BASE,READ"};
     case OP_MACRO:
         return {"BASE * (substituted instructions + visited references) + WRITE(unrolled length), "
                 "then the unrolled script's charges", "BASE,WRITE"};
     case OP_TOALTSTACK: case OP_FROMALTSTACK: return {"BASE + MOVE(1)", "BASE,MOVE"};
-    case OP_SWAP: return {"BASE + MOVE(2)", "BASE,MOVE"};
+    case OP_SWAP: case OP_NIP: return {"BASE + MOVE(2)", "BASE,MOVE"};
     case OP_ROT: return {"BASE + MOVE(3)", "BASE,MOVE"};
     case OP_2SWAP: return {"BASE + MOVE(4)", "BASE,MOVE"};
     case OP_2ROT: return {"BASE + MOVE(6)", "BASE,MOVE"};
-    case OP_DUP: case OP_OVER: case OP_TUCK: return {"BASE + WRITE(n)", "BASE,WRITE"};
+    case OP_DUP: case OP_OVER: return {"BASE + WRITE(n)", "BASE,WRITE"};
+    case OP_TUCK: return {"BASE + WRITE(n) + MOVE(2)", "BASE,WRITE,MOVE"};
     case OP_2DUP: case OP_2OVER: return {"BASE + WRITE(n1) + WRITE(n2)", "BASE,WRITE"};
     case OP_3DUP: return {"BASE + WRITE(n1) + WRITE(n2) + WRITE(n3)", "BASE,WRITE"};
     case OP_IFDUP:
@@ -2646,7 +2647,7 @@ static std::pair<std::string, std::string> CandidateFormula(opcodetype opcode)
     case OP_PICK:
         return {"BASE + READ(index) + WRITE(picked)", "BASE,READ,WRITE"};
     case OP_ROLL:
-        return {"BASE + READ(index) + MOVE(k), k = index value", "BASE,READ,MOVE"};
+        return {"BASE + READ(index) + MOVE(k), k = index value + 1", "BASE,READ,MOVE"};
     case OP_1ADD: case OP_1SUB:
         return {"BASE + READ(n) + ARITH(n) + WRITE(out)", "BASE,READ,ARITH,WRITE"};
     case OP_NOT: case OP_0NOTEQUAL:

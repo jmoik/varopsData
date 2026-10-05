@@ -14,7 +14,7 @@ Notation: `n` is a size in bytes, `W(n) = 8 ceil(n / 8)` its span in 64-bit word
 | `READ(n)` | `a + b W(n)` | Reading one operand: converting it into 64-bit words and scanning it for comparisons, zero tests and length conversion; charged per operand. |
 | `WRITE(n)` | `a + b W(n)` | Creating one stack value of `n` bytes: converting a numeric result back to bytes, or allocating and filling a buffer, then inserting it and eventually releasing it. |
 | `ARITH(n)` | `a + b W(n)` | One pass over the operands' words, with or without a carry between words: addition, subtraction, bitwise logic, shifts and OP_BYTEREV's byte reversal. |
-| `MOVE(k)` | `a + b k` | Reordering `k` stack entries without copying their contents, as OP_ROLL does. |
+| `MOVE(k)` | `a + b k` | Taking the top `k` entries off a stack and putting back some or all of them, in any order and on either stack, without copying their contents. |
 | `MUL(u, v)` | `a + b u + c v + d u v` | Schoolbook multiplication, one row per limb of the shorter operand, including scratch space. |
 | `DIV(s, v)` | `a + b s + c s v` | Long division or remainder: `s` quotient rows, each working through the `v` limbs of the divisor, including normalization and temporaries. |
 | `HASH(n)` | `a + b H(n)` | One SHA256, RIPEMD160 or SHA1 pass over an `n`-byte message, over whole 64-byte blocks; RIPEMD160 and SHA1 take at most 520 bytes. The three are measured separately and one price covers them (see [One price for the hash functions](#combining-machines)). |
@@ -111,7 +111,7 @@ Each item names what is timed, its paths (the path groups that the fit weights e
 
   Sizes include allocator-transition neighbours (±1, 8 and 16 bytes around 65,536 and other thresholds). Immutable source data is prepared outside the timer; mutable allocations and their destruction are inside. Shortening a value takes an opcode that pays for its result, so creating and shortening a value is two writes; `churn` measures that pair and no single-write shrink is fitted.
 - **ARITH**: `biguint::Add` and `biguint::Subtract` (`add`, `sub`) on fresh prepared operands of 1 to 500,000 words, with an equal-length or one-word second operand and full carry and borrow chains; and passes without a carry chain: invert and XOR kernels (`invert`, `xor`), up and down shifts by 1, 7 and 63 bits (`up`, `down`), OP_UPSHIFT's shift of the operand's words after a 64 KiB zero prefix (`upshift`), and OP_BYTEREV's complete work after dispatch: pop, word-wise reversal and push (`byterev`), across sizes. Prepared input and destination storage are outside the timer. Repeated mutation must not turn a measurement into a cheaper all-zero path.
-- **MOVE**: production stack rotation at depths 1, 2, 8, 32, 128, 1,024, 8,192 and 32,767, over empty and nonempty entries; payload bytes are not copied.
+- **MOVE**: production stack rotation at depths 1, 2, 8, 32, 128, 1,024, 8,192 and 32,767 (`k` = depth + 1), over empty and nonempty entries; payload bytes are not copied.
 - **MUL**: complete prepared multiplications with shorter-operand widths of 1 to 16,384 limbs and longer-operand widths up to the 4,000,000-byte element limit, on all-ones operands (maximal carry chains) and random operands. The zeroed product buffer is created before timing, because the product's WRITE pays for it; internal scratch storage is inside the timer. The per-row term `c v` is each row's call overhead: one schoolbook row per limb of the shorter operand.
 - **DIV**: complete prepared division and modulo (DIV and MOD) across divisor widths of 1 to 1,024 limbs, operand ratios and normalization patterns (`normalized`, `top-one`), and dividends up to the element size limit for 1-, 2- and 64-limb divisors. `s = max(1, u − v + 2)` quotient rows and `v` divisor limbs over limbs without trailing zero bytes, as BIP 441 specifies them, not measured loop counts. The bundled measurement includes normalization and temporary storage, so overlapping multiplication or storage work is not added again. The `b s` term covers per-row quotient estimation and correction; measurements with many rows at small `v` identify it.
 - **SHA256**: complete Core SHA256 of 0 to 4,000,000 bytes with the automatically selected backend, writing into a prepared digest buffer. Each size is fitted at its block span `H(n)`.
@@ -229,7 +229,7 @@ A schedule passes only if every candidate interval's upper end is at most 1; a l
 
 ### Current prices
 
-The implementation (gsr `26ed8d63da`) prices every primitive from the six-machine full-run envelope of [`2026-10-01-full-runs-one-deduction`](data/2026-10-01-full-runs-one-deduction/); READ, WRITE, ARITH and HASH compose the prices of their measured parts (see [Combining machines](#combining-machines)). Each dataset's README records what changed since the one before. Earlier datasets remain in the Git history.
+The implementation (gsr `0b644f0761`) prices every primitive from the six-machine full-run envelope of [`2026-10-01-full-runs-one-deduction`](data/2026-10-01-full-runs-one-deduction/); READ, WRITE, ARITH and HASH compose the prices of their measured parts (see [Combining machines](#combining-machines)). Each dataset's README records what changed since the one before. Earlier datasets remain in the Git history.
 
 ### Open items
 

@@ -559,8 +559,8 @@
     },
     "MOVE": {
       "envelope_coefficients": [
-        178.70453707858547,
-        36.00966958052454
+        161.49437424271994,
+        36.009669579869325
       ],
       "candidate_coefficients": [
         200,
@@ -568,8 +568,8 @@
       ],
       "candidate_formula": "200 + 37 \u00d7 k",
       "maximum_coefficients": [
-        178.70453707858547,
-        36.00966958052454
+        161.49437424271994,
+        36.009669579869325
       ],
       "maximum_candidate_coefficients": [
         200,
@@ -13101,11 +13101,11 @@
           "group": "empty",
           "decade": 0,
           "fixtures": 3,
-          "rms_factor": 1.1816961453882102,
+          "rms_factor": 1.1816961429162682,
           "within_share": 0.6666666666666666,
-          "max_above_fit": 1.0086680645549015,
-          "max_below_fit": 1.2791620679546027,
-          "rms_above_fit": 1.0049953797412905
+          "max_above_fit": 1.0086680647461537,
+          "max_below_fit": 1.2791620642364856,
+          "rms_above_fit": 1.0049953798513078
         },
         {
           "machine": "Apple M1 Pro",
@@ -13113,11 +13113,11 @@
           "group": "nonempty",
           "decade": 0,
           "fixtures": 3,
-          "rms_factor": 1.180722666535592,
+          "rms_factor": 1.180722664066331,
           "within_share": 0.6666666666666666,
-          "max_above_fit": 1.0086697748529247,
-          "max_below_fit": 1.2780884148895661,
-          "rms_above_fit": 1.0049963635865675
+          "max_above_fit": 1.008669775044177,
+          "max_below_fit": 1.2780884111745698,
+          "rms_above_fit": 1.0049963636965848
         },
         {
           "machine": "12th Gen Intel(R) Core(TM) i5-12500",
@@ -13125,10 +13125,10 @@
           "group": "empty",
           "decade": 0,
           "fixtures": 3,
-          "rms_factor": 1.2350041476727796,
+          "rms_factor": 1.2350041477014337,
           "within_share": 0.6666666666666666,
           "max_above_fit": 1.0,
-          "max_below_fit": 1.3979248325961346,
+          "max_below_fit": 1.397924832613803,
           "rms_above_fit": 1.0
         },
         {
@@ -13137,10 +13137,10 @@
           "group": "empty",
           "decade": 1,
           "fixtures": 1,
-          "rms_factor": 1.8878454455494311,
+          "rms_factor": 1.8878454455312619,
           "within_share": 0.0,
           "max_above_fit": 1.0,
-          "max_below_fit": 1.8878454455494311,
+          "max_below_fit": 1.8878454455312619,
           "rms_above_fit": 1.0
         },
         {
@@ -13149,10 +13149,10 @@
           "group": "empty",
           "decade": 2,
           "fixtures": 1,
-          "rms_factor": 2.365858676114712,
+          "rms_factor": 2.3658586760768796,
           "within_share": 0.0,
           "max_above_fit": 1.0,
-          "max_below_fit": 2.365858676114712,
+          "max_below_fit": 2.3658586760768796,
           "rms_above_fit": 1.0
         },
         {
@@ -13161,10 +13161,10 @@
           "group": "empty",
           "decade": 3,
           "fixtures": 2,
-          "rms_factor": 2.1849540546211257,
+          "rms_factor": 2.184954054581845,
           "within_share": 0.0,
           "max_above_fit": 1.0,
-          "max_below_fit": 2.313365497781551,
+          "max_below_fit": 2.3133654977401013,
           "rms_above_fit": 1.0
         },
         {
@@ -13173,11 +13173,11 @@
           "group": "nonempty",
           "decade": 0,
           "fixtures": 3,
-          "rms_factor": 1.233852043168666,
+          "rms_factor": 1.2338520431948135,
           "within_share": 0.6666666666666666,
-          "max_above_fit": 1.0071775335820525,
-          "max_below_fit": 1.3980086241103227,
-          "rms_above_fit": 1.0041376867383698
+          "max_above_fit": 1.0071775334722652,
+          "max_below_fit": 1.398008624127992,
+          "rms_above_fit": 1.0041376866751754
         },
         {
           "machine": "12th Gen Intel(R) Core(TM) i5-12500",
@@ -13185,10 +13185,10 @@
           "group": "nonempty",
           "decade": 1,
           "fixtures": 1,
-          "rms_factor": 1.8973914047691351,
+          "rms_factor": 1.897391404750874,
           "within_share": 0.0,
           "max_above_fit": 1.0,
-          "max_below_fit": 1.8973914047691351,
+          "max_below_fit": 1.897391404750874,
           "rms_above_fit": 1.0
         },
         {
@@ -13197,10 +13197,10 @@
           "group": "nonempty",
           "decade": 2,
           "fixtures": 1,
-          "rms_factor": 2.298032648311415,
+          "rms_factor": 2.298032648274667,
           "within_share": 0.0,
           "max_above_fit": 1.0,
-          "max_below_fit": 2.298032648311415,
+          "max_below_fit": 2.298032648274667,
           "rms_above_fit": 1.0
         },
         {
@@ -13209,10 +13209,10 @@
           "group": "nonempty",
           "decade": 3,
           "fixtures": 2,
-          "rms_factor": 2.184534609256474,
+          "rms_factor": 2.1845346092172,
           "within_share": 0.0,
           "max_above_fit": 1.0,
-          "max_below_fit": 2.3129432160213583,
+          "max_below_fit": 2.3129432159799155,
           "rms_above_fit": 1.0
         },
         {
@@ -13221,11 +13221,11 @@
           "group": "empty",
           "decade": 0,
           "fixtures": 3,
-          "rms_factor": 1.2967904135271384,
+          "rms_factor": 1.2967904157693364,
           "within_share": 0.3333333333333333,
-          "max_above_fit": 1.014263073739338,
-          "max_below_fit": 1.4588726975602642,
-          "rms_above_fit": 1.008210135083453
+          "max_above_fit": 1.014263073497387,
+          "max_below_fit": 1.458872700439355,
+          "rms_above_fit": 1.008210134944596
         },
         {
           "machine": "varop-calibration-ryzen99500x-full",
@@ -13233,11 +13233,11 @@
           "group": "nonempty",
           "decade": 0,
           "fixtures": 3,
-          "rms_factor": 1.2971176450857655,
+          "rms_factor": 1.2971176473248924,
           "within_share": 0.3333333333333333,
-          "max_above_fit": 1.007954421348357,
-          "max_below_fit": 1.4627926209625792,
-          "rms_above_fit": 1.0045847964675578
+          "max_above_fit": 1.0079544211079108,
+          "max_below_fit": 1.462792623849406,
+          "rms_above_fit": 1.0045847963292
         },
         {
           "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -13245,10 +13245,10 @@
           "group": "empty",
           "decade": 1,
           "fixtures": 1,
-          "rms_factor": 1.2270785551827048,
+          "rms_factor": 1.2270785551587415,
           "within_share": 1.0,
           "max_above_fit": 1.0,
-          "max_below_fit": 1.2270785551827048,
+          "max_below_fit": 1.2270785551587415,
           "rms_above_fit": 1.0
         },
         {
@@ -13257,10 +13257,10 @@
           "group": "empty",
           "decade": 2,
           "fixtures": 1,
-          "rms_factor": 1.2096161513629788,
+          "rms_factor": 1.209616151307964,
           "within_share": 1.0,
           "max_above_fit": 1.0,
-          "max_below_fit": 1.2096161513629788,
+          "max_below_fit": 1.209616151307964,
           "rms_above_fit": 1.0
         },
         {
@@ -13269,10 +13269,10 @@
           "group": "empty",
           "decade": 3,
           "fixtures": 2,
-          "rms_factor": 1.1453529329268461,
+          "rms_factor": 1.1453529328716516,
           "within_share": 1.0,
           "max_above_fit": 1.0,
-          "max_below_fit": 1.2004742806383844,
+          "max_below_fit": 1.2004742805736701,
           "rms_above_fit": 1.0
         },
         {
@@ -13281,10 +13281,10 @@
           "group": "nonempty",
           "decade": 1,
           "fixtures": 1,
-          "rms_factor": 1.223570435989653,
+          "rms_factor": 1.2235704359657584,
           "within_share": 1.0,
           "max_above_fit": 1.0,
-          "max_below_fit": 1.223570435989653,
+          "max_below_fit": 1.2235704359657584,
           "rms_above_fit": 1.0
         },
         {
@@ -13293,10 +13293,10 @@
           "group": "nonempty",
           "decade": 2,
           "fixtures": 1,
-          "rms_factor": 1.2106965644690526,
+          "rms_factor": 1.2106965644139887,
           "within_share": 1.0,
           "max_above_fit": 1.0,
-          "max_below_fit": 1.2106965644690526,
+          "max_below_fit": 1.2106965644139887,
           "rms_above_fit": 1.0
         },
         {
@@ -13305,10 +13305,10 @@
           "group": "nonempty",
           "decade": 3,
           "fixtures": 2,
-          "rms_factor": 1.1448389953041573,
+          "rms_factor": 1.1448389952495024,
           "within_share": 1.0,
           "max_above_fit": 1.0,
-          "max_below_fit": 1.2009416098261916,
+          "max_below_fit": 1.2009416097614523,
           "rms_above_fit": 1.0
         },
         {
@@ -13317,11 +13317,11 @@
           "group": "empty",
           "decade": 0,
           "fixtures": 3,
-          "rms_factor": 1.191934527824481,
+          "rms_factor": 1.191934528000677,
           "within_share": 0.6666666666666666,
-          "max_above_fit": 1.0005731280687333,
-          "max_below_fit": 1.2947405250761286,
-          "rms_above_fit": 1.0003308555788248
+          "max_above_fit": 1.0005731278616186,
+          "max_below_fit": 1.2947405253992461,
+          "rms_above_fit": 1.000330855459276
         },
         {
           "machine": "AMD Ryzen 5 3600 6-Core Processor",
@@ -13329,10 +13329,10 @@
           "group": "empty",
           "decade": 1,
           "fixtures": 1,
-          "rms_factor": 1.1154177911859713,
+          "rms_factor": 1.1154177911706016,
           "within_share": 1.0,
           "max_above_fit": 1.0,
-          "max_below_fit": 1.1154177911859713,
+          "max_below_fit": 1.1154177911706016,
           "rms_above_fit": 1.0
         },
         {
@@ -13341,11 +13341,11 @@
           "group": "nonempty",
           "decade": 0,
           "fixtures": 3,
-          "rms_factor": 1.2027802894376591,
+          "rms_factor": 1.2027802896131132,
           "within_share": 0.6666666666666666,
-          "max_above_fit": 1.008810273749278,
-          "max_below_fit": 1.319768721654467,
-          "rms_above_fit": 1.0050771828681158
+          "max_above_fit": 1.008810273540458,
+          "max_below_fit": 1.3197687219838303,
+          "rms_above_fit": 1.0050771827479996
         },
         {
           "machine": "AMD Ryzen 5 3600 6-Core Processor",
@@ -13353,10 +13353,10 @@
           "group": "nonempty",
           "decade": 1,
           "fixtures": 1,
-          "rms_factor": 1.115091442703255,
+          "rms_factor": 1.11509144268789,
           "within_share": 1.0,
           "max_above_fit": 1.0,
-          "max_below_fit": 1.115091442703255,
+          "max_below_fit": 1.11509144268789,
           "rms_above_fit": 1.0
         },
         {
@@ -13365,11 +13365,11 @@
           "group": "empty",
           "decade": 0,
           "fixtures": 3,
-          "rms_factor": 1.7965036560507828,
+          "rms_factor": 1.7965036626713806,
           "within_share": 0.3333333333333333,
-          "max_above_fit": 1.0419248505722083,
-          "max_below_fit": 2.29701565787983,
-          "rms_above_fit": 1.023995028719466
+          "max_above_fit": 1.0419248499708536,
+          "max_below_fit": 2.2970156693412553,
+          "rms_above_fit": 1.0239950283782482
         },
         {
           "machine": "Apple M4 Pro",
@@ -13377,10 +13377,10 @@
           "group": "empty",
           "decade": 1,
           "fixtures": 1,
-          "rms_factor": 1.2491266985494782,
+          "rms_factor": 1.249126694194763,
           "within_share": 1.0,
           "max_above_fit": 1.0,
-          "max_below_fit": 1.2491266985494782,
+          "max_below_fit": 1.249126694194763,
           "rms_above_fit": 1.0
         },
         {
@@ -13389,11 +13389,11 @@
           "group": "nonempty",
           "decade": 0,
           "fixtures": 3,
-          "rms_factor": 1.7408748062475312,
+          "rms_factor": 1.7408748126390474,
           "within_share": 0.3333333333333333,
-          "max_above_fit": 1.0080556590919476,
-          "max_below_fit": 2.2783835346012715,
-          "rms_above_fit": 1.0046430494706022
+          "max_above_fit": 1.0080556585101406,
+          "max_below_fit": 2.278383545969728,
+          "rms_above_fit": 1.004643049135833
         },
         {
           "machine": "Apple M4 Pro",
@@ -13401,10 +13401,10 @@
           "group": "nonempty",
           "decade": 1,
           "fixtures": 1,
-          "rms_factor": 1.2443245950844661,
+          "rms_factor": 1.244324590746492,
           "within_share": 1.0,
           "max_above_fit": 1.0,
-          "max_below_fit": 1.2443245950844661,
+          "max_below_fit": 1.244324590746492,
           "rms_above_fit": 1.0
         },
         {
@@ -20163,8 +20163,8 @@
             "primitive": "MOVE",
             "fixture": "MOVE/32767/nonempty",
             "measured_varops": 1230495.7576348616,
-            "charged_varops": 1212579,
-            "ratio": 1.0147757446194117
+            "charged_varops": 1212616,
+            "ratio": 1.014744781229063
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",

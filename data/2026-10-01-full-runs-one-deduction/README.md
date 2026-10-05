@@ -56,13 +56,18 @@ Schnorr baseline was slower by the same factor.
 gsr `26ed8d63da` charges OP_TX READ for each scope operand, which it takes as a number; this only raises a
 charge.
 
+gsr `0b644f0761` counts MOVE's `k` as the entries an opcode takes off the top of a stack and puts back:
+`n OP_ROLL` pays MOVE(n + 1), and OP_NIP and OP_TUCK pay MOVE(2). The fitter now sizes a `MOVE/<depth>` fixture
+as depth + 1 entries, which lowers the MOVE envelope's flat from 179 to 161; the price is unchanged and the
+charges only rise.
+
 ```
 Primitive  Envelope (varops, unrounded)                   Rounded candidate                      Maximum coefficients (unrounded)
 F          305.528                                          350                                    305.528
 READ       252.794 + 1.02356 × W(n)                         300 + 3 × W(n)                         252.794 + 1.02356 × W(n)
 WRITE      892.546 + 7.14225 × n                            1000 + 8 × W(n)                        892.546 + 7.14225 × n
 ARITH      183.087 + 2.68554 × W(n)                         200 + 3 × W(n)                         183.087 + 2.68554 × W(n)
-MOVE       178.705 + 36.0097 × k                            200 + 37 × k                           178.705 + 36.0097 × k
+MOVE       161.494 + 36.0097 × k                            200 + 37 × k                           161.494 + 36.0097 × k
 MULCORE    360.945 + 5.22967 × u + 118.164 × v + 28.2034 × u × v 400 + 6 × u + 120 × v + 29 × u × v     360.945 + 5.22967 × u + 121.724 × v + 28.2034 × u × v
 DIVCORE    500.023 × s + 32.5576 × s × v                    510 × s + 33 × s × v                   212.076 + 500.831 × s + 32.5576 × s × v
 HASH       133.549 + 39.1941 × H(n)                         300 + 40 × H(n)                        445.978 + 39.4259 × H(n)
