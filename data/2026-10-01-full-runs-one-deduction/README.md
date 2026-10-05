@@ -53,6 +53,9 @@ M4 Pro at that commit, with small equal values added for OP_NUMEQUALVERIFY
 0.20x (OP_IFDUP). Other sessions loaded the machine: the reference took 2.37 s instead of 1.59 s, and the
 Schnorr baseline was slower by the same factor.
 
+gsr `26ed8d63da` charges OP_TX READ for each scope operand, which it takes as a number; this only raises a
+charge.
+
 ```
 Primitive  Envelope (varops, unrounded)                   Rounded candidate                      Maximum coefficients (unrounded)
 F          305.528                                          350                                    305.528

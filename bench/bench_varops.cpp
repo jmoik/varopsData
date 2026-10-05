@@ -2676,9 +2676,9 @@ static std::pair<std::string, std::string> CandidateFormula(opcodetype opcode)
     case OP_HASH160: return {"BASE + HASH(n) + HASH(32) + WRITE(20)", "BASE,HASH,WRITE"};
     case OP_HASH256: return {"BASE + HASH(n) + HASH(32) + WRITE(32)", "BASE,HASH,WRITE"};
     case OP_TX:
-        return {"BASE + OP_TX_SELECT(k) + WRITE(collated bytes), or WRITE(n) per noncollated value "
-                "(WRITE(8) for a number); k = selected values + scanned records; a reserved selector "
-                "version pays nothing", "BASE,OP_TX_SELECT,WRITE"};
+        return {"BASE + READ(n) per scope operand + OP_TX_SELECT(k) + WRITE(collated bytes), or WRITE(n) "
+                "per noncollated value (WRITE(8) for a number); k = selected values + scanned records; a "
+                "reserved selector version pays nothing", "BASE,READ,OP_TX_SELECT,WRITE"};
     case OP_CAT: return {"BASE + WRITE(n1 + n2)", "BASE,WRITE"};
     case OP_SUBSTR:
         return {"BASE + READ(begin) + READ(size) + WRITE(out)", "BASE,READ,WRITE"};

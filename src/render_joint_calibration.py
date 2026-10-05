@@ -48,7 +48,7 @@ SECTIONS = [
          groups=[("Unrolling", ("UNROLL",))]),
 ]
 # Prices implemented in src/script/varops.h, compared against the joint candidate.
-IMPLEMENTED_AT = '0e999bbe39'
+IMPLEMENTED_AT = '26ed8d63da'
 CURRENT_COSTS = {'F': '350', 'READ': '300 + 3 × W(n)', 'WRITE': '1000 + 8 × W(n)', 'ARITH': '200 + 3 × W(n)',
                  'MOVE': '200 + 37 × k',
                  'MULCORE': '400 + 6 × u + 120 × v + 29 × u × v', 'DIVCORE': '510 × s + 33 × s × v',
@@ -96,7 +96,7 @@ def opcode_examples():
          'a valid signature', BASE + hash_cost(96) + SIGCHECK + write(8)),
         ('OP_CHECKSIGFROMSTACK', 'BASE + HASH(64 + n) + SIG + WRITE(8), HASH and SIG only for a non-empty signature',
          'a 32-byte message', BASE + hash_cost(64 + 32) + SIGCHECK + write(8)),
-        ('OP_TX', 'BASE + OP_TX_SELECT(k) + WRITE of each result, WRITE(8) for a number', 'one number, e.g. nVersion',
+        ('OP_TX', 'BASE + READ per scope operand + OP_TX_SELECT(k) + WRITE of each result, WRITE(8) for a number', 'one number, e.g. nVersion',
          BASE + SELECT[0] + SELECT[1] + write(8)),
     ]
     link = lambda m: f'<a href="#{OPCODE_PRIMITIVES[m.group(0)]}">{m.group(0)}</a>'
@@ -679,7 +679,8 @@ def screens_html(screens, machines, dataset, page_dir=None):
                 'value is produced: the results of OP_EQUALVERIFY, OP_NUMEQUALVERIFY and OP_CHECKSIGVERIFY, and '
                 'the operand that OP_CHECKLOCKTIMEVERIFY, OP_CHECKSEQUENCEVERIFY and OP_IFDUP leave on the stack. '
                 'Re-screened on the Apple M4 Pro, the worst of their scripts, OP_CHECKSIGVERIFY&#39;s, takes '
-                '0.69× the reference.') + '</p>'
+                '0.69× the reference. OP_TX also pays READ for each scope operand, which only raises its '
+                'charge.') + '</p>'
              '<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Reference</th><th>Worst Tapleaf 0xC2 '
              'script</th><th>× reference</th><th>Scripts above</th></tr></thead><tbody>']
     for machine, screen in rows:

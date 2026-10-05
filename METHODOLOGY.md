@@ -229,7 +229,7 @@ A schedule passes only if every candidate interval's upper end is at most 1; a l
 
 ### Current prices
 
-The implementation (gsr `0e999bbe39`) prices every primitive from the six-machine full-run envelope of [`2026-10-01-full-runs-one-deduction`](data/2026-10-01-full-runs-one-deduction/); READ, WRITE, ARITH and HASH compose the prices of their measured parts (see [Combining machines](#combining-machines)). Each dataset's README records what changed since the one before. Earlier datasets remain in the Git history.
+The implementation (gsr `26ed8d63da`) prices every primitive from the six-machine full-run envelope of [`2026-10-01-full-runs-one-deduction`](data/2026-10-01-full-runs-one-deduction/); READ, WRITE, ARITH and HASH compose the prices of their measured parts (see [Combining machines](#combining-machines)). Each dataset's README records what changed since the one before. Earlier datasets remain in the Git history.
 
 ### Open items
 
