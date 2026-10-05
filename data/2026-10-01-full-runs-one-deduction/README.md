@@ -29,23 +29,24 @@ with `--source-root` on the gsr repository. A full budget of fitted work is pric
 reference. The rounded candidates of the measured families were implemented at gsr `7d0c293b64`.
 
 This model measured BIP 440's READ, WRITE and ARITH in parts: PREP and READ, PRODUCE and NORMALIZE, ARITH and BIT.
-Since gsr `104c1c0dc3` the implementation charges the merged primitives, and the fit composes them from the parts
-(see [Primitives measured in parts](../../METHODOLOGY.md#combining-machines)): READ and WRITE add their parts' fits
-and rounded prices, ARITH takes the larger flat and rate of its two. Every opcode keeps its composition, so none is
-charged less than before, and each merged price lies above the envelope of its composed fits.
+Like every model, it measured SHA256, RIPEMD160 and SHA1 (H256, H160, H1) separately. Since gsr `104c1c0dc3` the
+implementation charges the merged READ, WRITE and ARITH, and since `fae30159ae` one HASH for the three hash
+functions, with READ's flat rounded up from 290 to 300. The fit composes them from the parts
+(see [Combining machines](../../METHODOLOGY.md#combining-machines)): READ and WRITE add their parts' fits and
+rounded prices, ARITH and HASH take the larger flat and rate of theirs, and a composed price is rounded again.
+Every opcode keeps its composition, so none is charged less than before, and each merged price lies above the
+envelope of its parts; for HASH, that envelope covers every machine and every hash function.
 
 ```
 Primitive  Envelope (varops, unrounded)                   Rounded candidate                      Maximum coefficients (unrounded)
 F          305.528                                          350                                    305.528
-READ       252.794 + 1.02356 × W(n)                         290 + 3 × W(n)                         252.794 + 1.02356 × W(n)
+READ       252.794 + 1.02356 × W(n)                         300 + 3 × W(n)                         252.794 + 1.02356 × W(n)
 WRITE      892.546 + 7.14225 × n                            1000 + 8 × W(n)                        892.546 + 7.14225 × n
 ARITH      183.087 + 2.68554 × W(n)                         200 + 3 × W(n)                         183.087 + 2.68554 × W(n)
 MOVE       178.705 + 36.0097 × k                            200 + 37 × k                           178.705 + 36.0097 × k
 MULCORE    360.945 + 5.22967 × u + 118.164 × v + 28.2034 × u × v 400 + 6 × u + 120 × v + 29 × u × v     360.945 + 5.22967 × u + 121.724 × v + 28.2034 × u × v
 DIVCORE    500.023 × s + 32.5576 × s × v                    510 × s + 33 × s × v                   212.076 + 500.831 × s + 32.5576 × s × v
-H256       256.703 + 37.2698 × H(n)                         300 + 38 × H(n)                        445.978 + 37.2698 × H(n)
-H160       50.7168 + 39.3379 × H(n)                         60 + 40 × H(n)                         238.838 + 39.4259 × H(n)
-H1         184.146 + 23.6595 × H(n)                         200 + 24 × H(n)                        285.079 + 23.9433 × H(n)
+HASH       133.549 + 39.1941 × H(n)                         300 + 40 × H(n)                        445.978 + 39.4259 × H(n)
 SIG        565437                                           500000                                 565437
 TWEAK      168023                                           170000                                 168023
 SELECT     2381.66 + 260.3 × k                              2400 + 270 × k                         2381.66 + 260.3 × k
@@ -56,4 +57,7 @@ Measured in parts:
   NORMALIZE 189.093                                          200
   ARITH    124.082 + 2.68554 × W(n)                         150 + 3 × W(n)
   BIT      183.087 + 1.80421 × W(n)                         200 + 2 × W(n)
+  H256     256.703 + 37.2698 × H(n)                         300 + 38 × H(n)
+  H160     50.7168 + 39.3379 × H(n)                         60 + 40 × H(n)
+  H1       184.146 + 23.6595 × H(n)                         200 + 24 × H(n)
 ```

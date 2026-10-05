@@ -35,8 +35,8 @@ SECTIONS = [
          intro="Numbers of any size: passes over their words, multiplication and division.",
          groups=[("Numeric and bit operations", ("ARITH", "MULCORE", "DIVCORE"))]),
     dict(slug="category-crypto", title="Hashing and signatures",
-         intro="Hashes are charged per 64-byte block they process. A signature check has a fixed price.",
-         groups=[("Hashing and signatures", ("H256", "H160", "H1", "SIG"))]),
+         intro="Hashes are charged per 64-byte block they process, at one price for SHA256, RIPEMD160 and SHA1. A signature check has a fixed price.",
+         groups=[("Hashing and signatures", ("HASH", "SIG"))]),
     dict(slug="section-extended-primitives", title="Extended Primitives · OP_CHECKSIGFROMSTACK, OP_TWEAKADD, OP_BYTEREV",
          intro="OP_TWEAKADD adds one primitive, TWEAK. OP_CHECKSIGFROMSTACK and OP_BYTEREV are charged with existing primitives; their measurements are compared with that charge.",
          groups=[("Opcodes", ("TWEAK", "CSFS", "BYTEREV"))]),
@@ -48,14 +48,13 @@ SECTIONS = [
          groups=[("Unrolling", ("UNROLL",))]),
 ]
 # Prices implemented in src/script/varops.h, compared against the joint candidate.
-IMPLEMENTED_AT = '104c1c0dc3'
-CURRENT_COSTS = {'F': '350', 'READ': '290 + 3 × W(n)', 'WRITE': '1000 + 8 × W(n)', 'ARITH': '200 + 3 × W(n)',
+IMPLEMENTED_AT = 'fae30159ae'
+CURRENT_COSTS = {'F': '350', 'READ': '300 + 3 × W(n)', 'WRITE': '1000 + 8 × W(n)', 'ARITH': '200 + 3 × W(n)',
                  'MOVE': '200 + 37 × k',
                  'MULCORE': '400 + 6 × u + 120 × v + 29 × u × v', 'DIVCORE': '510 × s + 33 × s × v',
-                 'H256': '300 + 38 × H(n)', 'H160': '60 + 40 × H(n)',
-                 'H1': '200 + 24 × H(n)', 'SIG': '500000', 'TWEAK': '170000',
+                 'HASH': '300 + 40 × H(n)', 'SIG': '500000', 'TWEAK': '170000',
                  'SELECT': '2400 + 270 × k'}
-BASE, WRITE, READ, SHA256, SIGCHECK = 350, (1000, 8), (290, 3), (300, 38), 500_000  # rates per byte of W(n), H(n)
+BASE, WRITE, READ, HASH, SIGCHECK = 350, (1000, 8), (300, 3), (300, 40), 500_000  # rates per byte of W(n), H(n)
 ARITH, MOVE, MUL, SELECT = (200, 3), (200, 37), (400, 6, 120, 29), (2400, 270)
 
 
@@ -70,7 +69,7 @@ def unroll_charge(units, length, base=BASE, write=WRITE, read=READ, padded=True)
 
 # Common opcodes composed from the implemented prices, as the v2 evaluator adds the charges.
 OPCODE_PRIMITIVES = {'BASE': 'F', 'WRITE': 'WRITE', 'READ': 'READ', 'MOVE': 'MOVE', 'ARITH': 'ARITH',
-                     'MUL': 'MULCORE', 'SHA256': 'H256', 'SIG': 'SIG', 'OP_TX_SELECT': 'SELECT'}
+                     'MUL': 'MULCORE', 'HASH': 'HASH', 'SIG': 'SIG', 'OP_TX_SELECT': 'SELECT'}
 
 
 def opcode_examples():
@@ -78,7 +77,7 @@ def opcode_examples():
     span = lambda n: (n + 7) // 8 * 8
     write = lambda n: WRITE[0] + WRITE[1] * span(n)
     read = lambda n: READ[0] + READ[1] * span(n)
-    sha256 = lambda n: SHA256[0] + SHA256[1] * hash_span(n)
+    hash_cost = lambda n: HASH[0] + HASH[1] * hash_span(n)
     rows = [
         ('OP_DUP', 'BASE + WRITE(n)', 'a 32-byte value', BASE + write(32)),
         ('OP_EQUAL', 'BASE + READ(n) + WRITE(8), READ only if both sizes are n', 'two 32-byte values',
@@ -90,11 +89,13 @@ def opcode_examples():
         ('OP_MUL', 'BASE + READ(a) + READ(b) + MUL(u, v) + WRITE(8 × (u + v))', 'two 8-byte numbers',
          BASE + 2 * read(8) + MUL[0] + MUL[1] + MUL[2] + MUL[3] + write(16)),
         ('OP_BYTEREV', 'BASE + ARITH(n)', 'a 32-byte value', BASE + ARITH[0] + ARITH[1] * 32),
-        ('OP_SHA256', 'BASE + SHA256(n) + WRITE(32)', 'a 32-byte value', BASE + sha256(32) + write(32)),
-        ('OP_CHECKSIG', 'BASE + SHA256(96) + SIG + WRITE(8), SHA256 and SIG only for a non-empty signature',
-         'a valid signature', BASE + sha256(96) + SIGCHECK + write(8)),
-        ('OP_CHECKSIGFROMSTACK', 'BASE + SHA256(64 + n) + SIG + WRITE(8), SHA256 and SIG only for a non-empty signature',
-         'a 32-byte message', BASE + sha256(64 + 32) + SIGCHECK + write(8)),
+        ('OP_SHA256', 'BASE + HASH(n) + WRITE(32)', 'a 32-byte value', BASE + hash_cost(32) + write(32)),
+        ('OP_HASH160', 'BASE + HASH(n) + HASH(32) + WRITE(20)', 'a 33-byte public key',
+         BASE + hash_cost(33) + hash_cost(32) + write(20)),
+        ('OP_CHECKSIG', 'BASE + HASH(96) + SIG + WRITE(8), HASH and SIG only for a non-empty signature',
+         'a valid signature', BASE + hash_cost(96) + SIGCHECK + write(8)),
+        ('OP_CHECKSIGFROMSTACK', 'BASE + HASH(64 + n) + SIG + WRITE(8), HASH and SIG only for a non-empty signature',
+         'a 32-byte message', BASE + hash_cost(64 + 32) + SIGCHECK + write(8)),
         ('OP_TX', 'BASE + OP_TX_SELECT(k) + WRITE of each result, WRITE(8) for a number', 'one number, e.g. nVersion',
          BASE + SELECT[0] + SELECT[1] + write(8)),
     ]
@@ -123,12 +124,12 @@ def opcodes_html():
 CHECKS = {
     'CSFS': dict(
         source='SIG', select=lambda p: True,
-        charge=f'{SIGCHECK + SHA256[0]} + {SHA256[1]} × H(64 + n)',
-        composition='SIGCHECK + SHA256(64 + n)',
-        charged=lambda p: SIGCHECK + SHA256[0] + SHA256[1] * hash_span(64 + p['x']),
-        curve=lambda x: SIGCHECK + SHA256[0] + SHA256[1] * hash_span(64 + round(x)),
+        charge=f'{SIGCHECK + HASH[0]} + {HASH[1]} × H(64 + n)',
+        composition='SIGCHECK + HASH(64 + n)',
+        charged=lambda p: SIGCHECK + HASH[0] + HASH[1] * hash_span(64 + p['x']),
+        curve=lambda x: SIGCHECK + HASH[0] + HASH[1] * hash_span(64 + round(x)),
         xlabel='Message bytes n',
-        models='One BIP 340 signature check of an <code>n</code>-byte message. Its challenge hash covers R, P and the message, so the message bytes are charged as SHA256.',
+        models='One BIP 340 signature check of an <code>n</code>-byte message. Its challenge hash, a SHA256, covers R, P and the message, so the message bytes are charged as HASH.',
         fixtures='valid signatures over messages of 0 bytes to 4 MB.'),
     'BYTEREV': dict(
         source=('ARITH', 'BIT'), select=lambda p: p['group'].startswith('byterev'),
@@ -162,10 +163,8 @@ MODELS = {
     'MOVE': 'Reordering <code>k</code> stack entries without copying their contents, as OP_ROLL does.',
     'MULCORE': 'Schoolbook multiplication of a <code>u</code>-limb number by a <code>v</code>-limb number (<code>v</code> ≤ <code>u</code>, 64-bit limbs), including scratch space.',
     'DIVCORE': 'Long division or remainder: <code>s</code> quotient rows, each working through the <code>v</code> limbs of the divisor.',
-    'H256': 'SHA256 of an <code>n</code>-byte message, over whole 64-byte blocks.',
-    'H160': 'RIPEMD160 of a message of at most 520 bytes, over whole 64-byte blocks.',
-    'H1': 'SHA1 of a message of at most 520 bytes, over whole 64-byte blocks.',
-    'SIG': 'One BIP 340 signature check. Its price is fixed at 500,000 varops, which keeps today’s allowance of one signature check per 50 weight units; the challenge hash is charged separately as SHA256.',
+    'HASH': 'One SHA256, RIPEMD160 or SHA1 pass over an <code>n</code>-byte message, in whole 64-byte blocks. RIPEMD160 and SHA1 take at most 520 bytes.',
+    'SIG': 'One BIP 340 signature check. Its price is fixed at 500,000 varops, which keeps today’s allowance of one signature check per 50 weight units; the challenge hash is charged separately as HASH.',
     'TWEAK': 'One BIP 449 x-only public key tweak (OP_TWEAKADD).',
     'SELECT': 'One OP_TX selection with <code>k</code> charged units: each value selected and each record scanned, including planning, framing and cleanup.',
 }
@@ -188,7 +187,11 @@ COMPOSED_TEXT = {
              'conversion as well.',
     'ARITH': 'This dataset measured ARITH in two parts: passes with a carry chain and passes without one. An opcode '
              'makes one kind of pass, so the price takes the larger flat and the larger rate of the two parts&#39; '
-             'rounded prices, {shares}, and each machine&#39;s curve takes the larger flat and rate of its two fits.',
+             'rounded prices, {shares}, and its envelope covers every machine&#39;s fit of both parts.',
+    'HASH': 'SHA256, RIPEMD160 and SHA1 are measured separately, and one price covers all three: it takes the larger '
+            'flat and the larger rate of their rounded prices, {shares}. As the envelope covers every machine, it also '
+            'covers every hash function, each over the sizes it takes: SHA256 any size, RIPEMD160 and SHA1 at most '
+            '520 bytes.',
 }
 # Parts of a primitive that a dataset measured separately (fit_calibrations.COMPOSED):
 # what each part times.
@@ -199,7 +202,15 @@ PARTS = {
     'NORMALIZE': ('Converting a numeric result', 'Turning a numeric result back into minimal bytes.'),
     'ARITH': ('With a carry chain', 'Addition and subtraction.'),
     'BIT': ('Without a carry chain', 'Bitwise logic, shifts and OP_BYTEREV&#39;s byte reversal.'),
+    'H256': ('SHA256', 'SHA256 of an <code>n</code>-byte message, over whole 64-byte blocks.'),
+    'H160': ('RIPEMD160', 'RIPEMD160 of a message of at most 520 bytes, over whole 64-byte blocks.'),
+    'H1': ('SHA1', 'SHA1 of a message of at most 520 bytes, over whole 64-byte blocks.'),
 }
+
+def and_list(items):
+    """Names joined as prose: a, b and c."""
+    return ', '.join(items[:-1]) + ' and ' + items[-1] if len(items) > 1 else ''.join(items)
+
 
 def group_digits(formula):
     """Thousands separators for the whole numbers of a displayed formula."""
@@ -589,7 +600,8 @@ def family_label(family, model_id):
     """A measured family's name on the page: a part as its primitive and what the part times."""
     for primitive, (_, parts) in COMPOSED[model_id].items():
         if family in parts:
-            return f'{DISPLAY.get(primitive, primitive)} · {PARTS[family][0].lower()}'
+            title = PARTS[family][0]
+            return f'{DISPLAY.get(primitive, primitive)} · {title if title.split()[0].isupper() else title.lower()}'
     return DISPLAY.get(family, family)
 
 
@@ -662,7 +674,8 @@ def screens_html(screens, machines, dataset, page_dir=None):
              'is re-measured at a 10% budget over 7 rounds and counts with its slowest round.'
              + ('' if IMPLEMENTED_AT.startswith(screens['commit'][:10]) else
                 f' Since then, gsr <code>{IMPLEMENTED_AT}</code> merged PREPARE, NORMALIZE and BIT into READ, WRITE '
-                'and ARITH without lowering any opcode&#39;s charge.') + '</p>'
+                'and ARITH and the three hash prices into HASH, and rounded READ&#39;s flat up to 300, without '
+                'lowering any opcode&#39;s charge.') + '</p>'
              '<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Reference</th><th>Worst Tapleaf 0xC2 '
              'script</th><th>× reference</th><th>Scripts above</th></tr></thead><tbody>']
     for machine, screen in rows:
@@ -878,7 +891,8 @@ def render(joint_path, output, source_root=None, title=TITLE):
                 priced_series[charged[point["family"]]].append(point)
     # env_model holds the measured families' envelopes, priced_env the priced primitives'.
     env_model = envelope_model(machine_models, series)
-    priced_env = envelope_model([priced[machine["key"]] for machine in machines], priced_series)
+    priced_env = envelope_model([priced[machine["key"]] for machine in machines], priced_series, machine_models,
+                                {family: members for family, (how, members) in composed.items() if how == 'max'})
     for records, envelopes in ((joint['primitives'], priced_env), (joint.get('measured_parts', {}), env_model)):
         for family, record in records.items():
             if any(abs(a - b) > 1e-6 * max(1.0, abs(a))
@@ -924,6 +938,7 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
                  f'{status}</p>')
 
     references = [machine['meta']['reference_seconds'] for machine in machines]
+    two_parts = [family for family, (_, members) in composed.items() if len(members) == 2]
     epochs = sorted({machine['meta']['epochs'] for machine in machines})
     passes = f'{epochs[0]} passes' if len(epochs) == 1 else f'{epochs[0]} to {epochs[-1]} passes'
     parts.append(opcodes_html())
@@ -933,15 +948,18 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
                  f'reference: {min(references):.1f} to {max(references):.1f} seconds here.</li>'
                  '<li><strong>Measure.</strong> Every primitive is timed on prepared operands, from empty values to the '
                  f'4 MB element limit, in {passes}; each measurement is the median.'
-                 + (' This dataset timed READ, WRITE and ARITH in two parts each; their prices compose the parts&#39; '
-                    'prices, as described under each of them.' if composed else '') + '</li>'
+                 + (f' This dataset timed {and_list(two_parts)} in two parts each.' if two_parts else '')
+                 + (' SHA256, RIPEMD160 and SHA1 are timed separately and priced as one primitive, HASH.'
+                    if 'HASH' in composed else '')
+                 + (' A price composed from parts is described under its primitive.' if composed else '') + '</li>'
                  '<li><strong>Fit.</strong> Times are converted to varops so that 40 billion varops of fitted work take '
                  f'{TARGET_FRACTION:g} × the reference. Each machine&#39;s measurements are fitted with the primitive&#39;s '
                  'formula, penalizing under-estimates 100 times more than over-estimates.</li>'
                  '<li><strong>Combine.</strong> The envelope is the cheapest formula of the same form that lies on or '
                  'above every machine&#39;s fit at every size.</li>'
                  '<li><strong>Round.</strong> Each price rounds the envelope up: rates to two significant figures, flat '
-                 'parts to multiples of 10 below 100 and of 50 from 100. SIG stays at 500,000.</li>'
+                 'parts to multiples of 10 below 100 and of 50 from 100. SIG stays at 500,000.'
+                 + (' A price composed from parts is rounded again.' if composed else '') + '</li>'
                  '<li><strong>Check.</strong> Complete scripts of every opcode run on every machine; prices are accepted '
                  'only if no block of them takes longer than the reference.</li>'
                  f'</ol><p>The full method is in <a href="{METHODOLOGY_URL}">METHODOLOGY.md</a>.</p></div>')
@@ -1021,10 +1039,10 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
         """OP_CHECKSIG verifies a signature over the 32-byte transaction digest, the only
         message size Bitcoin signs; other sizes belong to OP_CHECKSIGFROMSTACK."""
         span = hash_span(96)
-        charge = SIGCHECK + SHA256[0] + SHA256[1] * span
+        charge = SIGCHECK + HASH[0] + HASH[1] * span
         out = [f'<p>OP_CHECKSIG checks a signature over the 32-byte transaction digest, so its challenge hash covers '
-               f'96 bytes: R, P and the digest. It is charged <code>SIGCHECK + SHA256(96)</code> = 500,000 + '
-               f'{SHA256[0]} + {SHA256[1]} × {span} = {charge:,} varops. The table compares one such check, measured on '
+               f'96 bytes: R, P and the digest. It is charged <code>SIGCHECK + HASH(96)</code> = 500,000 + '
+               f'{HASH[0]} + {HASH[1]} × {span} = {charge:,} varops. The table compares one such check, measured on '
                'each machine, with that charge. Other message sizes are checked only by '
                '<a href="#CSFS">OP_CHECKSIGFROMSTACK</a>, whose charge grows with the message.</p>',
                '<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Measured (varops)</th>'
@@ -1053,7 +1071,7 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
                    + ('' if implemented == candidate else
                       f' The implementation still charges <code>{esc(group_digits(implemented))}</code>.') + '</p>')
         out.append(f'<p class="model"><strong>Pays for:</strong> {MODELS[family]}</p>')
-        note = NOTES.get(family) or (sha_note() if family == 'H256' else None)
+        note = NOTES.get(family)
         if note:
             out.append(f'<p>{note}</p>')
         if family in FIXTURES:
@@ -1099,34 +1117,48 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
         candidate = formulas(family, price, candidate=True)
         implemented = CURRENT_COSTS[family]
         shares = [joint['measured_parts'][m]['candidate_coefficients'] for m in members]
-        share_text = ' and '.join(f'<code>{esc(group_digits(formulas(m, c, candidate=True)))}</code>'
-                                  for m, c in zip(members, shares))
+        share_text = and_list([f'<code>{esc(group_digits(formulas(m, c, candidate=True)))}</code>'
+                               for m, c in zip(members, shares)])
         out = [f'<article id="{family}"><{tag}>{esc(DISPLAY.get(family, family))}</{tag}>',
                f'<p><strong>Price:</strong> <code>{esc(group_digits(candidate))}</code> varops.'
                + ('' if implemented == candidate else
                   f' The implementation still charges <code>{esc(group_digits(implemented))}</code>.') + '</p>',
                f'<p class="model"><strong>Pays for:</strong> {MODELS[family]}</p>']
         out.append(f'<p>{COMPOSED_TEXT[family].format(shares=share_text)}</p>')
-        # Coefficients and sizes are nonnegative and W(n) >= n, so covering every coefficient covers every size.
+        # Coefficients and sizes are nonnegative, so covering every coefficient covers every size.
         envelope = priced_env[family]
         covered = all(e <= c + 1e-9 for e, c in zip(envelope, price))
-        out.append('<details open><summary>Composed fits and price</summary>')
-        out.extend(fit_table(family, priced, priced_env))
+        if how == 'sum':
+            out.append('<details open><summary>Composed fits and price</summary>')
+            out.extend(fit_table(family, priced, priced_env))
+        else:
+            # A larger-of price covers each part: each part's envelope and rounded price, then the
+            # envelope of every machine's curve of every part.
+            everything = f'Envelope of all machines and {"hash functions" if family == "HASH" else "parts"}'
+            out.append('<details open><summary>Parts and price</summary><div class="table-wrap"><table><thead><tr>'
+                       '<th>Part</th><th>Envelope of all machines</th><th>Rounded</th></tr></thead><tbody>')
+            for m, share in zip(members, shares):
+                out.append(f'<tr><td><a href="#{family}-{m}">{esc(PARTS[m][0])}</a></td>'
+                           f'<td><code>{esc(fitted(m, env_model[m]))}</code></td>'
+                           f'<td><code>{esc(group_digits(formulas(m, share, candidate=True)))}</code></td></tr>')
+            out.append(f'<tr><td>{everything}</td><td><code>{esc(fitted(family, envelope))}</code></td>'
+                       f'<td><code>{esc(group_digits(candidate))}</code>, the price</td></tr></tbody></table></div>')
         out.append(f'<p>The envelope {"lies at or below the price at every size" if covered else "exceeds the price"}: '
                    f'<code>{esc(fitted(family, envelope))}</code> against <code>{esc(group_digits(candidate))}</code>.</p>')
         out.append('</details>')
         for m, share in zip(members, shares):
             title, description = PARTS[m]
             pts = series[m]
-            out.append(f'<details open><summary>{esc(title)}</summary><p class="model">{description}</p>')
-            note = NOTES.get(m)
+            out.append(f'<details open id="{family}-{m}"><summary>{esc(title)}</summary><p class="model">{description}</p>')
+            note = NOTES.get(m) or (sha_note() if m == 'H256' else None)
             if note:
                 out.append(f'<p>{note}</p>')
             if how == 'sum':
                 out.extend(charts(m, pts, {m: share}, f'{family}-', 'Part of the price',
                                   'The dotted line is this part&#39;s share of the price.'))
             else:
-                out.extend(charts(m, pts, {m: price}, f'{family}-'))
+                out.extend(charts(m, pts, {m: price}, f'{family}-',
+                                  price_note='The dotted line is the price, which covers every part.'))
             out.extend(fit_table(m, models, env_model))
             out.append('</details>')
         out.append('</article>')

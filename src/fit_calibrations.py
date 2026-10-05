@@ -39,16 +39,18 @@ MODEL_ID = "read-write-arith-v1"
 # Measured compositions of existing primitives: compared against their charge, never priced.
 CHECKS = {"UNROLL"}
 # BIP 440's priced primitives.
-PRICED = "F READ WRITE ARITH MOVE MULCORE DIVCORE H256 H160 H1 SIG TWEAK SELECT".split()
+PRICED = "F READ WRITE ARITH MOVE MULCORE DIVCORE HASH SIG TWEAK SELECT".split()
+# The hash functions, each measured as a family of its own: SHA256, RIPEMD160, SHA1.
+HASHES = ("H256", "H160", "H1")
 # How a model's measured families compose a priced primitive: READ pays for both
 # converting and scanning an operand and WRITE for both converting a numeric
 # result and producing it, so their parts add; ARITH covers passes with and
-# without a carry chain, so it takes the larger of the two. Other priced
-# primitives are measured families of the same name.
+# without a carry chain and HASH every hash function, so each takes the larger
+# of its parts. Other priced primitives are measured families of the same name.
 COMPOSED = {
-    "read-write-arith-v1": {},
+    "read-write-arith-v1": {"HASH": ("max", HASHES)},
     "producer-normalize-v1": {"READ": ("sum", ("PREP", "READ")), "WRITE": ("sum", ("PRODUCE", "NORMALIZE")),
-                              "ARITH": ("max", ("ARITH", "BIT"))},
+                              "ARITH": ("max", ("ARITH", "BIT")), "HASH": ("max", HASHES)},
 }
 
 
@@ -63,7 +65,9 @@ def charged_by(model_id):
 def priced_model(model, model_id):
     """One machine's curves of the priced primitives, composed from its measured fits.
 
-    Every composed part is a fixed term and a rate on W(n); a constant fit has a zero rate."""
+    Every composed part is a fixed term and a rate on W(n), or on H(n) for the hashes; a
+    constant fit has a zero rate. A larger-of composition takes the larger flat and the
+    larger rate, which covers every part at every size."""
     out = {}
     for family in PRICED:
         how, parts = COMPOSED[model_id].get(family, ("sum", (family,)))
@@ -76,8 +80,10 @@ def priced_model(model, model_id):
 
 
 def compose_candidates(candidates, model_id):
-    """Rounded prices of the priced primitives from rounded prices of the measured families."""
-    return priced_model({family: tuple(c) for family, c in candidates.items()}, model_id)
+    """Prices of the priced primitives composed from rounded prices of the measured
+    families, then rounded again: a sum of rounded flats need not be a rounded flat."""
+    composed = priced_model({family: tuple(c) for family, c in candidates.items()}, model_id)
+    return {family: tuple(rounded_candidate(family, curve)) for family, curve in composed.items()}
 BUDGET_VAROPS = 40_000_000_000
 # BIP 440 measurement condition: a run whose epoch noise exceeds this is repeated,
 # not priced. Load average and reference drift, which earlier runners recorded,
@@ -147,7 +153,7 @@ def hash_span(n):
 def features(family, x, group):
     if family in {"DIVCORE", "MULCORE"}:
         return x, x * int(group.split("=")[1])
-    if family in {"H256", "H160", "H1"}:
+    if family in HASHES + ("HASH",):
         return 1, hash_span(x)
     if family in {"PREP", "NORMALIZE"}:
         return 1, word(x)
@@ -540,7 +546,9 @@ ENVELOPE = ("Envelope: the cheapest curve of each family's form that covers ever
             "cannot be smaller: a hash processes at least one 64-byte block, a division has at least one quotient row "
             "and one divisor limb, and a multiplication's shorter operand is at most as long as the longer one. RIPEMD160 and SHA1 take at most 520 bytes; other sizes are unbounded. Where sizes "
             "start at zero and are unbounded, the envelope equals the coefficientwise maximum. Constant primitives "
-            "and SIG use the maximum.")
+            "and SIG use the maximum. A primitive that takes the larger of measured parts (ARITH, HASH) covers every "
+            "machine's curve of every part, each over the part's own chargeable sizes, and weighs each fixture "
+            "against its own part's curves.")
 
 
 def feature_domain(family):
@@ -578,29 +586,38 @@ def solve(rows, rhs):
     return [m[i][n] / m[i][i] for i in range(n)]
 
 
-def envelope_coefficients(family, models, points):
+def envelope_coefficients(family, models, points, parts=None):
     """The ENVELOPE curve of one family: an exact linear program over the family's
     few coefficients, solved by checking every vertex of the feasible region.
 
-    points are one machine's included fixtures of the family (all machines share them)."""
-    curves = [tuple(model[family]) for model in models]
+    points are one machine's included fixtures of the family (all machines share them).
+    parts are the measured families of a primitive that takes the larger of them: the
+    curve then covers every machine's curve of each part over that part's sizes."""
+    parts = parts or (family,)
+    curves = {part: [tuple(model[part]) for model in models] for part in parts}
     if family in CONSTANT:
-        return tuple(max(curve[i] for curve in curves) for i in range(len(curves[0])))
-    k = len(curves[0])
-    corners, rays = feature_domain(family)
+        return tuple(max(curve[i] for curve in curves[family]) for i in range(len(curves[family][0])))
+    k = len(curves[parts[0]][0])
     constraints = {}
-    for direction in corners + rays:
-        constraints[direction] = max(sum(t * e for t, e in zip(curve, direction)) for curve in curves)
+    for part in parts:
+        corners, rays = feature_domain(part)
+        for direction in corners + rays:
+            bound = max(sum(t * e for t, e in zip(curve, direction)) for curve in curves[part])
+            constraints[direction] = max(constraints.get(direction, bound), bound)
     for i in range(k):
         constraints.setdefault(tuple(int(i == j) for j in range(k)), 0.0)
     constraints = list(constraints.items())
     features_of = ((lambda p: (1, p['c'], mul_rows(p), p['v'])) if k == 4 else
                    (lambda p: (1, p['c'], p['v'])) if k == 3 else (lambda p: (p['c'], p['v'])))
+    if len(parts) > 1:
+        # Paths of different parts are different groups.
+        points = [dict(p, group=f"{p['family']}/{p['group']}") for p in points]
     ws = weights(points)
     gradient = [0.0] * k
     for w, p in zip(ws, points):
         phi = features_of(p)
-        target = max(sum(t * f for t, f in zip(curve, phi)) for curve in curves)
+        own = curves[p['family']] if len(parts) > 1 else curves[family]
+        target = max(sum(t * f for t, f in zip(curve, phi)) for curve in own)
         for i in range(k):
             gradient[i] += w * phi[i] / target
     best = None
@@ -616,14 +633,19 @@ def envelope_coefficients(family, models, points):
     return tuple(max(0.0, t) for t in best[1])
 
 
-def envelope_model(models, series):
+def envelope_model(models, series, measured=None, parts=None):
     """ENVELOPE coefficients for every family of the machine models; series holds the
-    fixtures of all machines, of which the first machine's are used for weights."""
+    fixtures of all machines, of which the first machine's are used for weights. A
+    family in parts takes the larger of those measured families, whose curves the
+    measured machine models hold."""
+    parts = parts or {}
     first = next(iter(series.values()))[0]['machine']
-    return {family: envelope_coefficients(
-                family, models,
-                [p for p in series.get(family, []) if p['included'] and p['machine'] == first])
-            for family in models[0]}
+    out = {}
+    for family in models[0]:
+        points = [p for p in series.get(family, []) if p['included'] and p['machine'] == first]
+        out[family] = (envelope_coefficients(family, measured, points, parts[family]) if family in parts else
+                       envelope_coefficients(family, models, points))
+    return out
 
 
 def independent_models(paths):
@@ -699,7 +721,7 @@ def formulas(family, coeff, candidate=False):
         variable = "W(n)"
     else:
         variable = ("W(n)" if family in {"PREP", "READ", "ARITH", "BIT", "NORMALIZE"} else "k" if family in {"MOVE", "SELECT"}
-                    else "H(n)" if family in {"H256", "H160", "H1"} else "n")
+                    else "H(n)" if family in HASHES + ("HASH",) else "n")
     return terms((coeff[0], ''), (coeff[1], variable))
 
 
@@ -726,7 +748,7 @@ def candidate_charge(family, point, candidates):
     """The rounded candidate's charge for one fixture, in the units varops.h charges it."""
     coeff = candidates[family]
     if family == "SIG":
-        a, b = candidates["H256"]
+        a, b = candidates["HASH"]
         return coeff[0] + a + b * hash_span(64 + point["x"])
     if family in CONSTANT:
         return coeff[0]
@@ -861,6 +883,24 @@ def report_diagnostics(diag, machines):
               f"epoch noise {100 * noise:.2f}%" + (f" exceeds {100 * MAX_EPOCH_NOISE:g}%" if noise > MAX_EPOCH_NOISE else "")))
 
 
+def composition_text(composed):
+    """How schedule_combination describes a model's composed primitives."""
+    if not composed:
+        return ""
+    sums = [family for family, (how, _) in composed.items() if how == "sum"]
+    maxima = [family for family, (how, _) in composed.items() if how == "max"]
+    rules = []
+    if sums:
+        rules.append(f"{' and '.join(sums)} add{'' if len(sums) > 1 else 's'} the parts' prices")
+    if maxima:
+        rules.append(f"{' and '.join(maxima)} take{'' if len(maxima) > 1 else 's'} the larger flat and the larger rate "
+                     f"of {'their' if len(maxima) > 1 else 'its'} parts")
+    return (" Primitives measured in parts (composed_from) are priced by composing the parts' rounded prices and "
+            "rounding the result again: " + "; ".join(rules) + ". The envelope of a sum covers each machine's composed "
+            "curve, that of a larger-of every machine's curve of each part over the part's own sizes; it is compared "
+            "with the price.")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("calibrations", type=Path, nargs="+", help="Per-machine varop-calibration JSON files")
@@ -933,13 +973,14 @@ def main():
         if family in charged:
             priced_series[charged[family]].extend(points)
     max_coeff = maximum_coefficients(priced)
-    envelope = envelope_model(priced, priced_series)
-    order = [family for family in PRICED if family in envelope]
     composed = COMPOSED[model_id]
+    envelope = envelope_model(priced, priced_series, models,
+                              {family: members for family, (how, members) in composed.items() if how == "max"})
+    order = [family for family in PRICED if family in envelope]
     parts = [part for _, (_, members) in composed.items() for part in members]
     # A composed primitive's price composes its parts' rounded prices, as varops.h
-    # merges them; its envelope, which covers each machine's composed curve, is
-    # compared with that price.
+    # merges them, rounded again; its envelope, which covers each machine's composed
+    # curve or every machine's curve of each part, is compared with that price.
     part_candidates = {part: rounded_candidate(part, measured_envelope[part]) for part in parts}
     part_maxima = {part: rounded_candidate(part, maximum_coefficients(models)[part]) for part in parts}
     composed_candidates = compose_candidates(part_candidates, model_id)
@@ -951,12 +992,12 @@ def main():
                   model_id=model_id,
                   pricing_basis="envelope",
                   schedule_combination="Envelope of machine curves, each fitted independently from the samples recorded on that machine after same-machine normalization (see envelope_combination); DIVCORE rows are trimmed-length quotient rows, fitted as fixed + step + cell. Round after combining; SIG remains fixed at 500000. Coefficientwise maxima are kept for comparison."
-                                       + (" Primitives measured in parts (composed_from) are priced by composing the parts' rounded prices: READ and WRITE add theirs, ARITH takes the larger. Their envelope covers each machine's composed curve and is compared with that price." if composed else ""),
+                                       + composition_text(composed),
                   envelope_combination=ENVELOPE,
                   method=f"Per-machine median of raw fixture epochs, normalized so that a full 40-billion-varop budget of fitted work takes {TARGET_FRACTION:g}× the recorded local pre-v2 reference (rate derived from the recorded reference time, whatever normalization the artifact was collected with); equal path-group and size-decade weights; weighted squared log error with a 100× underprediction penalty; nonnegative predefined coefficients; no coefficient rounding. SIG diagnostic fits do not replace the fixed 500000 allowance.",
                   machines=machines, source_check=source_check, bench_check=bench_check,
                   schedule_rounding=dict(coefficient="flats to a multiple of 10 below 100 and of 50 from 100, and to no more than two significant figures; rates to two significant figures, and at least to a whole varop", sig_policy=500000,
-                                         rule="Ceiling each coefficient independently: flats to a multiple of 10 below 100 and of 50 from 100, never to more than two significant figures; rates (per byte of W(n) or H(n) or per counted item) to two significant figures and at least to a whole varop; preserve zero/exact multiples; no refitting.",
+                                         rule="Ceiling each coefficient independently: flats to a multiple of 10 below 100 and of 50 from 100, never to more than two significant figures; rates (per byte of W(n) or H(n) or per counted item) to two significant figures and at least to a whole varop; preserve zero/exact multiples; no refitting. A price composed from rounded parts is rounded again by the same rule.",
                                          status="Installed as provisional research candidate; source discrepancy and multi-machine script confirmation remain open."),
                   primitives={}, measured_parts={})
     print("Primitive  Envelope (varops, unrounded)                   Rounded candidate                      Maximum coefficients (unrounded)")

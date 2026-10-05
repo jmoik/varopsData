@@ -20,7 +20,7 @@ The details of every step, each primitive's measurements and the acceptance stat
 
 ## Machines
 
-The current dataset, [`data/2026-10-01-full-runs-one-deduction`](data/2026-10-01-full-runs-one-deduction/), has full runs on six machines. It measured READ, WRITE and ARITH in two parts each, from which the fit composes them; the current benchmarks measure them directly. A non-Apple ARM64 machine and a low-end home-node device are still needed.
+The current dataset, [`data/2026-10-01-full-runs-one-deduction`](data/2026-10-01-full-runs-one-deduction/), has full runs on six machines. It measured READ, WRITE and ARITH in two parts each, from which the fit composes them; the current benchmarks measure them directly. SHA256, RIPEMD160 and SHA1 are measured separately and share one price, HASH. A non-Apple ARM64 machine and a low-end home-node device are still needed.
 
 | Machine | OS | Reference `T_pre` | Slowest existing workload |
 |---|---|---|---|

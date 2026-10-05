@@ -3,8 +3,8 @@
   "status": "provisional multi-machine fit, not an accepted consensus schedule",
   "model_id": "producer-normalize-v1",
   "pricing_basis": "envelope",
-  "schedule_combination": "Envelope of machine curves, each fitted independently from the samples recorded on that machine after same-machine normalization (see envelope_combination); DIVCORE rows are trimmed-length quotient rows, fitted as fixed + step + cell. Round after combining; SIG remains fixed at 500000. Coefficientwise maxima are kept for comparison. Primitives measured in parts (composed_from) are priced by composing the parts' rounded prices: READ and WRITE add theirs, ARITH takes the larger. Their envelope covers each machine's composed curve and is compared with that price.",
-  "envelope_combination": "Envelope: the cheapest curve of each family's form that covers every machine's fitted curve at every chargeable size. With feature vector phi(x) >= 0 and machine fits theta_m, it minimizes the weighted mean relative charge sum_x w(x) theta.phi(x) / max_m theta_m.phi(x) over the family's fixtures x (same path-group and size-decade weights as the fits), subject to theta.phi(x) >= theta_m.phi(x) for every machine m and every chargeable size x, and theta >= 0. Sizes start at zero except where an operation cannot be smaller: a hash processes at least one 64-byte block, a division has at least one quotient row and one divisor limb, and a multiplication's shorter operand is at most as long as the longer one. RIPEMD160 and SHA1 take at most 520 bytes; other sizes are unbounded. Where sizes start at zero and are unbounded, the envelope equals the coefficientwise maximum. Constant primitives and SIG use the maximum.",
+  "schedule_combination": "Envelope of machine curves, each fitted independently from the samples recorded on that machine after same-machine normalization (see envelope_combination); DIVCORE rows are trimmed-length quotient rows, fitted as fixed + step + cell. Round after combining; SIG remains fixed at 500000. Coefficientwise maxima are kept for comparison. Primitives measured in parts (composed_from) are priced by composing the parts' rounded prices and rounding the result again: READ and WRITE add the parts' prices; ARITH and HASH take the larger flat and the larger rate of their parts. The envelope of a sum covers each machine's composed curve, that of a larger-of every machine's curve of each part over the part's own sizes; it is compared with the price.",
+  "envelope_combination": "Envelope: the cheapest curve of each family's form that covers every machine's fitted curve at every chargeable size. With feature vector phi(x) >= 0 and machine fits theta_m, it minimizes the weighted mean relative charge sum_x w(x) theta.phi(x) / max_m theta_m.phi(x) over the family's fixtures x (same path-group and size-decade weights as the fits), subject to theta.phi(x) >= theta_m.phi(x) for every machine m and every chargeable size x, and theta >= 0. Sizes start at zero except where an operation cannot be smaller: a hash processes at least one 64-byte block, a division has at least one quotient row and one divisor limb, and a multiplication's shorter operand is at most as long as the longer one. RIPEMD160 and SHA1 take at most 520 bytes; other sizes are unbounded. Where sizes start at zero and are unbounded, the envelope equals the coefficientwise maximum. Constant primitives and SIG use the maximum. A primitive that takes the larger of measured parts (ARITH, HASH) covers every machine's curve of every part, each over the part's own chargeable sizes, and weighs each fixture against its own part's curves.",
   "method": "Per-machine median of raw fixture epochs, normalized so that a full 40-billion-varop budget of fitted work takes 0.9\u00d7 the recorded local pre-v2 reference (rate derived from the recorded reference time, whatever normalization the artifact was collected with); equal path-group and size-decade weights; weighted squared log error with a 100\u00d7 underprediction penalty; nonnegative predefined coefficients; no coefficient rounding. SIG diagnostic fits do not replace the fixed 500000 allowance.",
   "machines": [
     {
@@ -458,7 +458,7 @@
   "schedule_rounding": {
     "coefficient": "flats to a multiple of 10 below 100 and of 50 from 100, and to no more than two significant figures; rates to two significant figures, and at least to a whole varop",
     "sig_policy": 500000,
-    "rule": "Ceiling each coefficient independently: flats to a multiple of 10 below 100 and of 50 from 100, never to more than two significant figures; rates (per byte of W(n) or H(n) or per counted item) to two significant figures and at least to a whole varop; preserve zero/exact multiples; no refitting.",
+    "rule": "Ceiling each coefficient independently: flats to a multiple of 10 below 100 and of 50 from 100, never to more than two significant figures; rates (per byte of W(n) or H(n) or per counted item) to two significant figures and at least to a whole varop; preserve zero/exact multiples; no refitting. A price composed from rounded parts is rounded again by the same rule.",
     "status": "Installed as provisional research candidate; source discrepancy and multi-machine script confirmation remain open."
   },
   "primitives": {
@@ -488,16 +488,16 @@
         1.023556458904856
       ],
       "candidate_coefficients": [
-        290,
+        300,
         3
       ],
-      "candidate_formula": "290 + 3 \u00d7 W(n)",
+      "candidate_formula": "300 + 3 \u00d7 W(n)",
       "maximum_coefficients": [
         252.79356028243762,
         1.023556458904856
       ],
       "maximum_candidate_coefficients": [
-        290,
+        300,
         3
       ],
       "notes": "",
@@ -629,65 +629,31 @@
       ],
       "notes": ""
     },
-    "H256": {
+    "HASH": {
       "envelope_coefficients": [
-        256.70263803382295,
-        37.26979441897633
+        133.54855596195785,
+        39.194076951349224
       ],
       "candidate_coefficients": [
         300,
-        38
-      ],
-      "candidate_formula": "300 + 38 \u00d7 H(n)",
-      "maximum_coefficients": [
-        445.9778004310035,
-        37.26979441897633
-      ],
-      "maximum_candidate_coefficients": [
-        450,
-        38
-      ],
-      "notes": ""
-    },
-    "H160": {
-      "envelope_coefficients": [
-        50.716797249068804,
-        39.337882088003546
-      ],
-      "candidate_coefficients": [
-        60,
         40
       ],
-      "candidate_formula": "60 + 40 \u00d7 H(n)",
+      "candidate_formula": "300 + 40 \u00d7 H(n)",
       "maximum_coefficients": [
-        238.83782239824052,
+        445.9778004310035,
         39.42593208322762
       ],
       "maximum_candidate_coefficients": [
-        250,
+        450,
         40
       ],
-      "notes": ""
-    },
-    "H1": {
-      "envelope_coefficients": [
-        184.14623177234466,
-        23.65945961878731
+      "notes": "",
+      "composed_from": [
+        "H256",
+        "H160",
+        "H1"
       ],
-      "candidate_coefficients": [
-        200,
-        24
-      ],
-      "candidate_formula": "200 + 24 \u00d7 H(n)",
-      "maximum_coefficients": [
-        285.07903111608925,
-        23.943314298481884
-      ],
-      "maximum_candidate_coefficients": [
-        300,
-        24
-      ],
-      "notes": ""
+      "composition": "max"
     },
     "SIG": {
       "envelope_coefficients": [
@@ -822,6 +788,42 @@
         2
       ],
       "candidate_formula": "200 + 2 \u00d7 W(n)"
+    },
+    "H256": {
+      "primitive": "HASH",
+      "envelope_coefficients": [
+        256.70263803382295,
+        37.26979441897633
+      ],
+      "candidate_coefficients": [
+        300,
+        38
+      ],
+      "candidate_formula": "300 + 38 \u00d7 H(n)"
+    },
+    "H160": {
+      "primitive": "HASH",
+      "envelope_coefficients": [
+        50.716797249068804,
+        39.337882088003546
+      ],
+      "candidate_coefficients": [
+        60,
+        40
+      ],
+      "candidate_formula": "60 + 40 \u00d7 H(n)"
+    },
+    "H1": {
+      "primitive": "HASH",
+      "envelope_coefficients": [
+        184.14623177234466,
+        23.65945961878731
+      ],
+      "candidate_coefficients": [
+        200,
+        24
+      ],
+      "candidate_formula": "200 + 24 \u00d7 H(n)"
     }
   },
   "diagnostics": {
@@ -18946,8 +18948,8 @@
             "primitive": "SIG",
             "fixture": "SIG/32",
             "measured_varops": 555530.8082494239,
-            "charged_varops": 505164,
-            "ratio": 1.0997038748790964
+            "charged_varops": 505420,
+            "ratio": 1.0991468644878
           },
           {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
@@ -18959,15 +18961,6 @@
             "ratio": 1.0985955332021617
           },
           {
-            "machine": "varop-calibration-ryzen99500x-full",
-            "family": "SIG",
-            "primitive": "SIG",
-            "fixture": "SIG/64",
-            "measured_varops": 557340.5981315258,
-            "charged_varops": 507596,
-            "ratio": 1.0980003745725455
-          },
-          {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
             "family": "PRODUCE",
             "primitive": "WRITE",
@@ -18977,13 +18970,22 @@
             "ratio": 1.0977892873097543
           },
           {
+            "machine": "varop-calibration-ryzen99500x-full",
+            "family": "SIG",
+            "primitive": "SIG",
+            "fixture": "SIG/64",
+            "measured_varops": 557340.5981315258,
+            "charged_varops": 507980,
+            "ratio": 1.0971703573595926
+          },
+          {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "SIG",
             "primitive": "SIG",
             "fixture": "SIG/32",
             "measured_varops": 554249.2131845752,
-            "charged_varops": 505164,
-            "ratio": 1.0971668867626656
+            "charged_varops": 505420,
+            "ratio": 1.0966111613797935
           },
           {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
@@ -19027,8 +19029,8 @@
             "primitive": "SIG",
             "fixture": "SIG/32",
             "measured_varops": 552748.0632809724,
-            "charged_varops": 505164,
-            "ratio": 1.094195277733513
+            "charged_varops": 505420,
+            "ratio": 1.0936410574986595
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -19049,15 +19051,6 @@
             "ratio": 1.0928479623263376
           },
           {
-            "machine": "varop-calibration-ryzen99500x-full",
-            "family": "SIG",
-            "primitive": "SIG",
-            "fixture": "SIG/128",
-            "measured_varops": 557357.2754886618,
-            "charged_varops": 510028,
-            "ratio": 1.0927974061986045
-          },
-          {
             "machine": "Apple M1 Pro",
             "family": "PRODUCE",
             "primitive": "WRITE",
@@ -19065,6 +19058,15 @@
             "measured_varops": 859712.0869715642,
             "charged_varops": 787432.0,
             "ratio": 1.0917921636046848
+          },
+          {
+            "machine": "varop-calibration-ryzen99500x-full",
+            "family": "SIG",
+            "primitive": "SIG",
+            "fixture": "SIG/128",
+            "measured_varops": 557357.2754886618,
+            "charged_varops": 510540,
+            "ratio": 1.0917014837009085
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
@@ -19086,15 +19088,6 @@
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "SIG",
-            "primitive": "SIG",
-            "fixture": "SIG/0",
-            "measured_varops": 551084.2434919232,
-            "charged_varops": 505164,
-            "ratio": 1.090901654694165
-          },
-          {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "DIVCORE",
             "primitive": "DIVCORE",
             "fixture": "DIVCORE/256/256/127/MOD/top-one",
@@ -19103,13 +19096,22 @@
             "ratio": 1.0904712466254591
           },
           {
+            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
+            "family": "SIG",
+            "primitive": "SIG",
+            "fixture": "SIG/0",
+            "measured_varops": 551084.2434919232,
+            "charged_varops": 505420,
+            "ratio": 1.090349102710465
+          },
+          {
             "machine": "varop-calibration-ryzen99500x-full",
             "family": "SIG",
             "primitive": "SIG",
             "fixture": "SIG/0",
             "measured_varops": 550850.7424856715,
-            "charged_varops": 505164,
-            "ratio": 1.09043942657369
+            "charged_varops": 505420,
+            "ratio": 1.0898871087128952
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
@@ -19117,17 +19119,8 @@
             "primitive": "SIG",
             "fixture": "SIG/128",
             "measured_varops": 555515.5529497358,
-            "charged_varops": 510028,
-            "ratio": 1.0891863837862545
-          },
-          {
-            "machine": "AMD Ryzen 5 3600 6-Core Processor",
-            "family": "SIG",
-            "primitive": "SIG",
-            "fixture": "SIG/0",
-            "measured_varops": 549690.3128993659,
-            "charged_varops": 505164,
-            "ratio": 1.0881422922048403
+            "charged_varops": 510540,
+            "ratio": 1.0880940826374736
           },
           {
             "machine": "varop-calibration-ryzen99500x-full",
@@ -19139,13 +19132,22 @@
             "ratio": 1.0880202911433232
           },
           {
+            "machine": "AMD Ryzen 5 3600 6-Core Processor",
+            "family": "SIG",
+            "primitive": "SIG",
+            "fixture": "SIG/0",
+            "measured_varops": 549690.3128993659,
+            "charged_varops": 505420,
+            "ratio": 1.087591137864283
+          },
+          {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "SIG",
             "primitive": "SIG",
             "fixture": "SIG/64",
             "measured_varops": 552154.9309466593,
-            "charged_varops": 507596,
-            "ratio": 1.0877842436635814
+            "charged_varops": 507980,
+            "ratio": 1.0869619491843365
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -19157,15 +19159,6 @@
             "ratio": 1.0860404130084944
           },
           {
-            "machine": "AMD Ryzen 5 3600 6-Core Processor",
-            "family": "SIG",
-            "primitive": "SIG",
-            "fixture": "SIG/128",
-            "measured_varops": 553569.8754890084,
-            "charged_varops": 510028,
-            "ratio": 1.0853715393841288
-          },
-          {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "DIVCORE",
             "primitive": "DIVCORE",
@@ -19173,6 +19166,15 @@
             "measured_varops": 19428.601297854795,
             "charged_varops": 17916,
             "ratio": 1.0844273999695688
+          },
+          {
+            "machine": "AMD Ryzen 5 3600 6-Core Processor",
+            "family": "SIG",
+            "primitive": "SIG",
+            "fixture": "SIG/128",
+            "measured_varops": 553569.8754890084,
+            "charged_varops": 510540,
+            "ratio": 1.0842830639891259
           },
           {
             "machine": "Apple M4 Pro",
@@ -19184,15 +19186,6 @@
             "ratio": 1.08342945995282
           },
           {
-            "machine": "AMD Ryzen 5 3600 6-Core Processor",
-            "family": "SIG",
-            "primitive": "SIG",
-            "fixture": "SIG/64",
-            "measured_varops": 549911.4783792209,
-            "charged_varops": 507596,
-            "ratio": 1.083364483524734
-          },
-          {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
             "family": "DIVCORE",
             "primitive": "DIVCORE",
@@ -19200,6 +19193,15 @@
             "measured_varops": 19398.0687167325,
             "charged_varops": 17916,
             "ratio": 1.082723192494558
+          },
+          {
+            "machine": "AMD Ryzen 5 3600 6-Core Processor",
+            "family": "SIG",
+            "primitive": "SIG",
+            "fixture": "SIG/64",
+            "measured_varops": 549911.4783792209,
+            "charged_varops": 507980,
+            "ratio": 1.0825455300980766
           },
           {
             "machine": "Apple M1 Pro",
@@ -19571,15 +19573,6 @@
             "ratio": 1.0418921882380805
           },
           {
-            "machine": "Apple M1 Pro",
-            "family": "SIG",
-            "primitive": "SIG",
-            "fixture": "SIG/32",
-            "measured_varops": 526177.2800854511,
-            "charged_varops": 505164,
-            "ratio": 1.041596946903285
-          },
-          {
             "machine": "AMD Ryzen 5 3600 6-Core Processor",
             "family": "PRODUCE",
             "primitive": "WRITE",
@@ -19587,6 +19580,15 @@
             "measured_varops": 546972.4299537046,
             "charged_varops": 525224.0,
             "ratio": 1.0414079134877778
+          },
+          {
+            "machine": "Apple M1 Pro",
+            "family": "SIG",
+            "primitive": "SIG",
+            "fixture": "SIG/32",
+            "measured_varops": 526177.2800854511,
+            "charged_varops": 505420,
+            "ratio": 1.0410693682194039
           },
           {
             "machine": "12th Gen Intel(R) Core(TM) i5-12500",
@@ -19616,24 +19618,6 @@
             "ratio": 1.0396752619688467
           },
           {
-            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
-            "family": "SIG",
-            "primitive": "SIG",
-            "fixture": "SIG/1024",
-            "measured_varops": 565594.8345461761,
-            "charged_varops": 544076,
-            "ratio": 1.0395511556219648
-          },
-          {
-            "machine": "varop-calibration-ryzen99500x-full",
-            "family": "SIG",
-            "primitive": "SIG",
-            "fixture": "SIG/1024",
-            "measured_varops": 565483.611368672,
-            "charged_varops": 544076,
-            "ratio": 1.039346729811041
-          },
-          {
             "machine": "varop-calibration-ryzen99500x-full",
             "family": "PRODUCE",
             "primitive": "WRITE",
@@ -19648,8 +19632,8 @@
             "primitive": "SIG",
             "fixture": "SIG/0",
             "measured_varops": 524138.6467098472,
-            "charged_varops": 505164,
-            "ratio": 1.0375613596967463
+            "charged_varops": 505420,
+            "ratio": 1.037035825075872
           },
           {
             "machine": "Apple M4 Pro",
@@ -19668,6 +19652,15 @@
             "measured_varops": 8144.073005875808,
             "charged_varops": 7866,
             "ratio": 1.0353512593282237
+          },
+          {
+            "machine": "12th Gen Intel(R) Core(TM) i5-12500",
+            "family": "SIG",
+            "primitive": "SIG",
+            "fixture": "SIG/1024",
+            "measured_varops": 565594.8345461761,
+            "charged_varops": 546380,
+            "ratio": 1.0351675290936273
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -19695,6 +19688,15 @@
             "measured_varops": 2148.698638593832,
             "charged_varops": 2076,
             "ratio": 1.0350186120394183
+          },
+          {
+            "machine": "varop-calibration-ryzen99500x-full",
+            "family": "SIG",
+            "primitive": "SIG",
+            "fixture": "SIG/1024",
+            "measured_varops": 565483.611368672,
+            "charged_varops": 546380,
+            "ratio": 1.034963965314748
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -19751,15 +19753,6 @@
             "ratio": 1.033306888842079
           },
           {
-            "machine": "Apple M1 Pro",
-            "family": "SIG",
-            "primitive": "SIG",
-            "fixture": "SIG/128",
-            "measured_varops": 526958.151998051,
-            "charged_varops": 510028,
-            "ratio": 1.0331945540206635
-          },
-          {
             "machine": "Apple M4 Pro",
             "family": "PRODUCE",
             "primitive": "WRITE",
@@ -19814,6 +19807,15 @@
             "ratio": 1.032324462001598
           },
           {
+            "machine": "Apple M1 Pro",
+            "family": "SIG",
+            "primitive": "SIG",
+            "fixture": "SIG/128",
+            "measured_varops": 526958.151998051,
+            "charged_varops": 510540,
+            "ratio": 1.0321584048224448
+          },
+          {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
             "family": "DIVCORE",
             "primitive": "DIVCORE",
@@ -19821,15 +19823,6 @@
             "measured_varops": 106214.81142825121,
             "charged_varops": 102906,
             "ratio": 1.0321537269765728
-          },
-          {
-            "machine": "Apple M1 Pro",
-            "family": "SIG",
-            "primitive": "SIG",
-            "fixture": "SIG/64",
-            "measured_varops": 523916.01021918334,
-            "charged_varops": 507596,
-            "ratio": 1.0321515737302567
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -19841,13 +19834,13 @@
             "ratio": 1.0319466354278795
           },
           {
-            "machine": "AMD Ryzen 5 3600 6-Core Processor",
+            "machine": "Apple M1 Pro",
             "family": "SIG",
             "primitive": "SIG",
-            "fixture": "SIG/1024",
-            "measured_varops": 560958.6350062422,
-            "charged_varops": 544076,
-            "ratio": 1.0310299204637627
+            "fixture": "SIG/64",
+            "measured_varops": 523916.01021918334,
+            "charged_varops": 507980,
+            "ratio": 1.031371333948548
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",
@@ -19965,6 +19958,15 @@
             "measured_varops": 27591.27566522813,
             "charged_varops": 26874,
             "ratio": 1.0266903202064497
+          },
+          {
+            "machine": "AMD Ryzen 5 3600 6-Core Processor",
+            "family": "SIG",
+            "primitive": "SIG",
+            "fixture": "SIG/1024",
+            "measured_varops": 560958.6350062422,
+            "charged_varops": 546380,
+            "ratio": 1.0266822266668658
           },
           {
             "machine": "Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz",

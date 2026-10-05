@@ -17,10 +17,8 @@ Notation: `n` is a size in bytes, `W(n) = 8 ceil(n / 8)` its span in 64-bit word
 | `MOVE(k)` | `a + b k` | Reordering `k` stack entries without copying their contents, as OP_ROLL does. |
 | `MUL(u, v)` | `a + b u + c v + d u v` | Schoolbook multiplication, one row per limb of the shorter operand, including scratch space. |
 | `DIV(s, v)` | `a + b s + c s v` | Long division or remainder: `s` quotient rows, each working through the `v` limbs of the divisor, including normalization and temporaries. |
-| `SHA256(n)` | `a + b H(n)` | SHA256 of an `n`-byte message, over whole 64-byte blocks. |
-| `RIPEMD160(n)` | `a + b H(n)` | RIPEMD160 of a message of at most 520 bytes. |
-| `SHA1(n)` | `a + b H(n)` | SHA1 of a message of at most 520 bytes. |
-| `SIGCHECK` | 500,000, not fitted | One BIP 340 signature check, at today's allowance of one per 50 weight units; its challenge hash is charged as SHA256. |
+| `HASH(n)` | `a + b H(n)` | One SHA256, RIPEMD160 or SHA1 pass over an `n`-byte message, over whole 64-byte blocks; RIPEMD160 and SHA1 take at most 520 bytes. The three are measured separately and one price covers them (see [One price for the hash functions](#combining-machines)). |
+| `SIGCHECK` | 500,000, not fitted | One BIP 340 signature check, at today's allowance of one per 50 weight units; its challenge hash is charged as HASH. |
 | `TWEAK` | `a` | One BIP 449 x-only public key tweak (OP_TWEAKADD). |
 | `OP_TX_SELECT(k)` | `a + b k` | One OP_TX selection with `k` charged units: each value selected and each record scanned. |
 
@@ -32,7 +30,7 @@ Rates are fitted per byte of `n` and charged per byte of `W(n)` or `H(n)` (see [
 - **Numeric operands and results.** Every numeric operand pays READ, and every numeric result WRITE of its bytes. MUL charges WRITE of its full product span before multiplying; its scratch storage is part of MUL. DIV includes its internal temporary storage.
 - **Small results.** A count, comparison result, constant or boolean costs `WRITE(8)` whatever its encoded length.
 - **No separate allocation charge.** Required allocation and growth belong to the producing operation, including scratch storage; they are never omitted or charged twice.
-- **Hashes compose.** HASH256 is `SHA256(n) + SHA256(32)`, HASH160 is `SHA256(n) + RIPEMD160(32)`, plus BASE and the digest's WRITE.
+- **Hashes compose.** OP_SHA256, OP_RIPEMD160 and OP_SHA1 pay `HASH(n)`; OP_HASH160 and OP_HASH256 pay `HASH(n) + HASH(32)`, the second pass hashing the 32-byte SHA256 digest. Each also pays BASE and the digest's WRITE.
 - **Final result check**: `READ` of the remaining element, once per script.
 - **Macros.** Unrolled instructions in inactive branches pay nothing when reached, so the unrolling charge covers their substitution, copying and skipping. `bench_varops` evaluates such scripts repeatedly against one shared budget, as inputs of one transaction, because one script unrolls at most 4 MB.
 - Lock checks pay BASE plus READ of their operand. READ and WRITE keep their own flats rather than inflating BASE. A fitted rate may be zero.
@@ -118,7 +116,7 @@ Each item names what is timed, its paths (the path groups that the fit weights e
 - **DIV**: complete prepared division and modulo (DIV and MOD) across divisor widths of 1 to 1,024 limbs, operand ratios and normalization patterns (`normalized`, `top-one`), and dividends up to the element size limit for 1-, 2- and 64-limb divisors. `s = max(1, u − v + 2)` quotient rows and `v` divisor limbs over limbs without trailing zero bytes, as BIP 441 specifies them, not measured loop counts. The bundled measurement includes normalization and temporary storage, so overlapping multiplication or storage work is not added again. The `b s` term covers per-row quotient estimation and correction; measurements with many rows at small `v` identify it.
 - **SHA256**: complete Core SHA256 of 0 to 4,000,000 bytes with the automatically selected backend, writing into a prepared digest buffer. Each size is fitted at its block span `H(n)`.
 - **RIPEMD160**, **SHA1**: complete calls across the permitted 520-byte direct-input range, including 32-byte second-pass inputs; the digest buffer is prepared outside the timer.
-- **SIGCHECK**: uncached production Schnorr verification of valid signatures over messages of 0 to 4,000,000 bytes (OP_CHECKSIGFROMSTACK), checking that the challenge hash stays within `SHA256(64 + n)`. Not fitted for the price, which stays 500,000.
+- **SIGCHECK**: uncached production Schnorr verification of valid signatures over messages of 0 to 4,000,000 bytes (OP_CHECKSIGFROMSTACK), checking that the challenge hash stays within the SHA256 fit at `H(64 + n)`. Not fitted for the price, which stays 500,000.
 - **TWEAK**: one complete fixed-size production public-key tweak.
 - **OP_TX_SELECT**: selector setup plus `k` charged units, on collated output, per unit kind: witness items (`empty_items`), weight scan, amount scan, outputs and input fields. Measured on real transactions.
 
@@ -176,7 +174,9 @@ over the primitive's measurements, with the fitting weights, subject to `theta .
 
 Where sizes start at zero and are unbounded, the envelope equals the coefficientwise maximum; it is lower only where the domain is restricted. Constant primitives use the maximum. The envelope covers every machine's fitted curve, not every measurement. Adding a machine adds constraints, so the envelope never falls below any admitted machine's curve. It is not the coefficientwise maximum in general, which over-charges where machines differ in flat and rate.
 
-**Primitives measured in parts.** The current dataset was recorded with an earlier benchmark model, `producer-normalize-v1`, which timed READ, WRITE and ARITH in two parts each: converting an operand (PREPARE) apart from scanning it, producing a value apart from converting a numeric result to bytes (NORMALIZE, a flat), and passes without a carry chain (BIT) apart from ARITH. `fit_calibrations.py` fits every part on every machine and composes each machine's curve (`COMPOSED`, `priced_model`): READ and WRITE are charged once for both of their parts, so their parts' fits add; an opcode makes either kind of ARITH pass, so ARITH takes the larger flat and the larger rate of its two. The price composes the parts' rounded prices the same way, and the envelope of the composed curves is reported against it; it lies below the price at every size. The current benchmark model, `read-write-arith-v1`, times each of them directly.
+**Primitives measured in parts.** The current dataset was recorded with an earlier benchmark model, `producer-normalize-v1`, which timed READ, WRITE and ARITH in two parts each: converting an operand (PREPARE) apart from scanning it, producing a value apart from converting a numeric result to bytes (NORMALIZE, a flat), and passes without a carry chain (BIT) apart from ARITH. `fit_calibrations.py` fits every part on every machine and composes them (`COMPOSED`, `priced_model`): READ and WRITE are charged once for both of their parts, so their parts' fits add; an opcode makes either kind of ARITH pass, so ARITH takes the larger flat and the larger rate of its two. The price composes the parts' rounded prices the same way and is rounded again (see [Rounding](#rounding)). For READ and WRITE, the envelope of each machine's composed curve is reported against the price; for ARITH, the envelope of every machine's curve of both parts, as for HASH below. Each lies below its price at every size. The current benchmark model, `read-write-arith-v1`, times READ, WRITE and ARITH directly.
+
+**One price for the hash functions.** Every benchmark model measures SHA256, RIPEMD160 and SHA1 as separate families, and BIP 440 prices them as one primitive, HASH. An opcode makes one pass of one of them at a time, so HASH takes the larger flat and the larger rate of their rounded prices: `300 + 38 H(n)`, `60 + 40 H(n)` and `200 + 24 H(n)` give `300 + 40 H(n)`. As the envelope covers every machine, HASH's envelope also covers every hash function: it is the cheapest curve above every machine's curve of each hash function, each over that function's chargeable sizes in the table above. On the current dataset it is `133.5 + 39.19 H(n)`, below the price at every size. One price over-charges SHA1 most, at 1.65 to 1.66 times its own rounded price; that is accepted for a simpler schedule (see [Simplicity](#simplicity-and-revising-the-basis)).
 
 ## Rounding
 
@@ -185,7 +185,7 @@ After combining, round each coefficient upward on its own (`rounded_candidate`):
 - **Rates** to two significant figures, and at least to a whole varop. The prices then carry no more precision than a sample of machines supports, while rounding adds at most 10% to a rate of 10 or more. Rates below 10 can rise by more, because a whole varop is the smallest step.
 - **Flats** more coarsely: to a multiple of 10 below 100 and of 50 from 100, but never to more than two significant figures (so 100 from 1,000). A flat is the intercept of a fit, which moves more between calibration runs than the rates do; the coarse steps keep it from changing on every refit, at up to 50% more for a value just above 100.
 
-Zero and values already at a step stay unchanged. Coverage of the machines comes from the envelope, not from rounding. Do not refit after rounding: retain the unrounded fits and report the rounding uplift, especially for small rates. For example, a combined MUL fit of `360.9 + 5.23 u + 118.2 v + 28.20 u v` becomes `400 + 6 u + 120 v + 29 u v`, RIPEMD160's flat of `50.7` becomes `60`, and TWEAK's `168,023` becomes `170,000`.
+Zero and values already at a step stay unchanged. A price composed from rounded parts is rounded again by the same rule; only a sum of flats can change, as READ's `200` and `90` add to `290`, charged as `300`. Coverage of the machines comes from the envelope, not from rounding. Do not refit after rounding: retain the unrounded fits and report the rounding uplift, especially for small rates. For example, a combined MUL fit of `360.9 + 5.23 u + 118.2 v + 28.20 u v` becomes `400 + 6 u + 120 v + 29 u v`, RIPEMD160's flat of `50.7` becomes `60`, and TWEAK's `168,023` becomes `170,000`.
 
 Rates are fitted per byte of `n` and charged per byte of the padded span the operation processes: `W(n)` for READ, WRITE and ARITH, `H(n)` for the hashes, and per counted item elsewhere. Since `W(n) ≥ n`, this never charges less than the fit. Every rate is a whole number of varops, so a rate fitted far below one varop per byte, such as that of converting an operand, is charged well above its fit on large operands.
 
@@ -229,7 +229,7 @@ A schedule passes only if every candidate interval's upper end is at most 1; a l
 
 ### Current prices
 
-The implementation (gsr `104c1c0dc3`) prices every primitive from the six-machine full-run envelope of [`2026-10-01-full-runs-one-deduction`](data/2026-10-01-full-runs-one-deduction/); READ, WRITE and ARITH compose the prices of their measured parts (see [Primitives measured in parts](#combining-machines)). Each dataset's README records what changed since the one before. Earlier datasets remain in the Git history.
+The implementation (gsr `fae30159ae`) prices every primitive from the six-machine full-run envelope of [`2026-10-01-full-runs-one-deduction`](data/2026-10-01-full-runs-one-deduction/); READ, WRITE, ARITH and HASH compose the prices of their measured parts (see [Combining machines](#combining-machines)). Each dataset's README records what changed since the one before. Earlier datasets remain in the Git history.
 
 ### Open items
 

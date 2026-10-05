@@ -74,6 +74,20 @@ class CalibrationPipelineTests(unittest.TestCase):
             span = calibration.hash_span(n)
             self.assertGreaterEqual((env[0] + env[1] * span) * (1 + 1e-9), max(m['H1'][0] + m['H1'][1] * span for m in (a, b)))
         self.assertLess(env[0], maximum['H1'][0])
+        # HASH covers every machine's curve of every hash function, each over its own sizes:
+        # SHA256 unbounded, SHA1 to 520 bytes. A higher SHA1 rate need not raise the rate.
+        a.update(H256=(450, 37), H160=(240, 39))
+        b.update(H256=(250, 38), H160=(50, 40))
+        pts = [dict(machine='m', family=f, group='g', x=n, c=1, v=calibration.hash_span(n), included=True)
+               for f, sizes in (('H256', (0, 64, 4096, 10**6)), ('H160', (0, 64, 520)), ('H1', (0, 64, 520)))
+               for n in sizes]
+        env = calibration.envelope_coefficients('HASH', [a, b], pts, calibration.HASHES)
+        for part, limit in (('H256', 10**7), ('H160', 520), ('H1', 520)):
+            for n in (0, 55, 56, 519, 520, limit):
+                span = calibration.hash_span(n)
+                self.assertGreaterEqual((env[0] + env[1] * span) * (1 + 1e-9),
+                                        max(m[part][0] + m[part][1] * span for m in (a, b)))
+        self.assertLess(env[1], 40)
 
     def test_schedule_rounding(self):
         # Hashes are priced per byte of the block-padded length: 49.0253 per byte is charged as 50.
@@ -94,6 +108,7 @@ class CalibrationPipelineTests(unittest.TestCase):
         self.assertEqual(calibration.rounded_candidate('READ', [80.6, 1.01]), [90, 2])
         self.assertEqual(calibration.rounded_candidate('TWEAK', [168855, 0]), [170000, 0])
         self.assertEqual(calibration.formulas('H256', [192, 39], candidate=True), '192 + 39 × H(n)')
+        self.assertEqual(calibration.formulas('HASH', [300, 40], candidate=True), '300 + 40 × H(n)')
         self.assertEqual(calibration.rounded_candidate('NORMALIZE', [187.2, 0]), [200, 0])
         self.assertEqual(calibration.formulas('NORMALIZE', [200, 0], candidate=True), '200')
         # Zero stays zero and exact multiples keep their value.
@@ -109,13 +124,13 @@ class CalibrationPipelineTests(unittest.TestCase):
                          [0, 10, 10, 60, 100, 100, 150, 150, 1000, 1000, 1800, 10000, 170000])
 
     def test_candidate_charge_uses_pricing_units(self):
-        c = {'PRODUCE': [680, 7], 'PREP': [180, 1], 'H256': [280, 38], 'MOVE': [180, 23], 'SIG': [500000, 0],
+        c = {'PRODUCE': [680, 7], 'PREP': [180, 1], 'HASH': [280, 38], 'MOVE': [180, 23], 'SIG': [500000, 0],
              'MULCORE': [340, 5, 110, 29], 'F': [310, 0]}
         # WRITE and READ are charged on W(n), hashes on the block span.
         self.assertEqual(calibration.candidate_charge('WRITE', dict(x=9, group='g'), dict(WRITE=[680, 7])), 680 + 7 * 16)
         self.assertEqual(calibration.candidate_charge('PRODUCE', dict(x=9, group='g'), c), 680 + 7 * 16)
         self.assertEqual(calibration.candidate_charge('PREP', dict(x=9, group='spare'), c), 180 + 16)
-        self.assertEqual(calibration.candidate_charge('H256', dict(x=56, group='g'), c), 280 + 38 * 128)
+        self.assertEqual(calibration.candidate_charge('HASH', dict(x=56, group='g'), c), 280 + 38 * 128)
         self.assertEqual(calibration.candidate_charge('MOVE', dict(x=3, group='g'), c), 180 + 69)
         self.assertEqual(calibration.candidate_charge('SIG', dict(x=32, group='g'), c), 500000 + 280 + 38 * 128)
         self.assertEqual(calibration.candidate_charge('F', dict(x=1, group='g'), c), 310)
@@ -232,22 +247,28 @@ class CalibrationPipelineTests(unittest.TestCase):
         self.assertEqual(by_name['NORMALIZE']['v'], 8)
 
     def test_composed_primitives(self):
-        # The recorded parts compose BIP 440's READ, WRITE and ARITH: READ and WRITE
-        # add their parts, ARITH takes the larger of ARITH and BIT.
+        # The recorded parts compose BIP 440's READ, WRITE, ARITH and HASH: READ and WRITE
+        # add their parts, ARITH takes the larger of ARITH and BIT, HASH the larger of the
+        # three hash functions.
         parts = {'F': (350, 0), 'PREP': (200, 1), 'READ': (90, 2), 'PRODUCE': (800, 8), 'NORMALIZE': (200, 0),
-                 'ARITH': (150, 3), 'BIT': (200, 2), 'MOVE': (200, 37)}
+                 'ARITH': (150, 3), 'BIT': (200, 2), 'MOVE': (200, 37),
+                 'H256': (300, 38), 'H160': (60, 40), 'H1': (200, 24)}
         priced = calibration.priced_model(parts, 'producer-normalize-v1')
         self.assertEqual(priced, {'F': (350, 0), 'READ': (290, 3), 'WRITE': (1000, 8), 'ARITH': (200, 3),
-                                  'MOVE': (200, 37)})
+                                  'MOVE': (200, 37), 'HASH': (300, 40)})
+        # The composed price is rounded again: 200 + 90 is charged as 300.
         self.assertEqual(calibration.compose_candidates({k: list(v) for k, v in parts.items()}, 'producer-normalize-v1'),
-                         priced)
-        # A model that measures them directly is its own composition.
-        direct = {'READ': (290, 3), 'WRITE': (1000, 8), 'ARITH': (200, 3)}
-        self.assertEqual(calibration.priced_model(direct, calibration.MODEL_ID), direct)
+                         dict(priced, READ=(300, 3)))
+        # A model that measures READ, WRITE and ARITH directly composes only HASH.
+        direct = {'READ': (300, 3), 'WRITE': (1000, 8), 'ARITH': (200, 3),
+                  'H256': (300, 38), 'H160': (60, 40), 'H1': (200, 24)}
+        self.assertEqual(calibration.priced_model(direct, calibration.MODEL_ID),
+                         {'READ': (300, 3), 'WRITE': (1000, 8), 'ARITH': (200, 3), 'HASH': (300, 40)})
         charged = calibration.charged_by('producer-normalize-v1')
-        self.assertEqual({part: charged[part] for part in ('PREP', 'READ', 'PRODUCE', 'NORMALIZE', 'ARITH', 'BIT')},
+        self.assertEqual({part: charged[part] for part in ('PREP', 'READ', 'PRODUCE', 'NORMALIZE', 'ARITH', 'BIT',
+                                                           'H256', 'H160', 'H1')},
                          {'PREP': 'READ', 'READ': 'READ', 'PRODUCE': 'WRITE', 'NORMALIZE': 'WRITE',
-                          'ARITH': 'ARITH', 'BIT': 'ARITH'})
+                          'ARITH': 'ARITH', 'BIT': 'ARITH', 'H256': 'HASH', 'H160': 'HASH', 'H1': 'HASH'})
         # A part's fixture is checked against the price of the primitive that charges it.
         pts = [dict(family='NORMALIZE', machine='m', group='scalar', x=2, c=1, v=8, y=1100, included=True,
                     label='NORMALIZE/scalar/256')]

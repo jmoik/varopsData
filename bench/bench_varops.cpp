@@ -99,12 +99,8 @@ constexpr uint64_t COST_DIV_FIXED{DivCost(0, 0)};
 constexpr uint64_t COST_DIV_STEP{DivCost(1, 0) - DivCost(0, 0)};
 constexpr uint64_t COST_DIV_CELL{DivCost(1, 1) - DivCost(1, 0)};
 // Hash rates are per byte of the padded 64-byte-block span; an empty message is one block.
-constexpr uint64_t COST_SHA256_BYTE{(Sha256Cost(64) - Sha256Cost(0)) / 64};
-constexpr uint64_t COST_SHA256_FIXED{Sha256Cost(0) - 64 * COST_SHA256_BYTE};
-constexpr uint64_t COST_H160_BYTE{(Ripemd160Cost(64) - Ripemd160Cost(0)) / 64};
-constexpr uint64_t COST_H160_FIXED{Ripemd160Cost(0) - 64 * COST_H160_BYTE};
-constexpr uint64_t COST_H1_BYTE{(Sha1Cost(64) - Sha1Cost(0)) / 64};
-constexpr uint64_t COST_H1_FIXED{Sha1Cost(0) - 64 * COST_H1_BYTE};
+constexpr uint64_t COST_HASH_BYTE{(HashCost(64) - HashCost(0)) / 64};
+constexpr uint64_t COST_HASH_FIXED{HashCost(0) - 64 * COST_HASH_BYTE};
 constexpr uint64_t COST_MACRO_UNROLL{BaseCost()};
 constexpr uint64_t COST_SCALAR_WRITE{WriteCost(8)};
 } // namespace varops
@@ -1207,23 +1203,12 @@ static uint64_t OneToOneSequenceCost(opcodetype opcode, size_t size, bool three_
             opcode == OP_RIPEMD160 || opcode == OP_SHA1 || opcode == OP_HASH160 ? 20U : 32U};
         uint64_t hash_q{0};
         IndependentAdd(hash_q, varops::COST_BASE);
-        if (opcode == OP_SHA1) {
-            IndependentAdd(hash_q, varops::COST_H1_FIXED);
-            IndependentAdd(hash_q, varops::COST_H1_BYTE, IndependentHashSpan(size));
-        } else if (opcode == OP_RIPEMD160) {
-            IndependentAdd(hash_q, varops::COST_H160_FIXED);
-            IndependentAdd(hash_q, varops::COST_H160_BYTE, IndependentHashSpan(size));
-        } else if (opcode == OP_SHA256) {
-            IndependentAdd(hash_q, varops::COST_SHA256_FIXED);
-            IndependentAdd(hash_q, varops::COST_SHA256_BYTE, IndependentHashSpan(size));
-        } else if (opcode == OP_HASH160) {
-            IndependentAdd(hash_q, varops::COST_SHA256_FIXED);
-            IndependentAdd(hash_q, varops::COST_SHA256_BYTE, IndependentHashSpan(size));
-            IndependentAdd(hash_q, varops::COST_H160_FIXED);
-            IndependentAdd(hash_q, varops::COST_H160_BYTE, IndependentHashSpan(32));
-        } else {
-            IndependentAdd(hash_q, varops::COST_SHA256_FIXED, 2);
-            IndependentAdd(hash_q, varops::COST_SHA256_BYTE, IndependentHashSpan(size) + IndependentHashSpan(32));
+        IndependentAdd(hash_q, varops::COST_HASH_FIXED);
+        IndependentAdd(hash_q, varops::COST_HASH_BYTE, IndependentHashSpan(size));
+        if (opcode == OP_HASH160 || opcode == OP_HASH256) {
+            // The 32-byte SHA256 digest is hashed a second time.
+            IndependentAdd(hash_q, varops::COST_HASH_FIXED);
+            IndependentAdd(hash_q, varops::COST_HASH_BYTE, IndependentHashSpan(32));
         }
         IndependentAdd(hash_q, varops::COST_WRITE_FIXED);
         IndependentAdd(hash_q, varops::COST_WRITE_BYTE, varops::WordSpan(output_size));
@@ -2674,11 +2659,10 @@ static std::pair<std::string, std::string> CandidateFormula(opcodetype opcode)
         return {"BASE + 2 READ(n1) + READ(n2) + READ(n3) + WRITE(8)", "BASE,READ,WRITE"};
     case OP_AND: case OP_OR: case OP_XOR:
         return {"BASE + READ(n1) + READ(n2) + ARITH(max(n1, n2)) + WRITE(out)", "BASE,READ,ARITH,WRITE"};
-    case OP_RIPEMD160: return {"BASE + RIPEMD160(n) + WRITE(20)", "BASE,RIPEMD160,WRITE"};
-    case OP_SHA1: return {"BASE + SHA1(n) + WRITE(20)", "BASE,SHA1,WRITE"};
-    case OP_SHA256: return {"BASE + SHA256(n) + WRITE(32)", "BASE,SHA256,WRITE"};
-    case OP_HASH160: return {"BASE + SHA256(n) + RIPEMD160(32) + WRITE(20)", "BASE,SHA256,RIPEMD160,WRITE"};
-    case OP_HASH256: return {"BASE + SHA256(n) + SHA256(32) + WRITE(32)", "BASE,SHA256,WRITE"};
+    case OP_RIPEMD160: case OP_SHA1: return {"BASE + HASH(n) + WRITE(20)", "BASE,HASH,WRITE"};
+    case OP_SHA256: return {"BASE + HASH(n) + WRITE(32)", "BASE,HASH,WRITE"};
+    case OP_HASH160: return {"BASE + HASH(n) + HASH(32) + WRITE(20)", "BASE,HASH,WRITE"};
+    case OP_HASH256: return {"BASE + HASH(n) + HASH(32) + WRITE(32)", "BASE,HASH,WRITE"};
     case OP_TX:
         return {"BASE + OP_TX_SELECT(k) + WRITE(collated bytes), or WRITE(n) per noncollated value "
                 "(WRITE(8) for a number); k = selected values + scanned records; a reserved selector "
@@ -2696,15 +2680,15 @@ static std::pair<std::string, std::string> CandidateFormula(opcodetype opcode)
     case OP_LSHIFT: case OP_RSHIFT:
         return {"BASE + READ(n1) + READ(bits) + ARITH(n1) + WRITE(out)", "BASE,READ,ARITH,WRITE"};
     case OP_CHECKSIG: case OP_CHECKSIGVERIFY:
-        return {"BASE + WRITE(8), plus SIGCHECK + SHA256(96) for a nonempty signature", "BASE,SIGCHECK,SHA256,WRITE"};
+        return {"BASE + WRITE(8), plus SIGCHECK + HASH(96) for a nonempty signature", "BASE,SIGCHECK,HASH,WRITE"};
     case OP_CHECKSIGADD:
-        return {"BASE + READ(num) + WRITE(out), plus SIGCHECK + SHA256(96) + ARITH(num) "
-                "for a nonempty signature", "BASE,READ,SIGCHECK,SHA256,ARITH,WRITE"};
+        return {"BASE + READ(num) + WRITE(out), plus SIGCHECK + HASH(96) + ARITH(num) "
+                "for a nonempty signature", "BASE,READ,SIGCHECK,HASH,ARITH,WRITE"};
     case OP_CHECKLOCKTIMEVERIFY: case OP_CHECKSEQUENCEVERIFY:
         return {"BASE + READ(n) + WRITE(out)", "BASE,READ,WRITE"};
     case OP_CHECKSIGFROMSTACK:
-        return {"BASE + WRITE(8), plus SIGCHECK + SHA256(64 + msg) for a nonempty signature",
-                "BASE,SIGCHECK,SHA256,WRITE"};
+        return {"BASE + WRITE(8), plus SIGCHECK + HASH(64 + msg) for a nonempty signature",
+                "BASE,SIGCHECK,HASH,WRITE"};
     case OP_TWEAKADD: return {"BASE + TWEAK + WRITE(32)", "BASE,TWEAK,WRITE"};
     case OP_BYTEREV: return {"BASE + ARITH(n)", "BASE,ARITH"};
     default: throw std::runtime_error("no candidate formula for " + OpcodeName(opcode));
