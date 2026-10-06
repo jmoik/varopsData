@@ -61,6 +61,7 @@
 #include <map>
 #include <memory>
 #include <ratio>
+#include <set>
 #include <span>
 #include <sstream>
 #include <stdexcept>
@@ -140,6 +141,7 @@ struct Options {
     double reference_sec{0};
     std::string output{"primitive-measurements.csv"};
     bool self_test{false};
+    std::set<std::string> only; // Families to measure; empty for all.
 };
 
 // Epochs are taken in passes: each pass times one epoch of every fixture, so a
@@ -1369,6 +1371,23 @@ void MeasureUnroll(Runner& r)
             measure("chain-" + util::ToString(depth), bodies, depth - 1, calls, calls * depth, 0);
         }
     }
+    for (const size_t depth : {11U, 21U}) {
+        // Body i references body i-1 twice; body 0 is empty, so a call visits
+        // 2^depth - 1 references and unrolls to nothing.
+        std::vector<CScript> bodies{CScript{}};
+        for (size_t i{1}; i < depth; ++i) {
+            CScript body;
+            for (int j{0}; j < 2; ++j) {
+                body << OP_CALLMACRO;
+                AppendMacroCompactSize(body, i - 1);
+            }
+            bodies.push_back(body);
+        }
+        const uint64_t visits{(uint64_t{1} << depth) - 1};
+        for (const size_t calls : depth == 11 ? std::vector<size_t>{1024} : std::vector<size_t>{1, 16}) {
+            measure("fanout-" + util::ToString(depth), bodies, depth - 1, calls, calls * visits, 0);
+        }
+    }
 }
 
 void Help()
@@ -1380,7 +1399,10 @@ void Help()
                  "  --epochs N          Measured epochs per fixture, one per pass over all fixtures (default 7)\n"
                  "  --sample-ms MS      Target timed duration per epoch (default 10)\n"
                  "  --copy-sample-ms MS Target duration for WRITE lifetime fixtures (default 100)\n"
-                 "  --self-test         Check the production helper fixtures, then exit\n";
+                 "  --self-test         Check the production helper fixtures, then exit\n"
+                 "  --only FAMILY       Measure only this family (F, WRITE, READ, ARITH, BIT, MOVE, MULCORE,\n"
+                 "                      DIVCORE, HASH, SIG, SELECT or UNROLL); repeatable. No artifact pipeline\n"
+                 "                      accepts the partial output.\n";
 }
 
 Options Parse(int argc, char** argv)
@@ -1412,6 +1434,8 @@ Options Parse(int argc, char** argv)
             o.copy_epoch_ms = Number(value());
         } else if (arg == "--self-test") {
             o.self_test = true;
+        } else if (arg == "--only") {
+            o.only.insert(value());
         } else {
             throw std::runtime_error("unknown option: " + arg);
         }
@@ -1487,13 +1511,20 @@ int main(int argc, char** argv)
         std::cerr << "Reference: " << options.reference_sec << " s (Script evaluation only).\n";
         Runner runner(options);
         Crypto crypto;
-        runner.RunPasses({[&] { MeasureFixed(runner); }, [&] { MeasureWrite(runner); },
-                          [&] { MeasureRead(runner); },
-                          [&] { MeasureArithmetic(runner); }, [&] { MeasureBitwise(runner); },
-                          [&] { MeasureMove(runner); }, [&] { MeasureMultiplication(runner); },
-                          [&] { MeasureDivision(runner); }, [&] { MeasureHashes(runner); },
-                          [&] { MeasureSignatures(runner, crypto); }, [&] { MeasureItems(runner); },
-                          [&] { MeasureUnroll(runner); }});
+        const std::vector<std::pair<std::string, std::function<void()>>> families{
+            {"F", [&] { MeasureFixed(runner); }}, {"WRITE", [&] { MeasureWrite(runner); }},
+            {"READ", [&] { MeasureRead(runner); }},
+            {"ARITH", [&] { MeasureArithmetic(runner); }}, {"BIT", [&] { MeasureBitwise(runner); }},
+            {"MOVE", [&] { MeasureMove(runner); }}, {"MULCORE", [&] { MeasureMultiplication(runner); }},
+            {"DIVCORE", [&] { MeasureDivision(runner); }}, {"HASH", [&] { MeasureHashes(runner); }},
+            {"SIG", [&] { MeasureSignatures(runner, crypto); }}, {"SELECT", [&] { MeasureItems(runner); }},
+            {"UNROLL", [&] { MeasureUnroll(runner); }}};
+        std::vector<std::function<void()>> steps;
+        for (const auto& [name, step] : families) {
+            if (options.only.empty() || options.only.contains(name)) steps.push_back(step);
+        }
+        Require(steps.size() == (options.only.empty() ? families.size() : options.only.size()), "unknown --only family");
+        runner.RunPasses(steps);
         runner.Save();
         std::cerr << "Wrote " << options.output << ", " << options.output << ".samples.csv and " << options.output << ".produce.csv\n";
         return 0;
