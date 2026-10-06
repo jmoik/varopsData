@@ -16,6 +16,7 @@
  *        machine's slowest pre-v2 script evaluation from bench_varops.
  */
 
+#include <checkqueue.h>
 #include <consensus/consensus.h>
 #include <consensus/validation.h>
 #include <crypto/common.h>
@@ -65,11 +66,13 @@
 #include <map>
 #include <memory>
 #include <ratio>
+#include <optional>
 #include <set>
 #include <span>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -148,6 +151,7 @@ struct Options {
     bool self_test{false};
     std::set<std::string> only; // Families to measure; empty for all.
     bool funding_block{false};
+    bool contention{false};
     std::set<std::string> funding_shapes; // Funding-block shapes to time; empty for all.
 };
 
@@ -1716,6 +1720,128 @@ void MeasureFundingBlock(const Options& o)
                            verify_ns * varops_per_ns, varops::SignatureCost(), commit_ns / verify_ns);
 }
 
+// Contention: every opcode deducts its charge from the transaction's one
+// budget, so inputs of one transaction validated in parallel share a counter.
+// `spenders` 0xC2 inputs each unroll a macro to about four million OP_NOPs,
+// spending the block's budget at the cheapest charge per deduction. In the
+// shared layout they are inputs of one transaction funded by one large input;
+// in the split layout each is its own transaction with its own funding input,
+// so no budget is shared. Both are validated as ConnectBlock does, through a
+// CCheckQueue with `workers` threads besides the caller.
+constexpr size_t CONTENTION_SPENDERS{14};
+
+std::vector<FundingBlock> BuildContentionBlock(const XOnlyPubKey& internal, bool shared)
+{
+    CScript body;
+    for (int i{0}; i < 250; ++i) body << OP_NOP;
+    CScript loop;
+    loop << OP_MACRO;
+    AppendMacroCompactSize(loop, body.size());
+    loop.insert(loop.end(), body.begin(), body.end());
+    for (size_t i{0}; i < (MAX_TAPLEAF_0XC2_UNROLLED_SIZE - 1) / body.size(); ++i) {
+        loop << OP_CALLMACRO;
+        AppendMacroCompactSize(loop, 0);
+    }
+    loop << OP_1;
+    const LeafOutput spender{LeafOutputAtDepth(internal, TAPROOT_LEAF_0XC2, loop)};
+    const CScript program{CScript{} << OP_2 << Bytes{0x01, 0x02}};
+    const int64_t limit{MAX_BLOCK_WEIGHT - BLOCK_RESERVE_WEIGHT};
+    std::vector<FundingBlock> txs;
+    const size_t tx_count{shared ? 1 : CONTENTION_SPENDERS};
+    for (size_t t{0}; t < tx_count; ++t) {
+        CMutableTransaction mtx;
+        mtx.version = 2;
+        mtx.vout.emplace_back(0, CScript{} << OP_RETURN);
+        std::vector<CTxOut> spent;
+        for (size_t i{0}; i < CONTENTION_SPENDERS / tx_count; ++i) {
+            AddInput(mtx, spent, spender.script_pub_key, {Bytes(loop.begin(), loop.end()), spender.control});
+        }
+        // A funding input whose one witness element fills this transaction's share of the block.
+        AddInput(mtx, spent, program, {Bytes{}});
+        const int64_t share{limit / static_cast<int64_t>(tx_count)};
+        mtx.vin.back().scriptWitness.stack[0].resize(share - GetTransactionWeight(CTransaction{mtx}) - 8);
+        // Unique outpoints across transactions.
+        for (size_t i{0}; i < mtx.vin.size(); ++i) {
+            uint256 txid;
+            WriteLE64(txid.begin(), t * 1000 + i + 1);
+            mtx.vin[i].prevout = COutPoint{Txid::FromUint256(txid), 0};
+        }
+        txs.push_back({CTransaction{mtx}, std::move(spent)});
+    }
+    return txs;
+}
+
+struct BlockRun {
+    bool valid{true};
+    uint64_t budget{0}, consumed{0};
+    double seconds{0};
+};
+
+BlockRun ValidateBlock(const std::vector<FundingBlock>& txs, CCheckQueue<CScriptCheck>& queue, SignatureCache& cache)
+{
+    BlockRun run;
+    const auto start{Clock::now()};
+    std::vector<PrecomputedTransactionData> txdata(txs.size());
+    std::vector<std::shared_ptr<varops::Budget>> budgets;
+    std::vector<uint64_t> initial;
+    {
+        std::optional<CCheckQueueControl<CScriptCheck>> control;
+        if (queue.HasThreads()) control.emplace(queue);
+        for (size_t t{0}; t < txs.size(); ++t) {
+            const FundingBlock& block{txs[t]};
+            txdata[t].Init(block.tx, std::vector<CTxOut>{block.spent});
+            const uint64_t budget{GetTransactionVaropsBudget(block.tx, txdata[t].m_spent_outputs)};
+            run.budget += budget;
+            initial.push_back(budget);
+            budgets.push_back(std::make_shared<varops::Budget>(budget));
+            std::vector<CScriptCheck> checks;
+            for (unsigned int i{0}; i < block.tx.vin.size(); ++i) {
+                checks.emplace_back(txdata[t].m_spent_outputs[i], block.tx, cache, i, BLOCK_FLAGS, /*cacheIn=*/false, &txdata[t], budgets.back());
+            }
+            if (control) {
+                control->Add(std::move(checks));
+            } else {
+                for (auto& check : checks) run.valid = run.valid && !check().has_value();
+            }
+        }
+        if (control) run.valid = run.valid && !control->Complete().has_value();
+    }
+    run.seconds = std::chrono::duration<double>(Clock::now() - start).count();
+    for (size_t t{0}; t < budgets.size(); ++t) run.consumed += initial[t] - budgets[t]->Remaining();
+    return run;
+}
+
+void MeasureContention(const Options& o)
+{
+    const Crypto crypto;
+    SignatureCache cache{DEFAULT_SIGNATURE_CACHE_BYTES};
+    std::cout << std::fixed;
+    const int hardware{static_cast<int>(std::max(1U, std::thread::hardware_concurrency()))};
+    std::set<int> worker_counts{0, 1, 3, 7, hardware - 1};
+    for (const bool shared : {true, false}) {
+        const std::vector<FundingBlock> txs{BuildContentionBlock(crypto.pubkey, shared)};
+        int64_t weight{0};
+        for (const auto& tx : txs) weight += GetTransactionWeight(tx.tx);
+        for (const int workers : worker_counts) {
+            if (workers < 0 || workers > hardware - 1) continue;
+            CCheckQueue<CScriptCheck> queue{/*batch_size=*/128, workers};
+            std::vector<BlockRun> runs;
+            for (size_t e{0}; e < o.epochs; ++e) {
+                runs.push_back(ValidateBlock(txs, queue, cache));
+                Require(runs.back().valid, "contention block failed");
+            }
+            std::ranges::sort(runs, {}, &BlockRun::seconds);
+            const BlockRun& m{runs[runs.size() / 2]};
+            std::cout << strprintf("CONTENTION layout=%s transactions=%u spenders=%u workers=%d weight=%d budget=%u consumed=%u "
+                                   "total_s=%.4f ratio=%.4f min_ratio=%.4f max_ratio=%.4f\n",
+                                   shared ? "shared" : "split", txs.size(), CONTENTION_SPENDERS, workers, weight, m.budget,
+                                   m.consumed, m.seconds, m.seconds / o.reference_sec, runs.front().seconds / o.reference_sec,
+                                   runs.back().seconds / o.reference_sec);
+            std::cout.flush();
+        }
+    }
+}
+
 void Help()
 {
     std::cout << "Usage: bench_varops_primitives --pre-v2-seconds SECONDS [options]\n"
@@ -1733,7 +1859,10 @@ void Help()
                  "                      shape, and one commitment check against one Schnorr verification, then exit\n"
                  "  --funding-shape S   Time only this funding shape (c4, c2-op1, v2, p2a, c4-path128,\n"
                  "                      c2-success-path128, c2-success-stack, v2-stack, c2-success-nops,\n"
-                 "                      c2-success-macros); repeatable\n";
+                 "                      c2-success-macros); repeatable\n"
+                 "  --contention        Time a block of 0xC2 OP_NOP loops sharing one transaction's budget against\n"
+                 "                      the same loops in separate transactions, through a script-check queue\n"
+                 "                      with 0 to (cores - 1) worker threads, then exit\n";
 }
 
 Options Parse(int argc, char** argv)
@@ -1767,6 +1896,8 @@ Options Parse(int argc, char** argv)
             o.self_test = true;
         } else if (arg == "--funding-block") {
             o.funding_block = true;
+        } else if (arg == "--contention") {
+            o.contention = true;
         } else if (arg == "--funding-shape") {
             o.funding_shapes.insert(value());
         } else if (arg == "--only") {
@@ -1846,6 +1977,10 @@ int main(int argc, char** argv)
         std::cerr << "Reference: " << options.reference_sec << " s (Script evaluation only).\n";
         if (options.funding_block) {
             MeasureFundingBlock(options);
+            return 0;
+        }
+        if (options.contention) {
+            MeasureContention(options);
             return 0;
         }
         Runner runner(options);
