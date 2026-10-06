@@ -1,0 +1,13 @@
+Outcome verification passed: 489 candidate cases.
+Exact-budget/budget-minus-one verification passed: 489 successful cases across 78 opcode families.
+
+== VAROPS BENCHMARK SUMMARY ==
+  cases:                  93/93 completed x 5 stable rounds
+  sample mode:            2% budget (800000000 varops), no rejection or one-shot fixed cases
+  schnorr baseline:       80,000 checks: 2.957 s
+  pre-v2 worst:           OP_HASH256 520B: 3.481 s
+  v2 measured worst (sample):OP_NOP 32768-items: 0.056 s
+  v2 projected worst:     OP_NOP 32768-items: 2.906 s (0.98x schnorr, 0.83x pre-v2, 52.09x v2 measured)
+
+  top 5 new-v2 cases (measured or projected):
+  1. 2.906 s (projected, stable): gsr-tapscript-v2/OP_NOP/OP_NOP/max-initial-stack/32768-items/empty-items/No error

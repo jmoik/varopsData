@@ -37,3 +37,38 @@ slowest pre-v2 script. Worst medians ([`summary.txt`](macro-checks/summary.txt))
 Nothing reaches 1.0x: the unrolling charge covers unrolling per script and across the inputs of a block, and
 needs no primitive of its own. The M4 Pro ran under load from other sessions (load 3–4); its single-epoch
 maxima reach 0.87x.
+
+## Funding block
+
+Every Taproot script-path input that funds the budget, Tapleaf 0xC2 or an unknown leaf version, gets BIP 341's
+commitment check outside any budget. `bench_varops_primitives --funding-block` (varopsData `35669eb`, gsr
+`c77f8d5361`) builds a block-sized transaction of minimal funding inputs (164 non-witness WU and a 33-byte control
+block; 0xc4 with an empty script, or 0xC2 `OP_1`) and one Tapleaf 0xC2 input whose `OP_2DUP OP_CHECKSIGVERIFY`
+macro loop spends the whole budget. It validates the transaction as `CheckInputScripts` does, with
+`PrecomputedTransactionData`, the transaction budget and a `CScriptCheck` per input, single-threaded, against the
+same run's slowest pre-v2 case ([`funding-block/`](funding-block/)):
+
+    bench_varops --case-filter OP_NOP --sample-budget-percent 2 --epochs 5 --file reference.csv
+    bench_varops_primitives --funding-block --pre-v2-seconds <slowest pre-v2 case of reference.csv> --epochs 7
+
+| Machine | Funding leaf | Inputs | Signatures | Block / reference | Signature input alone | Per funding input |
+|---|---|---|---|---|---|---|
+| Intel i7-7700 | 0xc4 | 19,974 | 78,419 | **1.042x** | 0.865x | 30.6 µs |
+| Intel i7-7700 | 0xC2 `OP_1` | 19,874 | 78,346 | **1.051x** | 0.874x | 30.7 µs |
+| Apple M1 Pro | 0xc4 | 19,974 | 78,419 | **1.146x** (max 1.154x) | 0.944x | 22.7 µs |
+| Apple M1 Pro | 0xC2 `OP_1` | 19,874 | 78,346 | **1.154x** (max 1.163x) | 0.952x | 22.9 µs |
+| Apple M4 Pro | 0xc4 | 19,974 | 78,419 | 0.889x | 0.731x | 12.3 µs |
+| Apple M4 Pro | 0xC2 `OP_1` | 19,874 | 78,346 | 0.907x | 0.746x | 12.6 µs |
+
+One commitment check (tapleaf hash, Merkle root and `CheckTapTweak`) costs 0.84–0.86 of a Schnorr verification:
+
+| Machine | Commitment check | Schnorr verification | Commitment check at 1.0x the reference |
+|---|---|---|---|
+| Intel i7-7700 | 30.3 µs | 36.2 µs | 348,000 varops (2.05x TWEAK) |
+| Apple M1 Pro | 22.4 µs | 26.2 µs | 398,000 varops (2.34x TWEAK) |
+| Apple M4 Pro | 12.0 µs | 13.9 µs | 308,000 varops (1.81x TWEAK) |
+
+The block exceeds the reference on the i7-7700 and M1 Pro. A funding input's full time is 31–41 weight units of
+budget at 1.0x (M1 Pro: 40.5). If a funding script-path input contributed `(weight − k) × 10,000`, the measured
+blocks need k ≥ 12 (i7-7700) and k ≥ 33 (M1 Pro) using the signature loop's own margin; k = 50, one SIGCHECK per
+input as in BIP 342's 50 weight units per signature, brings them to 0.83x and 0.92x.
