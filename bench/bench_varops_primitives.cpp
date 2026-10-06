@@ -16,6 +16,8 @@
  *        machine's slowest pre-v2 script evaluation from bench_varops.
  */
 
+#include <consensus/consensus.h>
+#include <consensus/validation.h>
 #include <crypto/common.h>
 #include <crypto/ripemd160.h>
 #include <crypto/sha1.h>
@@ -27,6 +29,7 @@
 #include <script/op_tx.h>
 #include <script/script.h>
 #include <script/script_error.h>
+#include <script/sigcache.h>
 #include <script/valtype_stack.h>
 #include <script/varops.h>
 #include <script/verify_flags.h>
@@ -36,6 +39,7 @@
 #include <tinyformat.h>
 #include <util/string.h>
 #include <util/translation.h>
+#include <validation.h>
 
 #ifdef _WIN32
 #include <compat/compat.h>
@@ -142,6 +146,7 @@ struct Options {
     std::string output{"primitive-measurements.csv"};
     bool self_test{false};
     std::set<std::string> only; // Families to measure; empty for all.
+    bool funding_block{false};
 };
 
 // Epochs are taken in passes: each pass times one epoch of every fixture, so a
@@ -1390,6 +1395,201 @@ void MeasureUnroll(Runner& r)
     }
 }
 
+
+// Funding block: a transaction filling a block with minimal script-path inputs
+// that fund the budget, and one Tapleaf 0xC2 input spending it on signature
+// checks. Every funding input gets BIP 341's commitment check outside any
+// budget. It is validated as CheckInputScripts does: PrecomputedTransactionData,
+// the transaction budget, then a CScriptCheck per input against the shared
+// budget, with a signature cache that holds none of its signatures.
+constexpr script_verify_flags BLOCK_FLAGS{SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_DERSIG | SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY |
+                                          SCRIPT_VERIFY_CHECKSEQUENCEVERIFY | SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_NULLDUMMY |
+                                          SCRIPT_VERIFY_TAPROOT | SCRIPT_VERIFY_TAPLEAF_0XC2};
+// Room left in the block for its header and coinbase.
+constexpr int64_t BLOCK_RESERVE_WEIGHT{4000};
+
+struct LeafOutput {
+    CScript script_pub_key;
+    Bytes control;
+    uint256 leaf_hash;
+};
+
+//! A P2TR output committing to one leaf, and the leaf's 33-byte control block.
+LeafOutput SingleLeafOutput(const XOnlyPubKey& internal, uint8_t leaf_version, const CScript& leaf)
+{
+    const uint256 leaf_hash{ComputeTapleafHash(leaf_version, leaf)};
+    const auto tweaked{internal.CreateTapTweak(&leaf_hash)};
+    Require(tweaked.has_value(), "tap tweak");
+    Bytes control{static_cast<unsigned char>(leaf_version | (tweaked->second ? 1 : 0))};
+    control.insert(control.end(), internal.begin(), internal.end());
+    return {CScript{} << OP_1 << Bytes(tweaked->first.begin(), tweaked->first.end()), std::move(control), leaf_hash};
+}
+
+struct FundingBlock {
+    CTransaction tx;
+    std::vector<CTxOut> spent;
+};
+
+//! `signatures` checks of one signature: OP_2DUP OP_CHECKSIGVERIFY through a
+//! 256-check macro, then OP_CHECKSIG.
+CScript SignatureLoop(size_t signatures)
+{
+    CScript body;
+    for (int i{0}; i < 256; ++i) body << OP_2DUP << OP_CHECKSIGVERIFY;
+    CScript script;
+    script << OP_MACRO;
+    AppendMacroCompactSize(script, body.size());
+    script.insert(script.end(), body.begin(), body.end());
+    for (size_t i{0}; i < (signatures - 1) / 256; ++i) {
+        script << OP_CALLMACRO;
+        AppendMacroCompactSize(script, 0);
+    }
+    for (size_t i{0}; i < (signatures - 1) % 256; ++i) script << OP_2DUP << OP_CHECKSIGVERIFY;
+    return script << OP_CHECKSIG;
+}
+
+FundingBlock BuildFundingBlock(const Crypto& crypto, uint8_t funder_version, size_t signatures, size_t funders)
+{
+    const CScript funder_leaf{funder_version == TAPROOT_LEAF_0XC2 ? CScript{} << OP_1 : CScript{}};
+    const LeafOutput funder{SingleLeafOutput(crypto.pubkey, funder_version, funder_leaf)};
+    const CScript loop{SignatureLoop(signatures)};
+    const LeafOutput spender{SingleLeafOutput(crypto.pubkey, TAPROOT_LEAF_0XC2, loop)};
+    CMutableTransaction mtx;
+    mtx.version = 2;
+    mtx.vout.emplace_back(0, CScript{} << OP_RETURN);
+    std::vector<CTxOut> spent;
+    for (size_t i{0}; i <= funders; ++i) {
+        uint256 txid;
+        WriteLE64(txid.begin(), i + 1);
+        mtx.vin.emplace_back(COutPoint{Txid::FromUint256(txid), 0});
+        spent.emplace_back(1000, i == 0 ? spender.script_pub_key : funder.script_pub_key);
+        if (i > 0) mtx.vin.back().scriptWitness.stack = {Bytes(funder_leaf.begin(), funder_leaf.end()), funder.control};
+    }
+    // The signature commits to the transaction without its witnesses.
+    PrecomputedTransactionData txdata;
+    txdata.Init(mtx, std::vector<CTxOut>{spent});
+    ScriptExecutionData execdata;
+    execdata.m_tapleaf_hash_init = true;
+    execdata.m_tapleaf_hash = spender.leaf_hash;
+    execdata.m_codeseparator_pos_init = true;
+    execdata.m_codeseparator_pos = 0xFFFFFFFF;
+    execdata.m_annex_init = true;
+    execdata.m_annex_present = false;
+    uint256 sighash;
+    Require(SignatureHashSchnorr(sighash, execdata, mtx, 0, SIGHASH_DEFAULT, SigVersion::TAPLEAF_0XC2, txdata, MissingDataBehavior::FAIL),
+            "signature hash");
+    const auto signature{crypto.Sign(Bytes(sighash.begin(), sighash.end()))};
+    mtx.vin[0].scriptWitness.stack = {Bytes(signature.begin(), signature.end()), Bytes(crypto.pubkey.begin(), crypto.pubkey.end()),
+                                      Bytes(loop.begin(), loop.end()), spender.control};
+    return {CTransaction{mtx}, std::move(spent)};
+}
+
+struct Validation {
+    bool valid{true};
+    uint64_t budget{0}, consumed{0};
+    double setup{0}, signer{0}, funders{0};
+    double Total() const { return setup + signer + funders; }
+};
+
+Validation Validate(const FundingBlock& block, SignatureCache& cache)
+{
+    Validation v;
+    const auto start{Clock::now()};
+    PrecomputedTransactionData txdata;
+    txdata.Init(block.tx, std::vector<CTxOut>{block.spent});
+    v.budget = GetTransactionVaropsBudget(block.tx, txdata.m_spent_outputs);
+    const auto budget{std::make_shared<varops::Budget>(v.budget)};
+    auto last{Clock::now()};
+    v.setup = std::chrono::duration<double>(last - start).count();
+    for (unsigned int i{0}; i < block.tx.vin.size(); ++i) {
+        CScriptCheck check(txdata.m_spent_outputs[i], block.tx, cache, i, BLOCK_FLAGS, /*cacheIn=*/false, &txdata, budget);
+        v.valid = v.valid && !check().has_value();
+        const auto now{Clock::now()};
+        (i == 0 ? v.signer : v.funders) += std::chrono::duration<double>(now - last).count();
+        last = now;
+    }
+    v.consumed = v.budget - budget->Remaining();
+    return v;
+}
+
+//! Nanoseconds per call of `f`, the median of `epochs` timings of `calls` calls.
+template <typename F>
+double TimePerCall(F f, size_t calls, size_t epochs)
+{
+    std::vector<double> times;
+    for (size_t e{0}; e < epochs; ++e) {
+        const auto start{Clock::now()};
+        for (size_t i{0}; i < calls; ++i) f();
+        times.push_back(std::chrono::duration<double, std::nano>(Clock::now() - start).count() / calls);
+    }
+    std::ranges::sort(times);
+    return times[times.size() / 2];
+}
+
+void MeasureFundingBlock(const Options& o)
+{
+    const Crypto crypto;
+    SignatureCache cache{DEFAULT_SIGNATURE_CACHE_BYTES};
+    const double varops_per_ns{40e9 / (o.reference_sec * 1e9)};
+    std::cout << std::fixed;
+    for (const uint8_t version : {uint8_t{0xc4}, TAPROOT_LEAF_0XC2}) {
+        // Funders that fill the block, from the weight of two sizes.
+        const auto weight{[&](size_t funders) { return GetTransactionWeight(BuildFundingBlock(crypto, version, 1000, funders).tx); }};
+        const int64_t per_funder{weight(301) - weight(300)};
+        const size_t funders{static_cast<size_t>((MAX_BLOCK_WEIGHT - BLOCK_RESERVE_WEIGHT - weight(300)) / per_funder) + 300};
+        // Signatures that spend the budget: the cost per signature from two
+        // counts, then the most that still validate.
+        const auto consumed{[&](size_t signatures) { return Validate(BuildFundingBlock(crypto, version, signatures, funders), cache); }};
+        const Validation small{consumed(1000)}, large{consumed(2000)};
+        Require(small.valid && large.valid, "funding block calibration failed");
+        const uint64_t per_signature{(large.consumed - small.consumed) / 1000};
+        // The loop script's size, and with it the budget, changes with the count.
+        size_t signatures{1000 + static_cast<size_t>((small.budget - small.consumed) / per_signature)};
+        for (Validation v{consumed(signatures)};; v = consumed(signatures)) {
+            if (!v.valid) {
+                --signatures;
+            } else if (v.budget - v.consumed >= per_signature) {
+                signatures += (v.budget - v.consumed) / per_signature;
+            } else {
+                break;
+            }
+        }
+        Require(!consumed(signatures + 1).valid, "funding block leaves budget for another signature");
+        const FundingBlock block{BuildFundingBlock(crypto, version, signatures, funders)};
+        std::vector<Validation> runs;
+        for (size_t e{0}; e < o.epochs; ++e) {
+            runs.push_back(Validate(block, cache));
+            Require(runs.back().valid, "funding block failed");
+        }
+        std::ranges::sort(runs, {}, &Validation::Total);
+        const Validation& m{runs[runs.size() / 2]};
+        std::cout << strprintf("FUNDING_BLOCK leaf=0x%02x inputs=%u weight=%d budget=%u consumed=%u signatures=%u "
+                               "per_signature=%u total_s=%.4f setup_s=%.4f signer_s=%.4f funders_s=%.4f "
+                               "ratio=%.4f min_ratio=%.4f max_ratio=%.4f\n",
+                               version, block.tx.vin.size(), GetTransactionWeight(block.tx), m.budget, m.consumed,
+                               signatures, per_signature, m.Total(), m.setup, m.signer, m.funders,
+                               m.Total() / o.reference_sec, runs.front().Total() / o.reference_sec,
+                               runs.back().Total() / o.reference_sec);
+    }
+    // One commitment check of a funding input, and one Schnorr verification.
+    const CScript leaf;
+    const LeafOutput funder{SingleLeafOutput(crypto.pubkey, 0xc4, leaf)};
+    const XOnlyPubKey output{std::span{funder.script_pub_key}.subspan(2, 32)};
+    bool ok{true};
+    const double commit_ns{TimePerCall([&] {
+        const uint256 leaf_hash{ComputeTapleafHash(0xc4, leaf)};
+        ok &= output.CheckTapTweak(crypto.pubkey, ComputeTaprootMerkleRoot(funder.control, leaf_hash), funder.control[0] & 1);
+    }, 20000, o.epochs)};
+    const Bytes message(32, 0x42);
+    const auto signature{crypto.Sign(message)};
+    const double verify_ns{TimePerCall([&] { ok &= crypto.pubkey.VerifySchnorr(Message(message), signature); }, 20000, o.epochs)};
+    Require(ok, "commitment or signature check failed");
+    std::cout << strprintf("COMMITMENT_CHECK ns=%.1f varops=%.0f tweak_price=%u ratio_to_tweak=%.4f\n", commit_ns,
+                           commit_ns * varops_per_ns, varops::TweakCost(), commit_ns * varops_per_ns / varops::TweakCost());
+    std::cout << strprintf("SCHNORR_VERIFY ns=%.1f varops=%.0f sig_price=%u commitment_per_verify=%.4f\n", verify_ns,
+                           verify_ns * varops_per_ns, varops::SignatureCost(), commit_ns / verify_ns);
+}
+
 void Help()
 {
     std::cout << "Usage: bench_varops_primitives --pre-v2-seconds SECONDS [options]\n"
@@ -1402,7 +1602,9 @@ void Help()
                  "  --self-test         Check the production helper fixtures, then exit\n"
                  "  --only FAMILY       Measure only this family (F, WRITE, READ, ARITH, BIT, MOVE, MULCORE,\n"
                  "                      DIVCORE, HASH, SIG, SELECT or UNROLL); repeatable. No artifact pipeline\n"
-                 "                      accepts the partial output.\n";
+                 "                      accepts the partial output.\n"
+                 "  --funding-block     Time a block of minimal script-path inputs funding one signature loop,\n"
+                 "                      and one commitment check against one Schnorr verification, then exit\n";
 }
 
 Options Parse(int argc, char** argv)
@@ -1434,6 +1636,8 @@ Options Parse(int argc, char** argv)
             o.copy_epoch_ms = Number(value());
         } else if (arg == "--self-test") {
             o.self_test = true;
+        } else if (arg == "--funding-block") {
+            o.funding_block = true;
         } else if (arg == "--only") {
             o.only.insert(value());
         } else {
@@ -1509,6 +1713,10 @@ int main(int argc, char** argv)
             return 0;
         }
         std::cerr << "Reference: " << options.reference_sec << " s (Script evaluation only).\n";
+        if (options.funding_block) {
+            MeasureFundingBlock(options);
+            return 0;
+        }
         Runner runner(options);
         Crypto crypto;
         const std::vector<std::pair<std::string, std::function<void()>>> families{
