@@ -16,13 +16,17 @@
  *        machine's slowest pre-v2 script evaluation from bench_varops.
  */
 
+#include <chain.h>
 #include <checkqueue.h>
+#include <coins.h>
 #include <consensus/consensus.h>
 #include <consensus/validation.h>
 #include <crypto/common.h>
 #include <crypto/ripemd160.h>
 #include <crypto/sha1.h>
 #include <crypto/sha256.h>
+#include <node/blockstorage.h>
+#include <primitives/block.h>
 #include <primitives/transaction.h>
 #include <pubkey.h>
 #include <script/biguint.h>
@@ -37,9 +41,10 @@
 #include <secp256k1.h>
 #include <secp256k1_extrakeys.h>
 #include <secp256k1_schnorrsig.h>
+#include <sync.h>
+#include <test/util/setup_common.h>
 #include <tinyformat.h>
 #include <util/string.h>
-#include <util/translation.h>
 #include <validation.h>
 
 #ifdef _WIN32
@@ -77,7 +82,10 @@
 #include <utility>
 #include <vector>
 
-const TranslateFn G_TRANSLATION_FUN{nullptr};
+// The test setups of --connect-block read these: no extra arguments, and a
+// datadir named for the mode. They also define G_TRANSLATION_FUN.
+const std::function<std::vector<const char*>()> G_TEST_COMMAND_LINE_ARGUMENTS{[] { return std::vector<const char*>{}; }};
+const std::function<std::string()> G_TEST_GET_FULL_NAME{[] { return std::string{"connect-block"}; }};
 
 namespace primitive_bench {
 
@@ -152,6 +160,7 @@ struct Options {
     std::set<std::string> only; // Families to measure; empty for all.
     bool funding_block{false};
     bool contention{false};
+    bool connect_block{false};
     std::set<std::string> funding_shapes; // Funding-block shapes to time; empty for all.
 };
 
@@ -1651,6 +1660,43 @@ double TimePerCall(F f, size_t calls, size_t epochs)
     return times[times.size() / 2];
 }
 
+//! A block of one funding shape whose signature loop spends the whole budget.
+struct FilledBlock {
+    FundingBlock block;
+    size_t n, signatures;
+    uint64_t per_signature;
+};
+
+FilledBlock FillFundingBlock(const Crypto& crypto, const FundingShape& shape, SignatureCache& cache)
+{
+    // The shape's size that fills the block, from the weight of two sizes.
+    const auto weight{[&](size_t n) { return GetTransactionWeight(BuildFundingBlock(crypto, shape, 1000, n).tx); }};
+    const int64_t limit{MAX_BLOCK_WEIGHT - BLOCK_RESERVE_WEIGHT};
+    const size_t step{shape.probe / 100};
+    const double per_unit{double(weight(shape.probe + step) - weight(shape.probe)) / step};
+    size_t n{shape.probe + static_cast<size_t>((limit - weight(shape.probe)) / per_unit)};
+    for (int64_t w{weight(n)}; w > limit; w = weight(n)) n -= static_cast<size_t>(std::ceil((w - limit) / per_unit));
+    // Signatures that spend the budget: the cost per signature from two
+    // counts, then the most that still validate.
+    const auto consumed{[&](size_t signatures) { return Validate(BuildFundingBlock(crypto, shape, signatures, n), cache); }};
+    const Validation small{consumed(1000)}, large{consumed(2000)};
+    Require(small.valid && large.valid, "funding block calibration failed: " + shape.name + ", " + small.error + large.error);
+    const uint64_t per_signature{(large.consumed - small.consumed) / 1000};
+    // The loop script's size, and with it the budget, changes with the count.
+    size_t signatures{1000 + static_cast<size_t>((small.budget - small.consumed) / per_signature)};
+    for (Validation v{consumed(signatures)};; v = consumed(signatures)) {
+        if (!v.valid) {
+            --signatures;
+        } else if (v.budget - v.consumed >= per_signature) {
+            signatures += (v.budget - v.consumed) / per_signature;
+        } else {
+            break;
+        }
+    }
+    Require(!consumed(signatures + 1).valid, "funding block leaves budget for another signature");
+    return {BuildFundingBlock(crypto, shape, signatures, n), n, signatures, per_signature};
+}
+
 void MeasureFundingBlock(const Options& o)
 {
     const Crypto crypto;
@@ -1659,32 +1705,10 @@ void MeasureFundingBlock(const Options& o)
     std::cout << std::fixed;
     for (const FundingShape& shape : FundingShapes(crypto.pubkey)) {
         if (!o.funding_shapes.empty() && !o.funding_shapes.contains(shape.name)) continue;
-        // The shape's size that fills the block, from the weight of two sizes.
-        const auto weight{[&](size_t n) { return GetTransactionWeight(BuildFundingBlock(crypto, shape, 1000, n).tx); }};
-        const int64_t limit{MAX_BLOCK_WEIGHT - BLOCK_RESERVE_WEIGHT};
-        const size_t step{shape.probe / 100};
-        const double per_unit{double(weight(shape.probe + step) - weight(shape.probe)) / step};
-        size_t n{shape.probe + static_cast<size_t>((limit - weight(shape.probe)) / per_unit)};
-        for (int64_t w{weight(n)}; w > limit; w = weight(n)) n -= static_cast<size_t>(std::ceil((w - limit) / per_unit));
-        // Signatures that spend the budget: the cost per signature from two
-        // counts, then the most that still validate.
-        const auto consumed{[&](size_t signatures) { return Validate(BuildFundingBlock(crypto, shape, signatures, n), cache); }};
-        const Validation small{consumed(1000)}, large{consumed(2000)};
-        Require(small.valid && large.valid, "funding block calibration failed: " + shape.name + ", " + small.error + large.error);
-        const uint64_t per_signature{(large.consumed - small.consumed) / 1000};
-        // The loop script's size, and with it the budget, changes with the count.
-        size_t signatures{1000 + static_cast<size_t>((small.budget - small.consumed) / per_signature)};
-        for (Validation v{consumed(signatures)};; v = consumed(signatures)) {
-            if (!v.valid) {
-                --signatures;
-            } else if (v.budget - v.consumed >= per_signature) {
-                signatures += (v.budget - v.consumed) / per_signature;
-            } else {
-                break;
-            }
-        }
-        Require(!consumed(signatures + 1).valid, "funding block leaves budget for another signature");
-        const FundingBlock block{BuildFundingBlock(crypto, shape, signatures, n)};
+        const FilledBlock filled{FillFundingBlock(crypto, shape, cache)};
+        const FundingBlock& block{filled.block};
+        const size_t n{filled.n}, signatures{filled.signatures};
+        const uint64_t per_signature{filled.per_signature};
         std::vector<Validation> runs;
         for (size_t e{0}; e < o.epochs; ++e) {
             runs.push_back(Validate(block, cache));
@@ -1842,6 +1866,69 @@ void MeasureContention(const Options& o)
     }
 }
 
+// ConnectBlock: the funding blocks validated in full on a regtest chain with
+// Tapleaf 0xC2 active, including the work outside scripts that every input
+// costs: coin lookups, amount and maturity checks, sigop counting and the
+// coin updates. Script checks use the chainstate's queue (two worker threads in
+// test setups); the signature loop is one input, so it runs on one thread after
+// the main thread has looked up every coin. "memory" keeps the spent coins in
+// the coins cache; "leveldb" flushes them to the on-disk database and evicts
+// them from the cache before each epoch, so every lookup reads LevelDB through
+// its block cache and the operating system's page cache.
+void MeasureConnectBlock(const Options& o)
+{
+    const auto setup{MakeNoLogFileContext<TestChain100Setup>(
+        ChainType::REGTEST, {.extra_args = {"-vbparams=tapleaf_0xc2:-1:9223372036854775807"},
+                             .coins_db_in_memory = false, .min_validation_cache = true})};
+    ChainstateManager& chainman{*setup->m_node.chainman};
+    Chainstate& chainstate{chainman.ActiveChainstate()};
+    const Crypto crypto;
+    SignatureCache cache{DEFAULT_SIGNATURE_CACHE_BYTES};
+    std::cout << std::fixed;
+    for (const FundingShape& shape : FundingShapes(crypto.pubkey)) {
+        if (!o.funding_shapes.empty() && !o.funding_shapes.contains(shape.name)) continue;
+        const FilledBlock filled{FillFundingBlock(crypto, shape, cache)};
+        const CTransaction& tx{filled.block.tx};
+        // The spent coins, at a height far enough back for any maturity rule.
+        {
+            LOCK(cs_main);
+            for (size_t i{0}; i < tx.vin.size(); ++i) {
+                chainstate.CoinsTip().AddCoin(tx.vin[i].prevout, Coin{filled.block.spent[i], /*nHeight=*/1, /*fCoinBase=*/false},
+                                              /*possible_overwrite=*/true);
+            }
+        }
+        const CBlock block{setup->CreateBlock({CMutableTransaction{tx}}, CScript{} << OP_TRUE)};
+        for (const std::string coins : {"memory", "leveldb"}) {
+            std::vector<double> runs;
+            for (size_t e{0}; e < o.epochs; ++e) {
+                LOCK(cs_main);
+                if (coins == "leveldb") {
+                    chainstate.ForceFlushStateToDisk();
+                    for (const CTxIn& in : tx.vin) chainstate.CoinsTip().Uncache(in.prevout);
+                }
+                BlockValidationState state;
+                CBlockIndex* pindex{chainman.m_blockman.AddToBlockIndex(block, chainman.m_best_header)};
+                CCoinsViewCache view{&chainstate.CoinsTip()};
+                const auto start{Clock::now()};
+                // As when connecting a block: script results and signatures are
+                // looked up in the caches but not stored, so each check verifies.
+                const bool ok{chainstate.ConnectBlock(block, state, pindex, view, /*fJustCheck=*/false)};
+                runs.push_back(std::chrono::duration<double>(Clock::now() - start).count());
+                Require(ok, "ConnectBlock failed: " + shape.name + ", " + state.ToString());
+            }
+            std::ranges::sort(runs);
+            const double m{runs[runs.size() / 2]};
+            std::cout << strprintf("CONNECT_BLOCK shape=%s coins=%s inputs=%u weight=%d signatures=%u total_s=%.4f "
+                                   "ratio=%.4f min_ratio=%.4f max_ratio=%.4f\n",
+                                   shape.name, coins, tx.vin.size(), GetBlockWeight(block), filled.signatures, m,
+                                   m / o.reference_sec, runs.front() / o.reference_sec, runs.back() / o.reference_sec);
+            std::cout.flush();
+        }
+        LOCK(cs_main);
+        for (const CTxIn& in : tx.vin) chainstate.CoinsTip().SpendCoin(in.prevout);
+    }
+}
+
 void Help()
 {
     std::cout << "Usage: bench_varops_primitives --pre-v2-seconds SECONDS [options]\n"
@@ -1862,7 +1949,9 @@ void Help()
                  "                      c2-success-macros); repeatable\n"
                  "  --contention        Time a block of 0xC2 OP_NOP loops sharing one transaction's budget against\n"
                  "                      the same loops in separate transactions, through a script-check queue\n"
-                 "                      with 0 to (cores - 1) worker threads, then exit\n";
+                 "                      with 0 to (cores - 1) worker threads, then exit\n"
+                 "  --connect-block     Time ConnectBlock of each funding-shape block on a regtest chain, with the\n"
+                 "                      spent coins in memory and in LevelDB (--funding-shape selects), then exit\n";
 }
 
 Options Parse(int argc, char** argv)
@@ -1896,6 +1985,8 @@ Options Parse(int argc, char** argv)
             o.self_test = true;
         } else if (arg == "--funding-block") {
             o.funding_block = true;
+        } else if (arg == "--connect-block") {
+            o.connect_block = true;
         } else if (arg == "--contention") {
             o.contention = true;
         } else if (arg == "--funding-shape") {
@@ -1981,6 +2072,10 @@ int main(int argc, char** argv)
         }
         if (options.contention) {
             MeasureContention(options);
+            return 0;
+        }
+        if (options.connect_block) {
+            MeasureConnectBlock(options);
             return 0;
         }
         Runner runner(options);
