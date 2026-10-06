@@ -5,6 +5,7 @@
 #include <bench/nanobench.h>
 #include <consensus/consensus.h>
 #include <consensus/validation.h>
+#include <crypto/common.h>
 #include <crypto/hex_base.h>
 #include <crypto/sha256.h>
 #include <prevector.h>
@@ -1800,6 +1801,40 @@ static void AddMulCases(std::vector<CaseSpec>& specs, opcodetype opcode)
 
 static valtype DivisorTopClear(size_t size) { return valtype(size, 0x7f); }
 
+//! Operands for which Knuth's algorithm D adds the divisor back on every
+//! quotient step but the first (checked against a model of BigUint::DivMod):
+//! a divisor of n limbs, all ones under a top limb of 2^63, and the dividend
+//! d·(Q + 1) − 1 of `dividend_limbs` limbs, every limb of Q 2^64 − 2. Built in
+//! linear time as c·X·2^(64(n − 1)) − X − 1, with c = 2^63 + 1 and X = Q + 1.
+static std::pair<std::vector<unsigned char>, std::vector<unsigned char>> AddBackOperands(size_t dividend_limbs, size_t n)
+{
+    if (n < 3 || dividend_limbs <= n) throw std::runtime_error("add-back operands need 3 <= divisor limbs < dividend limbs");
+    const size_t k{dividend_limbs - n};
+    std::vector<uint64_t> x(k, UINT64_MAX - 1);
+    x[0] = UINT64_MAX;
+    std::vector<uint64_t> a(dividend_limbs, 0);
+    uint64_t carry{0};
+    for (size_t i{0}; i < k; ++i) {
+        // x[i] · (2^63 + 1) + carry, as two limbs.
+        const uint64_t low{x[i] << 63}, sum{low + x[i]}, limb{sum + carry};
+        a[n - 1 + i] = limb;
+        carry = (x[i] >> 1) + (sum < low) + (limb < sum);
+    }
+    a[n - 1 + k] = carry;
+    uint64_t borrow{1};
+    for (size_t i{0}; i < a.size(); ++i) {
+        const uint64_t sub{i < k ? x[i] : 0}, d{a[i] - sub};
+        const uint64_t next{uint64_t{a[i] < sub} | uint64_t{d < borrow}};
+        a[i] = d - borrow;
+        borrow = next;
+    }
+    if (borrow != 0 || a.back() == 0) throw std::runtime_error("add-back dividend");
+    std::vector<unsigned char> dividend(8 * dividend_limbs), divisor(8 * n, 0xff);
+    for (size_t i{0}; i < a.size(); ++i) WriteLE64(dividend.data() + 8 * i, a[i]);
+    WriteLE64(divisor.data() + 8 * (n - 1), uint64_t{1} << 63);
+    return {std::move(dividend), std::move(divisor)};
+}
+
 static valtype DivisorTopLimbOne(size_t size)
 {
     valtype divisor(size, 0);
@@ -1942,6 +1977,29 @@ static void AddDivModCases(std::vector<CaseSpec>& specs, opcodetype opcode)
                               return std::vector<valtype>{PatternBytes(dividend, "dense"), std::move(divisor)};
                           },
                           [&](size_t dividend) { return FormatBytes(dividend) + "x" + FormatBytes(divisor_size(dividend)); });
+    }
+    // Knuth D's add-back on every quotient step: a second pass over the divisor
+    // that dense and random operands almost never take. Sizes are whole limbs.
+    for (const unsigned int ratio : {2U, 4U, 16U}) {
+        const auto limbs{[ratio](size_t dividend) {
+            const size_t n{std::max<size_t>(3, dividend / 8 / ratio)};
+            return std::pair{std::max(n + 1, dividend / 8), n};
+        }};
+        AddCostCrossovers(specs, opcode, "divmod-crossover", strprintf("asymmetric-1/%u-add-back", ratio), sequence, 2'000'000,
+                          [&](size_t dividend) {
+                              const auto [a, d]{limbs(dividend)};
+                              auto [x, y]{AddBackOperands(a, d)};
+                              return std::vector<valtype>{std::move(x), std::move(y)};
+                          },
+                          [&](size_t dividend) {
+                              const auto [a, d]{limbs(dividend)};
+                              return FormatBytes(8 * a) + "x" + FormatBytes(8 * d);
+                          });
+    }
+    {
+        auto [x, y]{AddBackOperands(65536 / 8, 16384 / 8)};
+        AddCase(specs, opcode, HeadlineRole::NEW_GSR, "divmod-scale-tail", "64KBx16KB", "asymmetric-quarter-add-back",
+                sequence, FixedStack({std::move(x), std::move(y)}));
     }
     constexpr size_t tail_dividend{65536};
     constexpr size_t tail_divisor{16384};

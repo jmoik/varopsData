@@ -70,6 +70,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -147,6 +148,7 @@ struct Options {
     bool self_test{false};
     std::set<std::string> only; // Families to measure; empty for all.
     bool funding_block{false};
+    std::set<std::string> funding_shapes; // Funding-block shapes to time; empty for all.
 };
 
 // Epochs are taken in passes: each pass times one epoch of every fixture, so a
@@ -1005,6 +1007,40 @@ void MeasureMove(Runner& r)
     }
 }
 
+//! Operands for which Knuth's algorithm D adds the divisor back on every
+//! quotient step but the first (checked against a model of BigUint::DivMod):
+//! a divisor of n limbs, all ones under a top limb of 2^63, and the dividend
+//! d·(Q + 1) − 1 of `dividend_limbs` limbs, every limb of Q 2^64 − 2. Built in
+//! linear time as c·X·2^(64(n − 1)) − X − 1, with c = 2^63 + 1 and X = Q + 1.
+std::pair<std::vector<unsigned char>, std::vector<unsigned char>> AddBackOperands(size_t dividend_limbs, size_t n)
+{
+    if (n < 3 || dividend_limbs <= n) throw std::runtime_error("add-back operands need 3 <= divisor limbs < dividend limbs");
+    const size_t k{dividend_limbs - n};
+    std::vector<uint64_t> x(k, UINT64_MAX - 1);
+    x[0] = UINT64_MAX;
+    std::vector<uint64_t> a(dividend_limbs, 0);
+    uint64_t carry{0};
+    for (size_t i{0}; i < k; ++i) {
+        // x[i] · (2^63 + 1) + carry, as two limbs.
+        const uint64_t low{x[i] << 63}, sum{low + x[i]}, limb{sum + carry};
+        a[n - 1 + i] = limb;
+        carry = (x[i] >> 1) + (sum < low) + (limb < sum);
+    }
+    a[n - 1 + k] = carry;
+    uint64_t borrow{1};
+    for (size_t i{0}; i < a.size(); ++i) {
+        const uint64_t sub{i < k ? x[i] : 0}, d{a[i] - sub};
+        const uint64_t next{uint64_t{a[i] < sub} | uint64_t{d < borrow}};
+        a[i] = d - borrow;
+        borrow = next;
+    }
+    if (borrow != 0 || a.back() == 0) throw std::runtime_error("add-back dividend");
+    std::vector<unsigned char> dividend(8 * dividend_limbs), divisor(8 * n, 0xff);
+    for (size_t i{0}; i < a.size(); ++i) WriteLE64(dividend.data() + 8 * i, a[i]);
+    WriteLE64(divisor.data() + 8 * (n - 1), uint64_t{1} << 63);
+    return {std::move(dividend), std::move(divisor)};
+}
+
 // DIVCORE includes normalization and temporary storage in the prepared DIV/MOD
 // call. Fresh operands prevent repetition from measuring an already divided value.
 void MeasureDivision(Runner& r)
@@ -1025,11 +1061,15 @@ void MeasureDivision(Runner& r)
             const bool huge{aw >= 65536};
             for (uint64_t seed : {17U, 127U}) {
                 if (huge && seed != 17) continue;
-                for (const std::string pattern : {"normalized", "top-clear", "top-one", "padded"}) {
-                    if (huge && pattern != "normalized" && pattern != "top-one") continue;
+                for (const std::string pattern : {"normalized", "top-clear", "top-one", "padded", "add-back"}) {
+                    if (huge && pattern != "normalized" && pattern != "top-one" && pattern != "add-back") continue;
+                    // Fixed operands: one seed suffices.
+                    if (pattern == "add-back" && (seed != 17 || bw < 3 || aw <= bw)) continue;
                     // Pattern sets the divisor's top bit, as "normalized" needs.
                     Bytes a{Pattern(aw * 8, seed)}, b{Pattern(bw * 8, seed + 5)};
-                    if (pattern == "top-clear") {
+                    if (pattern == "add-back") {
+                        std::tie(a, b) = AddBackOperands(aw, bw);
+                    } else if (pattern == "top-clear") {
                         b.back() = 0x40;
                     } else if (pattern == "top-one") {
                         std::fill(b.end() - 8, b.end(), 0);
@@ -1417,14 +1457,23 @@ struct LeafOutput {
     uint256 leaf_hash;
 };
 
-//! A P2TR output committing to one leaf, and the leaf's 33-byte control block.
-LeafOutput SingleLeafOutput(const XOnlyPubKey& internal, uint8_t leaf_version, const CScript& leaf)
+//! A P2TR output committing to one leaf at depth `nodes`, and its control block.
+LeafOutput LeafOutputAtDepth(const XOnlyPubKey& internal, uint8_t leaf_version, const CScript& leaf, size_t nodes = 0)
 {
     const uint256 leaf_hash{ComputeTapleafHash(leaf_version, leaf)};
-    const auto tweaked{internal.CreateTapTweak(&leaf_hash)};
+    Bytes control(TAPROOT_CONTROL_BASE_SIZE + nodes * TAPROOT_CONTROL_NODE_SIZE);
+    control[0] = leaf_version;
+    std::ranges::copy(internal, control.begin() + 1);
+    for (size_t i{0}; i < nodes; ++i) {
+        // Distinct sibling hashes.
+        unsigned char index[8];
+        WriteLE64(index, i);
+        CSHA256().Write(index, sizeof(index)).Finalize(control.data() + TAPROOT_CONTROL_BASE_SIZE + i * TAPROOT_CONTROL_NODE_SIZE);
+    }
+    const uint256 root{ComputeTaprootMerkleRoot(control, leaf_hash)};
+    const auto tweaked{internal.CreateTapTweak(&root)};
     Require(tweaked.has_value(), "tap tweak");
-    Bytes control{static_cast<unsigned char>(leaf_version | (tweaked->second ? 1 : 0))};
-    control.insert(control.end(), internal.begin(), internal.end());
+    control[0] |= tweaked->second ? 1 : 0;
     return {CScript{} << OP_1 << Bytes(tweaked->first.begin(), tweaked->first.end()), std::move(control), leaf_hash};
 }
 
@@ -1432,6 +1481,76 @@ struct FundingBlock {
     CTransaction tx;
     std::vector<CTxOut> spent;
 };
+
+//! Appends an input spending `script_pub_key` with `witness`.
+void AddInput(CMutableTransaction& mtx, std::vector<CTxOut>& spent, const CScript& script_pub_key, std::vector<Bytes> witness)
+{
+    uint256 txid;
+    WriteLE64(txid.begin(), mtx.vin.size() + 1);
+    mtx.vin.emplace_back(COutPoint{Txid::FromUint256(txid), 0});
+    mtx.vin.back().scriptWitness.stack = std::move(witness);
+    spent.emplace_back(1000, script_pub_key);
+}
+
+//! Inputs that fund the budget without spending it: `add` appends `n` inputs,
+//! or one input of size `n`, starting the fill search at `probe`.
+struct FundingShape {
+    std::string name;
+    size_t probe;
+    std::function<void(CMutableTransaction&, std::vector<CTxOut>&, size_t)> add;
+};
+
+std::vector<FundingShape> FundingShapes(const XOnlyPubKey& internal)
+{
+    const CScript success{CScript{} << OP_RESERVED}; // OP_SUCCESS80
+    // n minimal script-path inputs of one leaf.
+    const auto leaves{[&](std::string name, uint8_t version, const CScript& leaf, size_t nodes) {
+        const LeafOutput out{LeafOutputAtDepth(internal, version, leaf, nodes)};
+        const Bytes script(leaf.begin(), leaf.end());
+        return FundingShape{std::move(name), 300, [out, script](CMutableTransaction& mtx, std::vector<CTxOut>& spent, size_t n) {
+            for (size_t i{0}; i < n; ++i) AddInput(mtx, spent, out.script_pub_key, {script, out.control});
+        }};
+    }};
+    // n inputs of a program that the witness rules leave unchecked, with empty witnesses.
+    const auto programs{[](std::string name, CScript script_pub_key) {
+        return FundingShape{std::move(name), 300, [script_pub_key](CMutableTransaction& mtx, std::vector<CTxOut>& spent, size_t n) {
+            for (size_t i{0}; i < n; ++i) AddInput(mtx, spent, script_pub_key, {});
+        }};
+    }};
+    // One 0xC2 input whose leaf, built from n, succeeds immediately.
+    const auto success_leaf{[&](std::string name, std::function<CScript(size_t)> leaf, bool one_byte_stack) {
+        return FundingShape{std::move(name), 100000, [=](CMutableTransaction& mtx, std::vector<CTxOut>& spent, size_t n) {
+            const CScript script{one_byte_stack ? success : leaf(n)};
+            const LeafOutput out{LeafOutputAtDepth(internal, TAPROOT_LEAF_0XC2, script)};
+            std::vector<Bytes> witness(one_byte_stack ? n : 0, Bytes{0x01});
+            witness.emplace_back(script.begin(), script.end());
+            witness.push_back(out.control);
+            AddInput(mtx, spent, out.script_pub_key, std::move(witness));
+        }};
+    }};
+    const CScript v2_program{CScript{} << OP_2 << Bytes{0x01, 0x02}}; // a true program
+    return {
+        leaves("c4", 0xc4, CScript{}, 0),
+        leaves("c2-op1", TAPROOT_LEAF_0XC2, CScript{} << OP_1, 0),
+        programs("v2", v2_program),
+        programs("p2a", CScript{} << OP_1 << Bytes{0x4e, 0x73}),
+        leaves("c4-path128", 0xc4, CScript{}, TAPROOT_CONTROL_MAX_NODE_COUNT),
+        leaves("c2-success-path128", TAPROOT_LEAF_0XC2, success, TAPROOT_CONTROL_MAX_NODE_COUNT),
+        success_leaf("c2-success-stack", {}, true),
+        FundingShape{"v2-stack", 100000, [v2_program](CMutableTransaction& mtx, std::vector<CTxOut>& spent, size_t n) {
+            AddInput(mtx, spent, v2_program, std::vector<Bytes>(n, Bytes{0x01}));
+        }},
+        success_leaf("c2-success-nops", [](size_t n) {
+            const Bytes nops(n, OP_NOP);
+            return CScript(nops.begin(), nops.end()) << OP_RESERVED;
+        }, false),
+        success_leaf("c2-success-macros", [](size_t n) {
+            CScript script;
+            for (size_t i{0}; i < n; ++i) script << OP_MACRO << OP_0; // an empty body
+            return script << OP_RESERVED;
+        }, false),
+    };
+}
 
 //! `signatures` checks of one signature: OP_2DUP OP_CHECKSIGVERIFY through a
 //! 256-check macro, then OP_CHECKSIG.
@@ -1451,23 +1570,18 @@ CScript SignatureLoop(size_t signatures)
     return script << OP_CHECKSIG;
 }
 
-FundingBlock BuildFundingBlock(const Crypto& crypto, uint8_t funder_version, size_t signatures, size_t funders)
+FundingBlock BuildFundingBlock(const Crypto& crypto, const FundingShape& shape, size_t signatures, size_t n)
 {
-    const CScript funder_leaf{funder_version == TAPROOT_LEAF_0XC2 ? CScript{} << OP_1 : CScript{}};
-    const LeafOutput funder{SingleLeafOutput(crypto.pubkey, funder_version, funder_leaf)};
     const CScript loop{SignatureLoop(signatures)};
-    const LeafOutput spender{SingleLeafOutput(crypto.pubkey, TAPROOT_LEAF_0XC2, loop)};
+    const LeafOutput spender{LeafOutputAtDepth(crypto.pubkey, TAPROOT_LEAF_0XC2, loop)};
     CMutableTransaction mtx;
     mtx.version = 2;
     mtx.vout.emplace_back(0, CScript{} << OP_RETURN);
     std::vector<CTxOut> spent;
-    for (size_t i{0}; i <= funders; ++i) {
-        uint256 txid;
-        WriteLE64(txid.begin(), i + 1);
-        mtx.vin.emplace_back(COutPoint{Txid::FromUint256(txid), 0});
-        spent.emplace_back(1000, i == 0 ? spender.script_pub_key : funder.script_pub_key);
-        if (i > 0) mtx.vin.back().scriptWitness.stack = {Bytes(funder_leaf.begin(), funder_leaf.end()), funder.control};
-    }
+    // A placeholder witness, so that the transaction data includes BIP 341's
+    // hashes whatever the funders are; the signature does not commit to it.
+    AddInput(mtx, spent, spender.script_pub_key, {Bytes{0x00}});
+    shape.add(mtx, spent, n);
     // The signature commits to the transaction without its witnesses.
     PrecomputedTransactionData txdata;
     txdata.Init(mtx, std::vector<CTxOut>{spent});
@@ -1489,6 +1603,7 @@ FundingBlock BuildFundingBlock(const Crypto& crypto, uint8_t funder_version, siz
 
 struct Validation {
     bool valid{true};
+    std::string error; // The first failing input's error.
     uint64_t budget{0}, consumed{0};
     double setup{0}, signer{0}, funders{0};
     double Total() const { return setup + signer + funders; }
@@ -1506,7 +1621,10 @@ Validation Validate(const FundingBlock& block, SignatureCache& cache)
     v.setup = std::chrono::duration<double>(last - start).count();
     for (unsigned int i{0}; i < block.tx.vin.size(); ++i) {
         CScriptCheck check(txdata.m_spent_outputs[i], block.tx, cache, i, BLOCK_FLAGS, /*cacheIn=*/false, &txdata, budget);
-        v.valid = v.valid && !check().has_value();
+        if (const auto result{check()}; result && v.valid) {
+            v.valid = false;
+            v.error = strprintf("input %u: %s", i, ScriptErrorString(result->first));
+        }
         const auto now{Clock::now()};
         (i == 0 ? v.signer : v.funders) += std::chrono::duration<double>(now - last).count();
         last = now;
@@ -1535,16 +1653,20 @@ void MeasureFundingBlock(const Options& o)
     SignatureCache cache{DEFAULT_SIGNATURE_CACHE_BYTES};
     const double varops_per_ns{40e9 / (o.reference_sec * 1e9)};
     std::cout << std::fixed;
-    for (const uint8_t version : {uint8_t{0xc4}, TAPROOT_LEAF_0XC2}) {
-        // Funders that fill the block, from the weight of two sizes.
-        const auto weight{[&](size_t funders) { return GetTransactionWeight(BuildFundingBlock(crypto, version, 1000, funders).tx); }};
-        const int64_t per_funder{weight(301) - weight(300)};
-        const size_t funders{static_cast<size_t>((MAX_BLOCK_WEIGHT - BLOCK_RESERVE_WEIGHT - weight(300)) / per_funder) + 300};
+    for (const FundingShape& shape : FundingShapes(crypto.pubkey)) {
+        if (!o.funding_shapes.empty() && !o.funding_shapes.contains(shape.name)) continue;
+        // The shape's size that fills the block, from the weight of two sizes.
+        const auto weight{[&](size_t n) { return GetTransactionWeight(BuildFundingBlock(crypto, shape, 1000, n).tx); }};
+        const int64_t limit{MAX_BLOCK_WEIGHT - BLOCK_RESERVE_WEIGHT};
+        const size_t step{shape.probe / 100};
+        const double per_unit{double(weight(shape.probe + step) - weight(shape.probe)) / step};
+        size_t n{shape.probe + static_cast<size_t>((limit - weight(shape.probe)) / per_unit)};
+        for (int64_t w{weight(n)}; w > limit; w = weight(n)) n -= static_cast<size_t>(std::ceil((w - limit) / per_unit));
         // Signatures that spend the budget: the cost per signature from two
         // counts, then the most that still validate.
-        const auto consumed{[&](size_t signatures) { return Validate(BuildFundingBlock(crypto, version, signatures, funders), cache); }};
+        const auto consumed{[&](size_t signatures) { return Validate(BuildFundingBlock(crypto, shape, signatures, n), cache); }};
         const Validation small{consumed(1000)}, large{consumed(2000)};
-        Require(small.valid && large.valid, "funding block calibration failed");
+        Require(small.valid && large.valid, "funding block calibration failed: " + shape.name + ", " + small.error + large.error);
         const uint64_t per_signature{(large.consumed - small.consumed) / 1000};
         // The loop script's size, and with it the budget, changes with the count.
         size_t signatures{1000 + static_cast<size_t>((small.budget - small.consumed) / per_signature)};
@@ -1558,25 +1680,26 @@ void MeasureFundingBlock(const Options& o)
             }
         }
         Require(!consumed(signatures + 1).valid, "funding block leaves budget for another signature");
-        const FundingBlock block{BuildFundingBlock(crypto, version, signatures, funders)};
+        const FundingBlock block{BuildFundingBlock(crypto, shape, signatures, n)};
         std::vector<Validation> runs;
         for (size_t e{0}; e < o.epochs; ++e) {
             runs.push_back(Validate(block, cache));
-            Require(runs.back().valid, "funding block failed");
+            Require(runs.back().valid, "funding block failed: " + shape.name);
         }
         std::ranges::sort(runs, {}, &Validation::Total);
         const Validation& m{runs[runs.size() / 2]};
-        std::cout << strprintf("FUNDING_BLOCK leaf=0x%02x inputs=%u weight=%d budget=%u consumed=%u signatures=%u "
+        std::cout << strprintf("FUNDING_BLOCK shape=%s n=%u inputs=%u weight=%d budget=%u consumed=%u signatures=%u "
                                "per_signature=%u total_s=%.4f setup_s=%.4f signer_s=%.4f funders_s=%.4f "
                                "ratio=%.4f min_ratio=%.4f max_ratio=%.4f\n",
-                               version, block.tx.vin.size(), GetTransactionWeight(block.tx), m.budget, m.consumed,
+                               shape.name, n, block.tx.vin.size(), GetTransactionWeight(block.tx), m.budget, m.consumed,
                                signatures, per_signature, m.Total(), m.setup, m.signer, m.funders,
                                m.Total() / o.reference_sec, runs.front().Total() / o.reference_sec,
                                runs.back().Total() / o.reference_sec);
+        std::cout.flush();
     }
     // One commitment check of a funding input, and one Schnorr verification.
     const CScript leaf;
-    const LeafOutput funder{SingleLeafOutput(crypto.pubkey, 0xc4, leaf)};
+    const LeafOutput funder{LeafOutputAtDepth(crypto.pubkey, 0xc4, leaf)};
     const XOnlyPubKey output{std::span{funder.script_pub_key}.subspan(2, 32)};
     bool ok{true};
     const double commit_ns{TimePerCall([&] {
@@ -1606,8 +1729,11 @@ void Help()
                  "  --only FAMILY       Measure only this family (F, WRITE, READ, ARITH, BIT, MOVE, MULCORE,\n"
                  "                      DIVCORE, HASH, SIG, SELECT or UNROLL); repeatable. No artifact pipeline\n"
                  "                      accepts the partial output.\n"
-                 "  --funding-block     Time a block of minimal script-path inputs funding one signature loop,\n"
-                 "                      and one commitment check against one Schnorr verification, then exit\n";
+                 "  --funding-block     Time blocks of inputs that fund one signature loop, one per funding\n"
+                 "                      shape, and one commitment check against one Schnorr verification, then exit\n"
+                 "  --funding-shape S   Time only this funding shape (c4, c2-op1, v2, p2a, c4-path128,\n"
+                 "                      c2-success-path128, c2-success-stack, v2-stack, c2-success-nops,\n"
+                 "                      c2-success-macros); repeatable\n";
 }
 
 Options Parse(int argc, char** argv)
@@ -1641,6 +1767,8 @@ Options Parse(int argc, char** argv)
             o.self_test = true;
         } else if (arg == "--funding-block") {
             o.funding_block = true;
+        } else if (arg == "--funding-shape") {
+            o.funding_shapes.insert(value());
         } else if (arg == "--only") {
             o.only.insert(value());
         } else {
