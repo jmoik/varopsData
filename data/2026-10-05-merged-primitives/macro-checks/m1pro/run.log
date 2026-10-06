@@ -1,0 +1,39 @@
+start 2026-10-06T09:37:49Z 8998dcca1cafe886160cb948f0c3c348ca6cceff
+Outcome verification passed: 590 candidate cases.
+Exact-budget/budget-minus-one verification passed: 575 successful cases across 78 opcode families.
+
+== VAROPS BENCHMARK SUMMARY ==
+  cases:                  108/108 completed x 5 stable rounds
+  schnorr baseline:       80,000 checks: 2.151 s
+  pre-v2 worst:           OP_RIPEMD160 520B: 2.259 s
+  v2 measured worst:      OP_MACRO depth-16384/6975-calls: 2.061 s
+  v2 projected worst:     OP_MACRO depth-16384/6975-calls: 2.062 s (0.96x schnorr, 0.91x pre-v2, 1.00x v2 measured)
+
+  top 5 new-v2 cases (measured or projected):
+  1. 2.062 s (projected, stable): gsr-tapscript-v2/OP_MACRO/depth-16384+6975_CALLS/macro-ref-chain/depth-16384/6975-calls/empty-leaf/No error
+  2. 1.797 s (projected, stable): gsr-tapscript-v2/OP_MACRO/levels-20+54_CALLS/macro-ref-fanout/levels-20/54-calls/empty-leaf/No error
+  3. 1.697 s (projected, stable): gsr-tapscript-v2/OP_MACRO/depth-256+446428_CALLS/macro-ref-chain/depth-256/446428-calls/empty-leaf/No error
+  4. 1.681 s (projected, stable): gsr-tapscript-v2/OP_MACRO/1NOP+1999989_CALLS/macro-unroll-nop-repeated/1NOP/1999989-calls/inactive/No error
+  5. 1.678 s (projected, stable): gsr-tapscript-v2/OP_MACRO/1NOP+1999989_CALLS/macro-unroll-nop/1NOP/1999989-calls/inactive/No error
+macro done 09:46:31
+Outcome verification passed: 590 candidate cases.
+Exact-budget/budget-minus-one verification passed: 575 successful cases across 78 opcode families.
+
+== VAROPS BENCHMARK SUMMARY ==
+  cases:                  125/125 completed x 5 stable rounds
+  schnorr baseline:       80,000 checks: 2.151 s
+  pre-v2 worst:           OP_RIPEMD160 520B: 2.255 s
+  v2 measured worst:      OP_MACRO 252B-body/11814-calls/3x519B: 1.611 s
+  v2 projected worst:     OP_MACRO 252B-body/11814-calls/3x519B: 1.611 s (0.75x schnorr, 0.71x pre-v2, 1.00x v2 measured)
+
+  top 5 new-v2 cases (measured or projected):
+  1. 1.611 s (projected, stable): gsr-tapscript-v2/OP_MACRO/DEFINE_252B+11814_CALLS/function-slow-OP_RIPEMD160/252B-body/11814-calls/3x519B/late-nonzero/No error
+  2. 1.424 s (projected, stable): gsr-tapscript-v2/OP_MACRO/DEFINE_256B+15624_CALLS/function-probe-chain-OP_RIPEMD160/256B-body/15624-calls/20B/calibration-worst-pattern/No error
+  3. 1.190 s (projected, stable): gsr-tapscript-v2/OP_MACRO/DEFINE_255B+15686_CALLS/function-probe-tiny-OP_RIPEMD160/255B-body/15686-calls/1B/calibration-worst-pattern/No error
+  4. 1.103 s (projected, stable): gsr-tapscript-v2/OP_MACRO/DEFINE_256B+15624_CALLS/function-probe-chain-OP_HASH160/256B-body/15624-calls/20B/calibration-worst-pattern/No error
+  5. 1.041 s (projected, stable): gsr-tapscript-v2/OP_MACRO/DEFINE_252B+11814_CALLS/function-slow-OP_SHA1/252B-body/11814-calls/3x519B/late-nonzero/No error
+function done 09:54:57
+reference 2.259070542
+unroll done 09:55:14
+EXIT=0
+EXIT=0

@@ -32,7 +32,7 @@ Rates are fitted per byte of `n` and charged per byte of `W(n)` or `H(n)` (see [
 - **No separate allocation charge.** Required allocation and growth belong to the producing operation, including scratch storage; they are never omitted or charged twice.
 - **Hashes compose.** OP_SHA256, OP_RIPEMD160 and OP_SHA1 pay `HASH(n)`; OP_HASH160 and OP_HASH256 pay `HASH(n) + HASH(32)`, the second pass hashing the 32-byte SHA256 digest. Each also pays BASE and the digest's WRITE.
 - **Final result check**: `READ` of the remaining element, once per script.
-- **Macros.** Unrolled instructions in inactive branches pay nothing when reached, so the unrolling charge covers their substitution, copying and skipping. `bench_varops` evaluates such scripts repeatedly against one shared budget, as inputs of one transaction, because one script unrolls at most 4 MB.
+- **Macros.** Unrolled instructions in inactive branches pay nothing when reached, so the unrolling charge covers their substitution, copying and skipping. `bench_varops` evaluates such scripts repeatedly against one shared budget, as inputs of one transaction, because one script unrolls at most 4 MB. On the i7-7700, M1 Pro and M4 Pro, unrolling fixtures take at most 0.84x their charge and macro scripts at most 0.91x the reference, per script and across the inputs of a block, so the composition covers unrolling without a primitive of its own ([macro checks](data/2026-10-05-merged-primitives/README.md#macro-unrolling-checks)).
 - Lock checks pay BASE plus READ of their operand. READ and WRITE keep their own flats rather than inflating BASE. A fitted rate may be zero.
 - Capacity and cache state are measurement conditions, never charge inputs.
 
@@ -122,7 +122,7 @@ Each item names what is timed, its paths (the path groups that the fit weights e
 
 **Held-out checks**, measured but not fitted:
 
-- **Macro unrolling**: unrolling of inactive NOP, push and reference-chain bodies, against unrolled bytes per unit. The charge is BASE per substituted instruction or visited reference, plus WRITE of the unrolled script when the script declares macros; the measurements check it rather than price it.
+- **Macro unrolling**: unrolling of inactive NOP, push, reference-chain and fan-out bodies, against unrolled bytes per unit. The charge is BASE per substituted instruction or visited reference, plus WRITE of the unrolled script when the script declares macros; the measurements check it rather than price it.
 - **Lifetime checks**: numeric lifetimes from source to result with tight and spare capacity (`numeric`). They check that WRITE, READ and WRITE again compose to cover complete lifetimes: producing the source bytes, reading them as a number and writing the result.
 
 ## Fitting
