@@ -3,9 +3,9 @@
   "status": "provisional multi-machine fit, not an accepted consensus schedule",
   "model_id": "producer-normalize-v1",
   "pricing_basis": "envelope",
-  "schedule_combination": "Envelope of machine curves, each fitted independently from the samples recorded on that machine after same-machine normalization (see envelope_combination); DIVCORE rows are trimmed-length quotient rows, fitted as fixed + step + cell. Round after combining; SIG remains fixed at 500000. Coefficientwise maxima are kept for comparison. Primitives measured in parts (composed_from) are priced by composing the parts' rounded prices and rounding the result again: READ and WRITE add the parts' prices; ARITH and HASH take the larger flat and the larger rate of their parts. The envelope of a sum covers each machine's composed curve, that of a larger-of every machine's curve of each part over the part's own sizes; it is compared with the price.",
+  "schedule_combination": "Envelope of machine curves, each fitted independently from the samples recorded on that machine after same-machine normalization (see envelope_combination); DIVCORE rows are trimmed-length quotient rows, fitted as fixed + step + cell. Round after combining; SIG and TWEAK remain fixed at SIGCHECK, 500000. Coefficientwise maxima are kept for comparison. Primitives measured in parts (composed_from) are priced by composing the parts' rounded prices and rounding the result again: READ and WRITE add the parts' prices; ARITH and HASH take the larger flat and the larger rate of their parts. The envelope of a sum covers each machine's composed curve, that of a larger-of every machine's curve of each part over the part's own sizes; it is compared with the price.",
   "envelope_combination": "Envelope: the cheapest curve of each family's form that covers every machine's fitted curve at every chargeable size. With feature vector phi(x) >= 0 and machine fits theta_m, it minimizes the weighted mean relative charge sum_x w(x) theta.phi(x) / max_m theta_m.phi(x) over the family's fixtures x (same path-group and size-decade weights as the fits), subject to theta.phi(x) >= theta_m.phi(x) for every machine m and every chargeable size x, and theta >= 0. Sizes start at zero except where an operation cannot be smaller: a hash processes at least one 64-byte block, a division has at least one quotient row and one divisor limb, and a multiplication's shorter operand is at most as long as the longer one. RIPEMD160 and SHA1 take at most 520 bytes; other sizes are unbounded. Where sizes start at zero and are unbounded, the envelope equals the coefficientwise maximum. Constant primitives and SIG use the maximum. A primitive that takes the larger of measured parts (ARITH, HASH) covers every machine's curve of every part, each over the part's own chargeable sizes, and weighs each fixture against its own part's curves.",
-  "method": "Per-machine median of raw fixture epochs, normalized so that a full 40-billion-varop budget of fitted work takes 0.9\u00d7 the recorded local pre-v2 reference (rate derived from the recorded reference time, whatever normalization the artifact was collected with); equal path-group and size-decade weights; weighted squared log error with a 100\u00d7 underprediction penalty; nonnegative predefined coefficients; no coefficient rounding. SIG diagnostic fits do not replace the fixed 500000 allowance.",
+  "method": "Per-machine median of raw fixture epochs, normalized so that a full 40-billion-varop budget of fitted work takes 0.9\u00d7 the recorded local pre-v2 reference (rate derived from the recorded reference time, whatever normalization the artifact was collected with); equal path-group and size-decade weights; weighted squared log error with a 100\u00d7 underprediction penalty; nonnegative predefined coefficients; no coefficient rounding. SIG and TWEAK diagnostic fits do not replace the fixed 500000 SIGCHECK.",
   "machines": [
     {
       "file": "varop-calibration-m1pro-full.json",
@@ -681,16 +681,16 @@
         0
       ],
       "candidate_coefficients": [
-        170000,
+        500000,
         0
       ],
-      "candidate_formula": "170000",
+      "candidate_formula": "500000",
       "maximum_coefficients": [
         168022.92908455187,
         0
       ],
       "maximum_candidate_coefficients": [
-        170000,
+        500000,
         0
       ],
       "notes": ""

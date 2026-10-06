@@ -1587,8 +1587,8 @@ void MeasureFundingBlock(const Options& o)
     const auto signature{crypto.Sign(message)};
     const double verify_ns{TimePerCall([&] { ok &= crypto.pubkey.VerifySchnorr(Message(message), signature); }, 20000, o.epochs)};
     Require(ok, "commitment or signature check failed");
-    std::cout << strprintf("COMMITMENT_CHECK ns=%.1f varops=%.0f tweak_price=%u ratio_to_tweak=%.4f\n", commit_ns,
-                           commit_ns * varops_per_ns, varops::TweakCost(), commit_ns * varops_per_ns / varops::TweakCost());
+    std::cout << strprintf("COMMITMENT_CHECK ns=%.1f varops=%.0f sigcheck=%u ratio_to_sigcheck=%.4f\n", commit_ns,
+                           commit_ns * varops_per_ns, varops::SignatureCost(), commit_ns * varops_per_ns / varops::SignatureCost());
     std::cout << strprintf("SCHNORR_VERIFY ns=%.1f varops=%.0f sig_price=%u commitment_per_verify=%.4f\n", verify_ns,
                            verify_ns * varops_per_ns, varops::SignatureCost(), commit_ns / verify_ns);
 }

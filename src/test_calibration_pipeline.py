@@ -106,7 +106,7 @@ class CalibrationPipelineTests(unittest.TestCase):
         self.assertEqual(calibration.rounded_candidate('SELECT', [3454.87, 1643.3]), [3500, 1700])
         self.assertEqual(calibration.rounded_candidate('MULCORE', [338.305, 4.32306, 109.887, 28.2557]), [350, 5, 110, 29])
         self.assertEqual(calibration.rounded_candidate('READ', [80.6, 1.01]), [90, 2])
-        self.assertEqual(calibration.rounded_candidate('TWEAK', [168855, 0]), [170000, 0])
+        self.assertEqual(calibration.rounded_candidate('TWEAK', [168855, 0]), [500000, 0])
         self.assertEqual(calibration.formulas('H256', [192, 39], candidate=True), '192 + 39 × H(n)')
         self.assertEqual(calibration.formulas('HASH', [300, 40], candidate=True), '300 + 40 × H(n)')
         self.assertEqual(calibration.rounded_candidate('NORMALIZE', [187.2, 0]), [200, 0])

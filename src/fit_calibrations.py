@@ -38,8 +38,10 @@ FAMILIES = {
 MODEL_ID = "read-write-arith-v1"
 # Measured compositions of existing primitives: compared against their charge, never priced.
 CHECKS = {"UNROLL"}
-# BIP 440's priced primitives.
+# BIP 440's priced primitives. TWEAK is measured on its own but priced as SIG.
 PRICED = "F READ WRITE ARITH MOVE MULCORE DIVCORE HASH SIG TWEAK SELECT".split()
+# Elliptic-curve operations, each charged one SIGCHECK.
+SIGCHECK_FAMILIES = {"SIG", "TWEAK"}
 # The hash functions, each measured as a family of its own: SHA256, RIPEMD160, SHA1.
 HASHES = ("H256", "H160", "H1")
 # How a model's measured families compose a priced primitive: READ pays for both
@@ -695,8 +697,8 @@ def round_flat(value):
 
 def rounded_candidate(family, coeff):
     """Schedule adoption, not refitting: each coefficient rounded up on its own, the flat
-    with round_flat and rates with round_coefficient; SIG stays at its fixed allowance."""
-    if family == 'SIG':
+    with round_flat and rates with round_coefficient; SIG and TWEAK stay at SIGCHECK."""
+    if family in SIGCHECK_FAMILIES:
         return [500000, 0]
     return [round_flat(coeff[0])] + [round_coefficient(v) for v in coeff[1:]]
 
@@ -992,10 +994,10 @@ def main():
     result = dict(schema="varop-joint-fit-v3", status=status,
                   model_id=model_id,
                   pricing_basis="envelope",
-                  schedule_combination="Envelope of machine curves, each fitted independently from the samples recorded on that machine after same-machine normalization (see envelope_combination); DIVCORE rows are trimmed-length quotient rows, fitted as fixed + step + cell. Round after combining; SIG remains fixed at 500000. Coefficientwise maxima are kept for comparison."
+                  schedule_combination="Envelope of machine curves, each fitted independently from the samples recorded on that machine after same-machine normalization (see envelope_combination); DIVCORE rows are trimmed-length quotient rows, fitted as fixed + step + cell. Round after combining; SIG and TWEAK remain fixed at SIGCHECK, 500000. Coefficientwise maxima are kept for comparison."
                                        + composition_text(composed),
                   envelope_combination=ENVELOPE,
-                  method=f"Per-machine median of raw fixture epochs, normalized so that a full 40-billion-varop budget of fitted work takes {TARGET_FRACTION:g}× the recorded local pre-v2 reference (rate derived from the recorded reference time, whatever normalization the artifact was collected with); equal path-group and size-decade weights; weighted squared log error with a 100× underprediction penalty; nonnegative predefined coefficients; no coefficient rounding. SIG diagnostic fits do not replace the fixed 500000 allowance.",
+                  method=f"Per-machine median of raw fixture epochs, normalized so that a full 40-billion-varop budget of fitted work takes {TARGET_FRACTION:g}× the recorded local pre-v2 reference (rate derived from the recorded reference time, whatever normalization the artifact was collected with); equal path-group and size-decade weights; weighted squared log error with a 100× underprediction penalty; nonnegative predefined coefficients; no coefficient rounding. SIG and TWEAK diagnostic fits do not replace the fixed 500000 SIGCHECK.",
                   machines=machines, source_check=source_check, bench_check=bench_check,
                   schedule_rounding=dict(coefficient="flats to a multiple of 10 below 100 and of 50 from 100, and to no more than two significant figures; rates to two significant figures, and at least to a whole varop", sig_policy=500000,
                                          rule="Ceiling each coefficient independently: flats to a multiple of 10 below 100 and of 50 from 100, never to more than two significant figures; rates (per byte of W(n) or H(n) or per counted item) to two significant figures and at least to a whole varop; preserve zero/exact multiples; no refitting. A price composed from rounded parts is rounded again by the same rule.",

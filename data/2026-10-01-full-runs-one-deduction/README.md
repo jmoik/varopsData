@@ -61,6 +61,12 @@ gsr `0b644f0761` counts MOVE's `k` as the entries an opcode takes off the top of
 as depth + 1 entries, which lowers the MOVE envelope's flat from 179 to 161; the price is unchanged and the
 charges only rise.
 
+gsr `d4121fe10f` charges OP_TWEAKADD one SIGCHECK instead of a fitted TWEAK, and each funding Taproot script-path
+input one SIGCHECK from the budget for its BIP 341 commitment check. This dataset's TWEAK fixture tweaked by 1,
+which makes the scalar multiplication nearly free; its 168,023 is kept as measured. A hash-sized tweak takes
+0.79–0.82 of a signature check ([`../2026-10-05-merged-primitives/`](../2026-10-05-merged-primitives/README.md#tweak-and-commitment-checks-at-sigcheck)).
+The refit changes only TWEAK's candidate, to 500,000.
+
 ```
 Primitive  Envelope (varops, unrounded)                   Rounded candidate                      Maximum coefficients (unrounded)
 F          305.528                                          350                                    305.528

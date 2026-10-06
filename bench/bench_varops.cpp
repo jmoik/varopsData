@@ -2706,7 +2706,7 @@ static std::pair<std::string, std::string> CandidateFormula(opcodetype opcode)
     case OP_CHECKSIGFROMSTACK:
         return {"BASE + WRITE(8), plus SIGCHECK + HASH(64 + msg) for a nonempty signature",
                 "BASE,SIGCHECK,HASH,WRITE"};
-    case OP_TWEAKADD: return {"BASE + TWEAK + WRITE(32)", "BASE,TWEAK,WRITE"};
+    case OP_TWEAKADD: return {"BASE + SIGCHECK + WRITE(32)", "BASE,SIGCHECK,WRITE"};
     case OP_BYTEREV: return {"BASE + ARITH(n) + WRITE(n)", "BASE,ARITH,WRITE"};
     default: throw std::runtime_error("no candidate formula for " + OpcodeName(opcode));
     }

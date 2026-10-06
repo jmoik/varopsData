@@ -35,11 +35,11 @@ SECTIONS = [
          intro="Numbers of any size: passes over their words, multiplication and division.",
          groups=[("Numeric and bit operations", ("ARITH", "MULCORE", "DIVCORE"))]),
     dict(slug="category-crypto", title="Hashing and signatures",
-         intro="Hashes are charged per 64-byte block they process, at one price for SHA256, RIPEMD160 and SHA1. A signature check has a fixed price.",
-         groups=[("Hashing and signatures", ("HASH", "SIG"))]),
+         intro="Hashes are charged per 64-byte block they process, at one price for SHA256, RIPEMD160 and SHA1. Every elliptic-curve operation, a signature check or a public key tweak, costs one SIGCHECK.",
+         groups=[("Hashing and signatures", ("HASH", "SIG", "TWEAK"))]),
     dict(slug="section-extended-primitives", title="Extended Primitives · OP_CHECKSIGFROMSTACK, OP_TWEAKADD, OP_BYTEREV",
-         intro="OP_TWEAKADD adds one primitive, TWEAK. OP_CHECKSIGFROMSTACK and OP_BYTEREV are charged with existing primitives; their measurements are compared with that charge.",
-         groups=[("Opcodes", ("TWEAK", "CSFS", "BYTEREV"))]),
+         intro="These opcodes add no primitive. OP_CHECKSIGFROMSTACK and OP_TWEAKADD each pay one SIGCHECK (OP_TWEAKADD's tweak is measured under Hashing and signatures); their measurements are compared with that charge.",
+         groups=[("Opcodes", ("CSFS", "BYTEREV"))]),
     dict(slug="section-optx", title="OP_TX",
          intro="OP_TX adds one primitive, OP_TX_SELECT, for selecting and encoding transaction fields.",
          groups=[("OP_TX", ("SELECT",))]),
@@ -48,11 +48,11 @@ SECTIONS = [
          groups=[("Unrolling", ("UNROLL",))]),
 ]
 # Prices implemented in src/script/varops.h, compared against the joint candidate.
-IMPLEMENTED_AT = '0b644f0761'
+IMPLEMENTED_AT = 'd4121fe10f'
 CURRENT_COSTS = {'F': '350', 'READ': '300 + 3 × W(n)', 'WRITE': '1000 + 8 × W(n)', 'ARITH': '200 + 3 × W(n)',
                  'MOVE': '200 + 37 × k',
                  'MULCORE': '400 + 6 × u + 120 × v + 29 × u × v', 'DIVCORE': '510 × s + 33 × s × v',
-                 'HASH': '300 + 40 × H(n)', 'SIG': '500000', 'TWEAK': '170000',
+                 'HASH': '300 + 40 × H(n)', 'SIG': '500000', 'TWEAK': '500000',
                  'SELECT': '2400 + 270 × k'}
 BASE, WRITE, READ, HASH, SIGCHECK = 350, (1000, 8), (300, 3), (300, 40), 500_000  # rates per byte of W(n), H(n)
 ARITH, MOVE, MUL, SELECT = (200, 3), (200, 37), (400, 6, 120, 29), (2400, 270)
@@ -150,7 +150,7 @@ CHECKS = {
 # Fixtures of priced primitives that may not be in every calibration yet.
 FIXTURES = {
     'SELECT': 'empty witness items, weight and amount scans, outputs, and all fields of every input, each with <code>k</code> charged units. Only collated output is fitted; noncollated output also pays WRITE per value.',
-    'TWEAK': 'one x-only key tweak with a valid key and tweak.',
+    'TWEAK': 'one x-only key tweak of a valid key by a hash-sized tweak.',
 }
 
 
@@ -165,7 +165,7 @@ MODELS = {
     'DIVCORE': 'Long division or remainder: <code>s</code> quotient rows, each working through the <code>v</code> limbs of the divisor.',
     'HASH': 'One SHA256, RIPEMD160 or SHA1 pass over an <code>n</code>-byte message, in whole 64-byte blocks. RIPEMD160 and SHA1 take at most 520 bytes.',
     'SIG': 'One BIP 340 signature check. Its price is fixed at 500,000 varops, which keeps today’s allowance of one signature check per 50 weight units; the challenge hash is charged separately as HASH.',
-    'TWEAK': 'One BIP 449 x-only public key tweak (OP_TWEAKADD).',
+    'TWEAK': 'One BIP 449 x-only public key tweak (OP_TWEAKADD), P + t·G. It is the same elliptic-curve work as a signature check without the challenge hash, at about 80% of its time, and is charged one SIGCHECK. The 2026-10-01 fixture tweaked by 1, which makes the scalar multiplication nearly free; it is shown as measured.',
     'SELECT': 'One OP_TX selection with <code>k</code> charged units: each value selected and each record scanned, including planning, framing and cleanup.',
 }
 
@@ -585,6 +585,7 @@ SCREEN_OPCODES = {
     'MOVE': ('OP_ROLL', 'OP_PICK', 'OP_ROT', 'OP_2ROT'),
     'SELECT': ('OP_TX',),
     'SIG': ('OP_CHECKSIG', 'OP_CHECKSIGVERIFY', 'OP_CHECKSIGADD', 'OP_CHECKSIGFROMSTACK'),
+    'TWEAK': ('OP_TWEAKADD',),
 }
 # Why a primitive's single measurements above the reference do not carry over to complete opcodes.
 ABOVE_REFERENCE_NOTES = {
@@ -679,8 +680,9 @@ def screens_html(screens, machines, dataset, page_dir=None):
                 'value is produced: the results of OP_EQUALVERIFY, OP_NUMEQUALVERIFY and OP_CHECKSIGVERIFY, and '
                 'the operand that OP_CHECKLOCKTIMEVERIFY, OP_CHECKSEQUENCEVERIFY and OP_IFDUP leave on the stack. '
                 'Re-screened on the Apple M4 Pro, the worst of their scripts, OP_CHECKSIGVERIFY&#39;s, takes '
-                '0.69× the reference. OP_TX also pays READ for each scope operand, which only raises its '
-                'charge.') + '</p>'
+                '0.69× the reference. OP_TX also pays READ for each scope operand and OP_TWEAKADD one SIGCHECK, which '
+                'only raises their charges, and each funding Taproot script-path input pays one SIGCHECK for its '
+                'commitment check, which only lowers the budget.') + '</p>'
              '<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Reference</th><th>Worst Tapleaf 0xC2 '
              'script</th><th>× reference</th><th>Scripts above</th></tr></thead><tbody>']
     for machine, screen in rows:
