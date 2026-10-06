@@ -1,0 +1,18 @@
+SHA256 backend: sse4(1way);sse41(4way);avx2(8way)
+Clock tick: 17 ns
+Reference: 3.49641 s (Script evaluation only).
+  Pass 1/7
+  Progress: pass 1/7, 0 fixtures complete; 0 s elapsed; measuring SIG/0
+  Pass 2/7
+  Progress: pass 2/7, 0 fixtures complete; 0 s elapsed; measuring SIG/0
+  Pass 3/7
+  Progress: pass 3/7, 0 fixtures complete; 0 s elapsed; measuring SIG/0
+  Pass 4/7
+  Progress: pass 4/7, 0 fixtures complete; 0 s elapsed; measuring SIG/0
+  Pass 5/7
+  Progress: pass 5/7, 0 fixtures complete; 1 s elapsed; measuring SIG/0
+  Pass 6/7
+  Progress: pass 6/7, 0 fixtures complete; 1 s elapsed; measuring SIG/0
+  Pass 7/7
+  Progress: pass 7/7, 0 fixtures complete; 1 s elapsed; measuring SIG/0
+Wrote /root/confirm-wip/sig.csv, /root/confirm-wip/sig.csv.samples.csv and /root/confirm-wip/sig.csv.produce.csv

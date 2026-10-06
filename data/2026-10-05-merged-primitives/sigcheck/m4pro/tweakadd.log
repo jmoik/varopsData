@@ -1,0 +1,12 @@
+Outcome verification passed: 590 candidate cases.
+Exact-budget/budget-minus-one verification passed: 575 successful cases across 78 opcode families.
+
+== VAROPS BENCHMARK SUMMARY ==
+  cases:                  94/94 completed x 5 stable rounds
+  schnorr baseline:       80,000 checks: 1.143 s
+  pre-v2 worst:           OP_RIPEMD160 520B: 1.584 s
+  v2 measured worst:      OP_TWEAKADD 32B+32B: 0.945 s
+  v2 projected worst:     OP_TWEAKADD 32B+32B: 0.945 s (0.83x schnorr, 0.60x pre-v2, 1.00x v2 measured)
+
+  top 5 new-v2 cases (measured or projected):
+  1. 0.945 s (projected, stable): gsr-tapscript-v2/OP_TWEAKADD/OP_2DUP+OP_TWEAKADD+OP_DROP/tweakadd-valid/32B+32B/hash-tweak/No error

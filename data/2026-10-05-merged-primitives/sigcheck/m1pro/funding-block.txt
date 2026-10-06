@@ -1,0 +1,4 @@
+FUNDING_BLOCK leaf=0xc4 inputs=19974 weight=3996361 budget=29976610000 consumed=29976378996 signatures=58823 per_signature=509622 total_s=2.1158 setup_s=0.0021 signer_s=1.6533 funders_s=0.4604 ratio=0.9326 min_ratio=0.9284 max_ratio=0.9366
+FUNDING_BLOCK leaf=0xc2 inputs=19874 weight=3996292 budget=30025920000 consumed=30025676470 signatures=58852 per_signature=509622 total_s=2.0654 setup_s=0.0020 signer_s=1.6104 funders_s=0.4529 ratio=0.9104 min_ratio=0.9097 max_ratio=0.9291
+COMMITMENT_CHECK ns=22530.3 varops=397241 sigcheck=500000 ratio_to_sigcheck=0.7945
+SCHNORR_VERIFY ns=26206.9 varops=462066 sig_price=500000 commitment_per_verify=0.8597

@@ -72,3 +72,27 @@ The block exceeds the reference on the i7-7700 and M1 Pro. A funding input's ful
 budget at 1.0x (M1 Pro: 40.5). If a funding script-path input contributed `(weight − k) × 10,000`, the measured
 blocks need k ≥ 12 (i7-7700) and k ≥ 33 (M1 Pro) using the signature loop's own margin; k = 50, one SIGCHECK per
 input as in BIP 342's 50 weight units per signature, brings them to 0.83x and 0.92x.
+
+## TWEAK and commitment checks at SIGCHECK
+
+The TWEAK fixture and the OP_TWEAKADD script case tweaked by 1, so libsecp256k1's scalar multiplication walked
+one bit. With a hash-sized tweak (varopsData `885f067`), a tweak takes 0.79–0.82 of a signature check, 1.7–2.3
+times the fitted TWEAK of 170,000. gsr `d4121fe10f` therefore charges every elliptic-curve operation one SIGCHECK:
+OP_TWEAKADD pays `BASE + SIGCHECK + WRITE(32)`, and each funding Taproot script-path input pays one SIGCHECK from
+the transaction budget for its commitment check. The funding block's signature input then has about 58,800
+signatures instead of 78,400. [`sigcheck/`](sigcheck/) repeats both checks at gsr `f20e116670` (same tree as
+`d4121fe10f` except one include) with varopsData `11ada19`:
+
+    bench_varops --case-filter OP_NOP --sample-budget-percent 2 --epochs 5 --file reference.csv
+    bench_varops --case-filter tweakadd --epochs 5 --file tweakadd.csv
+    bench_varops_primitives --only SIG --pre-v2-seconds <slowest pre-v2 case of reference.csv> --epochs 7 --out sig.csv
+    bench_varops_primitives --funding-block --pre-v2-seconds <same> --epochs 7
+
+| Machine | Reference (s) | OP_TWEAKADD script / reference | Funding block 0xc4 / 0xC2 | TWEAK / SIG/32 | Commitment check / SIGCHECK |
+|---|---|---|---|---|---|
+| Intel i7-7700 | 3.485 | 0.67x | 0.834x / 0.829x | 0.792 | 0.69 |
+| Apple M1 Pro | 2.283 | 0.78x | 0.933x / 0.910x (max 0.937x) | 0.799 | 0.79 |
+| Apple M4 Pro | 1.584 | 0.60x | 0.711x / 0.713x | 0.821 | 0.61 |
+
+Everything is below 1.0x. The M1 Pro started under load from other sessions (load 7, falling to 3).
+
