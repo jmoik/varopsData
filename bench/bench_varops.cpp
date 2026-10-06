@@ -267,9 +267,11 @@ using StackFactory = std::function<std::vector<valtype>(const CryptoFixture&)>;
 //! Transaction around an OP_TX case: input 0 runs the case script; input 1 carries
 //! `empty_items` empty witness items; extra inputs and outputs have empty scripts.
 struct OpTxShape {
+    //! Witness items of input 1 before its leaf and control block, each item_bytes long.
     size_t empty_items{0};
     size_t extra_inputs{0};
     size_t extra_outputs{0};
+    size_t item_bytes{0};
 };
 
 struct CaseOptions {
@@ -843,7 +845,7 @@ static CMutableTransaction EmptyWitnessTransaction(const OpTxShape& shape, const
     tx.vin[0].scriptWitness.stack = {valtype{1}, selector,
                                     valtype{script.begin(), script.end()}, control_block};
     auto& source_witness{tx.vin[1].scriptWitness.stack};
-    source_witness.assign(shape.empty_items, valtype{});
+    source_witness.assign(shape.empty_items, valtype(shape.item_bytes, 0x01));
     // An immediate-success leaf makes the large source witness plausible.
     source_witness.push_back(valtype{static_cast<unsigned char>(OP_1NEGATE)});
     source_witness.push_back(control_block);
@@ -1311,6 +1313,13 @@ static void AddBinaryDataCases(std::vector<CaseSpec>& specs, opcodetype opcode, 
                     "carry-boundary", strprintf("1Bx%uB", size), "all-ff-plus-one",
                     sequence, FixedStack({valtype{1}, valtype(size, 0xff)}));
         }
+        // The same carry into a new word at the sizes where growing a value
+        // through the allocator is slowest (WRITE/grow).
+        for (size_t size : {65536U, 86656U, 135000U, 262144U, 330568U}) {
+            AddCase(specs, opcode, HeadlineRole::NEW_GSR,
+                    "carry-grow", strprintf("1Bx%s", FormatBytes(size)), "all-ff-plus-one",
+                    sequence, FixedStack({valtype{1}, valtype(size, 0xff)}));
+        }
     }
     if (!restored) {
         const size_t size{byte_compare ? MAX_SCRIPT_ELEMENT_SIZE : 4};
@@ -1602,6 +1611,57 @@ static void AddOpTxCases(std::vector<CaseSpec>& specs, opcodetype opcode)
     const size_t inputs{fill(41 * WITNESS_SCALE_FACTOR + 1, {})};
     add("inputs", strprintf("%u-inputs", inputs + 2), valtype{0, 1, 0, 0x20, 0x7f, 0}, false,
         {.extra_inputs = inputs});
+
+    // Input 1's one-byte witness items: two collated bytes and one item unit
+    // each, as many as fill the transaction or the result's element limit.
+    {
+        const size_t items{std::min(fill(2, {}), (size_t{MAX_TAPLEAF_0XC2_STACK_ELEMENT_SIZE} - 64) / 2)};
+        add("collated-witness-1B-items", strprintf("%u-items", items), valtype{0, 1, 0, 0x30, 0x80, 0}, true,
+            {.empty_items = items, .item_bytes = 1});
+    }
+    // One witness item as large as the transaction and the result allow:
+    // collating it zero-fills the result and then copies the item into it.
+    {
+        const size_t bytes{std::min<size_t>(TARGET_WEIGHT - SCRIPT_RESERVE - base_weight({}) - 8,
+                                            MAX_TAPLEAF_0XC2_STACK_ELEMENT_SIZE - 64)};
+        add("collated-witness-large-item", FormatBytes(bytes), valtype{0, 1, 0, 0x30, 0x80, 0}, true,
+            {.empty_items = 1, .item_bytes = bytes});
+    }
+    // Scope operands are zero-padded integers read before any record: a SINGLE
+    // operand as large as two copies allow, and a RANGE start and count.
+    {
+        constexpr size_t single{3'999'000};
+        const valtype selector{0, 0, 0, 0x30, 0x20, 0};
+        CaseOptions options{};
+        options.op_tx_shape = OpTxShape{};
+        AddCase(specs, opcode, HeadlineRole::NEW_GSR, "scope-operand", FormatBytes(single), "zero-padded",
+                Ops({OP_2DUP, OP_TX, OP_DROP}), FixedStack({PatternBytes(single, "zero"), selector}), std::move(options));
+    }
+    {
+        constexpr size_t range{1'999'000};
+        const valtype selector{0, 0, 0, 0x40, 0x20, 0};
+        CaseOptions options{};
+        options.op_tx_shape = OpTxShape{};
+        AddCase(specs, opcode, HeadlineRole::NEW_GSR, "scope-operand", "2x" + FormatBytes(range), "zero-padded-range",
+                Ops({OP_3DUP, OP_TX, OP_DROP}),
+                FixedStack({PatternBytes(range, "zero"), PatternBytes(range, "one-low"), selector}), std::move(options));
+    }
+    // Noncollated: seven values of every input pushed as separate elements, as
+    // many as the stack holds, then dropped in pairs.
+    {
+        constexpr size_t extra_inputs{4094};
+        constexpr size_t elements{7 * (extra_inputs + 2)};
+        CScript sequence{Ops({OP_DUP, OP_TX})};
+        for (size_t i{0}; i < elements / 2; ++i) sequence << OP_2DROP;
+        CaseOptions options{};
+        options.cleanup_items = 1;
+        options.op_tx_shape = OpTxShape{.extra_inputs = extra_inputs};
+        options.sequence_label = strprintf("OP_DUP+OP_TX+%uxOP_2DROP", elements / 2);
+        options.max_repetitions = (TARGET_WEIGHT - base_weight(*options.op_tx_shape) - 8 - 3) / sequence.size();
+        options.saturation_hint = "transaction-weight";
+        AddCase(specs, opcode, HeadlineRole::NEW_GSR, "noncollated-inputs", strprintf("%u-inputs", extra_inputs + 2),
+                "seven-fields", std::move(sequence), FixedStack({valtype{0, 0, 0, 0x20, 0x7f, 0}}), std::move(options));
+    }
 }
 
 //! The benchmark key (secret 1): its x-only public key and a BIP 340 signature
@@ -2026,6 +2086,9 @@ static void AddShiftCases(std::vector<CaseSpec>& specs, opcodetype opcode)
     const CScript sequence{Ops({OP_2DUP, opcode, OP_DROP})};
     std::vector<std::pair<size_t, uint64_t>> shapes{{1, 1}, {17, 9}, {17, 56}, {17, 65}};
     shapes.insert(shapes.end(), {{1024, 8}, {1024, 1032}, {1024, 1033}, {65536, 524288}, {1, uint64_t{MAX_TAPLEAF_0XC2_STACK_ELEMENT_SIZE - 1} * 8}});
+    // One more byte at the sizes where growing a value through the allocator is
+    // slowest (WRITE/grow).
+    for (size_t size : {65536U, 86656U, 135000U, 262144U, 330568U}) shapes.emplace_back(size, 8);
     for (const auto& [size, shift] : shapes) {
         AddCase(specs, opcode, HeadlineRole::NEW_GSR,
                 "shift-preserve", FormatBytes(size) + ":" + strprintf("%ubits", shift),
