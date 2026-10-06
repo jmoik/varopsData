@@ -1,0 +1,38 @@
+start 2026-10-06T14:27:06Z d4121fe10f1548c72aff2c3f4ae2a3a3e335a354 load: 2.66 3.44 2.97
+reference 1.573497958
+FUNDING_BLOCK shape=c4 n=19973 inputs=19974 total_s=1.1187 setup_s=0.0016 signer_s=0.8715 funders_s=0.2456 ratio=0.7109 min_ratio=0.7087 max_ratio=0.7119
+FUNDING_BLOCK shape=c2-op1 n=19873 inputs=19874 total_s=1.1131 setup_s=0.0015 signer_s=0.8624 funders_s=0.2491 ratio=0.7074 min_ratio=0.7046 max_ratio=0.7104
+FUNDING_BLOCK shape=v2 n=24209 inputs=24210 total_s=1.1551 setup_s=0.0014 signer_s=1.1484 funders_s=0.0053 ratio=0.7341 min_ratio=0.7270 max_ratio=0.7370
+FUNDING_BLOCK shape=p2a n=24209 inputs=24210 total_s=1.1426 setup_s=0.0015 signer_s=1.1362 funders_s=0.0049 ratio=0.7262 min_ratio=0.7253 max_ratio=0.7373
+FUNDING_BLOCK shape=c4-path128 n=929 inputs=930 total_s=1.1466 setup_s=0.0001 signer_s=1.1277 funders_s=0.0188 ratio=0.7287 min_ratio=0.7273 max_ratio=0.7329
+FUNDING_BLOCK shape=c2-success-path128 n=929 inputs=930 total_s=1.1396 setup_s=0.0001 signer_s=1.1126 funders_s=0.0269 ratio=0.7242 min_ratio=0.7239 max_ratio=0.7251
+FUNDING_BLOCK shape=c2-success-stack n=1997214 inputs=2 total_s=1.2201 setup_s=0.0012 signer_s=1.1615 funders_s=0.0574 ratio=0.7754 min_ratio=0.7719 max_ratio=0.7836
+FUNDING_BLOCK shape=v2-stack n=1997232 inputs=2 total_s=1.1658 setup_s=0.0011 signer_s=1.1646 funders_s=0.0000 ratio=0.7409 min_ratio=0.7393 max_ratio=0.7455
+FUNDING_BLOCK shape=c2-success-nops n=3994428 inputs=2 total_s=1.1520 setup_s=0.0000 signer_s=1.1346 funders_s=0.0174 ratio=0.7321 min_ratio=0.7235 max_ratio=0.7364
+FUNDING_BLOCK shape=c2-success-macros n=1997214 inputs=2 total_s=1.1807 setup_s=0.0000 signer_s=1.1551 funders_s=0.0256 ratio=0.7504 min_ratio=0.7489 max_ratio=0.7606
+  pre-v2 worst:           OP_RIPEMD160 520B: 1.579 s
+  v2 projected worst:     OP_DIV 64KBx16KB: 1.969 s (1.73x schnorr, 1.25x pre-v2, 1.00x v2 measured)
+CONTENTION layout=shared transactions=1 spenders=14 workers=0 total_s=0.4165 ratio=0.2647 min_ratio=0.2642 max_ratio=0.2672
+CONTENTION layout=shared transactions=1 spenders=14 workers=1 total_s=0.3026 ratio=0.1923 min_ratio=0.1732 max_ratio=0.2036
+CONTENTION layout=shared transactions=1 spenders=14 workers=3 total_s=2.4062 ratio=1.5292 min_ratio=1.4776 max_ratio=1.7255
+CONTENTION layout=shared transactions=1 spenders=14 workers=7 total_s=4.9696 ratio=3.1583 min_ratio=2.6208 max_ratio=3.6041
+CONTENTION layout=shared transactions=1 spenders=14 workers=13 total_s=23.5036 ratio=14.9372 min_ratio=14.7952 max_ratio=15.0236
+CONTENTION layout=split transactions=14 spenders=14 workers=0 total_s=0.4062 ratio=0.2582 min_ratio=0.2508 max_ratio=0.2673
+CONTENTION layout=split transactions=14 spenders=14 workers=1 total_s=0.2073 ratio=0.1317 min_ratio=0.1311 max_ratio=0.1432
+CONTENTION layout=split transactions=14 spenders=14 workers=3 total_s=0.1195 ratio=0.0760 min_ratio=0.0756 max_ratio=0.0787
+CONTENTION layout=split transactions=14 spenders=14 workers=7 total_s=0.0632 ratio=0.0402 min_ratio=0.0387 max_ratio=0.0682
+CONTENTION layout=split transactions=14 spenders=14 workers=13 total_s=0.1158 ratio=0.0736 min_ratio=0.0386 max_ratio=0.0853
+CONNECT_BLOCK shape=c4 coins=memory inputs=19974 signatures=58823 total_s=0.9754 ratio=0.6199 min_ratio=0.6175 max_ratio=0.6216
+CONNECT_BLOCK shape=c4 coins=leveldb inputs=19974 signatures=58823 total_s=1.0053 ratio=0.6389 min_ratio=0.6221 max_ratio=0.6398
+CONNECT_BLOCK shape=c2-op1 coins=memory inputs=19874 signatures=58852 total_s=0.9665 ratio=0.6142 min_ratio=0.6102 max_ratio=0.6200
+CONNECT_BLOCK shape=c2-op1 coins=leveldb inputs=19874 signatures=58852 total_s=0.9842 ratio=0.6255 min_ratio=0.6178 max_ratio=0.6274
+CONNECT_BLOCK shape=v2 coins=memory inputs=24210 signatures=78415 total_s=1.1697 ratio=0.7434 min_ratio=0.7362 max_ratio=0.7478
+CONNECT_BLOCK shape=v2 coins=leveldb inputs=24210 signatures=78415 total_s=1.1704 ratio=0.7438 min_ratio=0.7410 max_ratio=0.7468
+CONNECT_BLOCK shape=p2a coins=memory inputs=24210 signatures=78415 total_s=1.1574 ratio=0.7355 min_ratio=0.7281 max_ratio=0.7363
+CONNECT_BLOCK shape=p2a coins=leveldb inputs=24210 signatures=78415 total_s=1.1731 ratio=0.7455 min_ratio=0.7429 max_ratio=0.7548
+CONNECT_BLOCK shape=c2-success-stack coins=memory inputs=2 signatures=78417 total_s=1.1804 ratio=0.7502 min_ratio=0.7474 max_ratio=0.7583
+CONNECT_BLOCK shape=c2-success-stack coins=leveldb inputs=2 signatures=78417 total_s=1.1826 ratio=0.7516 min_ratio=0.7471 max_ratio=0.7535
+end 2026-10-06T14:43:32Z
+EXIT=0
+
+[exited with code 0]

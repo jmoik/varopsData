@@ -1,0 +1,16 @@
+start 2026-10-06T14:18:06Z f20e116670e70e00fce38326f1ead1ee32655227 load: 0.36, 0.09, 0.03
+reference 3.483718692
+FUNDING_BLOCK shape=c4 n=19973 inputs=19974 total_s=2.9153 setup_s=0.0071 signer_s=2.2977 funders_s=0.6105 ratio=0.8368 min_ratio=0.8367 max_ratio=0.8383
+FUNDING_BLOCK shape=c2-op1 n=19873 inputs=19874 total_s=2.8976 setup_s=0.0071 signer_s=2.2794 funders_s=0.6111 ratio=0.8318 min_ratio=0.8317 max_ratio=0.8319
+FUNDING_BLOCK shape=v2 n=24209 inputs=24210 total_s=3.0104 setup_s=0.0058 signer_s=2.9987 funders_s=0.0060 ratio=0.8641 min_ratio=0.8639 max_ratio=0.8655
+FUNDING_BLOCK shape=p2a n=24209 inputs=24210 total_s=3.0211 setup_s=0.0058 signer_s=3.0092 funders_s=0.0060 ratio=0.8672 min_ratio=0.8670 max_ratio=0.8673
+FUNDING_BLOCK shape=c4-path128 n=929 inputs=930 total_s=3.0665 setup_s=0.0003 signer_s=2.9897 funders_s=0.0765 ratio=0.8802 min_ratio=0.8802 max_ratio=0.8804
+FUNDING_BLOCK shape=c2-success-path128 n=929 inputs=930 total_s=3.0661 setup_s=0.0003 signer_s=2.9392 funders_s=0.1265 ratio=0.8801 min_ratio=0.8799 max_ratio=0.8806
+FUNDING_BLOCK shape=c2-success-stack n=1997214 inputs=2 total_s=3.1927 setup_s=0.0067 signer_s=3.0686 funders_s=0.1175 ratio=0.9165 min_ratio=0.9163 max_ratio=0.9166
+FUNDING_BLOCK shape=v2-stack n=1997232 inputs=2 total_s=3.0989 setup_s=0.0066 signer_s=3.0922 funders_s=0.0000 ratio=0.8895 min_ratio=0.8893 max_ratio=0.8896
+FUNDING_BLOCK shape=c2-success-nops n=3994428 inputs=2 total_s=3.0288 setup_s=0.0000 signer_s=2.9768 funders_s=0.0520 ratio=0.8694 min_ratio=0.8692 max_ratio=0.8697
+FUNDING_BLOCK shape=c2-success-macros n=1997214 inputs=2 total_s=3.1259 setup_s=0.0000 signer_s=3.0646 funders_s=0.0613 ratio=0.8973 min_ratio=0.8970 max_ratio=0.8996
+  pre-v2 worst:           OP_HASH256 520B: 3.484 s
+  v2 projected worst:     OP_MOD 64KBx16KB: 3.717 s (1.26x schnorr, 1.07x pre-v2, 1.00x v2 measured)
+end 2026-10-06T14:49:02Z
+EXIT=0

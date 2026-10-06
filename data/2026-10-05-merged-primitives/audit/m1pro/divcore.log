@@ -1,0 +1,81 @@
+SHA256 backend: arm_shani(1way;2way)
+Clock tick: 41 ns
+Reference: 2.25577 s (Script evaluation only).
+  Pass 1/5
+  Progress: pass 1/5, 0 fixtures complete; 0 s elapsed; measuring DIVCORE/1/1/17/DIV/normalized
+  DIVCORE: 100 fixtures measured
+  DIVCORE: 200 fixtures measured
+  DIVCORE: 300 fixtures measured
+  DIVCORE: 400 fixtures measured
+  DIVCORE: 500 fixtures measured
+  Progress: pass 1/5, 559 fixtures complete; 5 s elapsed; measuring DIVCORE/1032/8/17/MOD/top-clear
+  DIVCORE: 600 fixtures measured
+  DIVCORE: 700 fixtures measured
+  DIVCORE: 800 fixtures measured
+  Progress: pass 1/5, 883 fixtures complete; 10 s elapsed; measuring DIVCORE/128/64/127/MOD/top-one
+  DIVCORE: 900 fixtures measured
+  DIVCORE: 1000 fixtures measured
+  DIVCORE: 1100 fixtures measured
+  Progress: pass 1/5, 1113 fixtures complete; 15 s elapsed; measuring DIVCORE/288/256/17/MOD/padded
+  DIVCORE: 1200 fixtures measured
+  Pass 2/5
+  Progress: pass 2/5, 0 fixtures complete; 18 s elapsed; measuring DIVCORE/1/1/17/DIV/normalized
+  DIVCORE: 100 fixtures measured
+  DIVCORE: 200 fixtures measured
+  DIVCORE: 300 fixtures measured
+  DIVCORE: 400 fixtures measured
+  DIVCORE: 500 fixtures measured
+  DIVCORE: 600 fixtures measured
+  DIVCORE: 700 fixtures measured
+  DIVCORE: 800 fixtures measured
+  DIVCORE: 900 fixtures measured
+  Progress: pass 2/5, 930 fixtures complete; 23 s elapsed; measuring DIVCORE/500000/64/17/DIV/top-one
+  DIVCORE: 1000 fixtures measured
+  DIVCORE: 1100 fixtures measured
+  DIVCORE: 1200 fixtures measured
+  Pass 3/5
+  Progress: pass 3/5, 0 fixtures complete; 25 s elapsed; measuring DIVCORE/1/1/17/DIV/normalized
+  DIVCORE: 100 fixtures measured
+  DIVCORE: 200 fixtures measured
+  DIVCORE: 300 fixtures measured
+  DIVCORE: 400 fixtures measured
+  DIVCORE: 500 fixtures measured
+  DIVCORE: 600 fixtures measured
+  DIVCORE: 700 fixtures measured
+  DIVCORE: 800 fixtures measured
+  DIVCORE: 900 fixtures measured
+  Progress: pass 3/5, 930 fixtures complete; 30 s elapsed; measuring DIVCORE/500000/64/17/DIV/top-one
+  DIVCORE: 1000 fixtures measured
+  DIVCORE: 1100 fixtures measured
+  DIVCORE: 1200 fixtures measured
+  Pass 4/5
+  Progress: pass 4/5, 0 fixtures complete; 33 s elapsed; measuring DIVCORE/1/1/17/DIV/normalized
+  DIVCORE: 100 fixtures measured
+  DIVCORE: 200 fixtures measured
+  DIVCORE: 300 fixtures measured
+  DIVCORE: 400 fixtures measured
+  DIVCORE: 500 fixtures measured
+  DIVCORE: 600 fixtures measured
+  DIVCORE: 700 fixtures measured
+  DIVCORE: 800 fixtures measured
+  DIVCORE: 900 fixtures measured
+  Progress: pass 4/5, 930 fixtures complete; 38 s elapsed; measuring DIVCORE/500000/64/17/DIV/top-one
+  DIVCORE: 1000 fixtures measured
+  DIVCORE: 1100 fixtures measured
+  DIVCORE: 1200 fixtures measured
+  Pass 5/5
+  Progress: pass 5/5, 0 fixtures complete; 41 s elapsed; measuring DIVCORE/1/1/17/DIV/normalized
+  DIVCORE: 100 fixtures measured
+  DIVCORE: 200 fixtures measured
+  DIVCORE: 300 fixtures measured
+  DIVCORE: 400 fixtures measured
+  DIVCORE: 500 fixtures measured
+  DIVCORE: 600 fixtures measured
+  DIVCORE: 700 fixtures measured
+  DIVCORE: 800 fixtures measured
+  DIVCORE: 900 fixtures measured
+  Progress: pass 5/5, 930 fixtures complete; 46 s elapsed; measuring DIVCORE/500000/64/17/DIV/top-one
+  DIVCORE: 1000 fixtures measured
+  DIVCORE: 1100 fixtures measured
+  DIVCORE: 1200 fixtures measured
+Wrote /Users/julian/Code/bitcoin/audit/divcore.csv, /Users/julian/Code/bitcoin/audit/divcore.csv.samples.csv and /Users/julian/Code/bitcoin/audit/divcore.csv.produce.csv

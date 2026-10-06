@@ -1,0 +1,10 @@
+CONNECT_BLOCK shape=c4 coins=memory inputs=19974 weight=3997161 signatures=58823 total_s=0.9754 ratio=0.6199 min_ratio=0.6175 max_ratio=0.6216
+CONNECT_BLOCK shape=c4 coins=leveldb inputs=19974 weight=3997161 signatures=58823 total_s=1.0053 ratio=0.6389 min_ratio=0.6221 max_ratio=0.6398
+CONNECT_BLOCK shape=c2-op1 coins=memory inputs=19874 weight=3997092 signatures=58852 total_s=0.9665 ratio=0.6142 min_ratio=0.6102 max_ratio=0.6200
+CONNECT_BLOCK shape=c2-op1 coins=leveldb inputs=19874 weight=3997092 signatures=58852 total_s=0.9842 ratio=0.6255 min_ratio=0.6178 max_ratio=0.6274
+CONNECT_BLOCK shape=v2 coins=memory inputs=24210 weight=3996960 signatures=78415 total_s=1.1697 ratio=0.7434 min_ratio=0.7362 max_ratio=0.7478
+CONNECT_BLOCK shape=v2 coins=leveldb inputs=24210 weight=3996960 signatures=78415 total_s=1.1704 ratio=0.7438 min_ratio=0.7410 max_ratio=0.7468
+CONNECT_BLOCK shape=p2a coins=memory inputs=24210 weight=3996960 signatures=78415 total_s=1.1574 ratio=0.7355 min_ratio=0.7281 max_ratio=0.7363
+CONNECT_BLOCK shape=p2a coins=leveldb inputs=24210 weight=3996960 signatures=78415 total_s=1.1731 ratio=0.7455 min_ratio=0.7429 max_ratio=0.7548
+CONNECT_BLOCK shape=c2-success-stack coins=memory inputs=2 weight=3997104 signatures=78417 total_s=1.1804 ratio=0.7502 min_ratio=0.7474 max_ratio=0.7583
+CONNECT_BLOCK shape=c2-success-stack coins=leveldb inputs=2 weight=3997104 signatures=78417 total_s=1.1826 ratio=0.7516 min_ratio=0.7471 max_ratio=0.7535

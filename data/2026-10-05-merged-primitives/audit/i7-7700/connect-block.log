@@ -1,0 +1,3 @@
+SHA256 backend: sse4(1way);sse41(4way);avx2(8way)
+Clock tick: 17 ns
+Reference: 3.48372 s (Script evaluation only).

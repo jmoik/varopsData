@@ -96,3 +96,62 @@ signatures instead of 78,400. [`sigcheck/`](sigcheck/) repeats both checks at gs
 
 Everything is below 1.0x. The M1 Pro started under load from other sessions (load 7, falling to 3).
 
+
+## Audit: easy operands and work outside scripts
+
+The TWEAK fixture was too cheap because of its operand values, and the funding block exceeded the bound because of
+per-input work outside scripts. [`audit/`](audit/) looks for more of both on three machines: the funding shapes,
+complete DIV/MOD scripts and DIVCORE at varopsData `e3e5720` and gsr `f20e116670` (M4 Pro: `d4121fe10f`),
+`ConnectBlock` and contention at `fad70bc` ([`audit.sh`](audit/audit.sh), [`audit2.sh`](audit/audit2.sh)).
+Ratios are to the same run's slowest pre-v2 script.
+
+**Easy operands.** One family takes a costly path that no fixture used. With a divisor of all-ones limbs under a top limb
+of 2^63 and a dividend d·(Q + 1) − 1 whose quotient limbs are all 2^64 − 2, algorithm D adds the divisor back on every
+quotient step but the first (checked against a model of `BigUint::DivMod`). Each step then makes a second pass over the
+divisor, at 1.4–1.8 times the time of the existing patterns. Dense and random operands almost never take this path.
+[`analyze_div.py`](audit/analyze_div.py) compares DIVCORE with `DIV(s, v) = 510 s + 33 s v` at 1.0x the reference:
+
+| Machine | Add-back script, 64KBx16KB | Other DIV/MOD scripts | DIVCORE add-back / charge | Other DIVCORE patterns / charge |
+|---|---|---|---|---|
+| Intel i7-7700 | **1.07x** | ≤ 0.78x | **1.03x** | ≤ 1.00x (128/128 MOD top-one) |
+| Apple M1 Pro | **1.16x** | ≤ 0.67x | **1.15x** | ≤ 0.74x |
+| Apple M4 Pro | **1.25x** | ≤ 0.72x | **1.25x** | ≤ 0.75x |
+
+At the widest divisors an add-back step costs 38–41 varops per divisor limb at 1.0x (M1 Pro, M4 Pro) against the cell
+rate of 33; fitted at 0.9x, the cell rate would be about 46–47. A refit needs the add-back fixtures on all six machines.
+The fit also predates the BigUint rewrite, and on the i7-7700 an existing pattern reaches 1.00x of the charge. Every
+other fixture in the audit either uses its family's most expensive values or depends on values by a few percent at
+most (signature and tweak scalars).
+
+**Work outside scripts.** The funding shapes of `--funding-block` are validated as `CheckInputScripts` does, single-threaded;
+`--connect-block` connects the same blocks through `ConnectBlock` on a regtest chain, with the spent coins in the
+coins cache or evicted to LevelDB, and its script checks on the test setup's two worker threads:
+
+| Shape | i7-7700 | M1 Pro | M4 Pro | ConnectBlock (worst of memory, LevelDB): i7 / M1 / M4 |
+|---|---|---|---|---|
+| 0xc4 / 0xC2 `OP_1` minimal leaves | 0.84x / 0.83x | 0.92x / 0.92x | 0.71x / 0.71x | 0.73x / 0.80x / 0.64x |
+| witness v2 / P2A, empty witness, 24,209 inputs | 0.86x / 0.87x | 0.94x / 0.95x | 0.73x / 0.73x | 0.88x / 0.96x / 0.75x |
+| 128-node control blocks, 0xc4 / 0xC2 OP_SUCCESS | 0.88x / 0.88x | 0.95x / 0.94x | 0.73x / 0.72x | – |
+| 0xC2 OP_SUCCESS, 2M one-byte stack elements | 0.92x | **0.985x** | 0.78x | 0.88x / 0.96x / 0.75x |
+| the same witness on a v2 input | 0.89x | 0.97x | 0.74x | 0.89x / 0.97x / – |
+| 0xC2 OP_SUCCESS after 4M OP_NOPs / 2M empty macros | 0.87x / 0.90x | 0.94x / 0.98x | 0.73x / 0.75x | macros: 0.88x / 0.96x / – |
+
+Nothing reaches 1.0x. Pure funding inputs have no commitment check and fund 78,415 signatures; their coin lookups add
+about 1% in `ConnectBlock`. The 0xC2 OP_SUCCESS leaf copies its initial stack before the OP_SUCCESS prescan finds the
+opcode, uncharged (1.5% over the v2 input on the M1 Pro), and a 0xC2 script-path spend computes its Merkle path twice;
+both are implementation choices. The tightest margins are on the M1 Pro, whose signature loop alone runs at 0.94x.
+
+**Shared-budget contention.** `--contention` spends a block's budget on 14 Tapleaf 0xC2 OP_NOP loops, as inputs of one
+transaction sharing its budget or as 14 transactions, through a script-check queue as `ConnectBlock` uses it:
+
+| Worker threads | i7-7700 (4 cores, 8 threads) | M1 Pro (8 cores) | M4 Pro (14 cores) |
+|---|---|---|---|
+| 0, shared / split | 0.37x / 0.37x | 0.28x / 0.28x | 0.26x / 0.26x |
+| 3, shared / split | **1.22x** / 0.11x | **1.92x** / 0.15x | **1.53x** / 0.08x |
+| 7, shared / split | **1.82x** / 0.10x | **4.57x** / 0.17x | **3.16x** / 0.04x |
+| 13, shared / split | | | **14.9x** / 0.07x |
+
+Every opcode deducts from the transaction's one atomic counter, so inputs of one transaction on different threads
+contend for its cache line. Serially the block takes a third of the reference; in parallel, with Core's default of one
+script-check thread per core, it takes up to 15 times the reference. The bound assumes single-threaded evaluation, so
+validating a transaction's budget-charging inputs on one thread would remove the contention without changing consensus.

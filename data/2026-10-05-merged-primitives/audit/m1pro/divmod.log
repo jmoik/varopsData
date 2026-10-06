@@ -1,0 +1,16 @@
+Outcome verification passed: 604 candidate cases.
+Exact-budget/budget-minus-one verification passed: 589 successful cases across 78 opcode families.
+
+== VAROPS BENCHMARK SUMMARY ==
+  cases:                  189/189 completed x 3 stable rounds
+  schnorr baseline:       80,000 checks: 2.151 s
+  pre-v2 worst:           OP_RIPEMD160 520B: 2.258 s
+  v2 measured worst:      OP_DIV 64KBx16KB: 2.601 s
+  v2 projected worst:     OP_DIV 64KBx16KB: 2.609 s (1.21x schnorr, 1.16x pre-v2, 1.00x v2 measured)
+
+  top 5 new-v2 cases (measured or projected):
+  1. 2.609 s (projected, stable): gsr-tapscript-v2/OP_DIV/OP_2DUP+OP_DIV+OP_DROP/divmod-scale-tail/64KBx16KB/asymmetric-quarter-add-back/No error
+  2. 2.609 s (projected, stable): gsr-tapscript-v2/OP_MOD/OP_2DUP+OP_MOD+OP_DROP/divmod-scale-tail/64KBx16KB/asymmetric-quarter-add-back/No error
+  3. 1.504 s (projected, stable): gsr-tapscript-v2/OP_DIV/OP_2DUP+OP_DIV+OP_DROP/divmod-preserve/64KBx64KB/divisor-half-zero-padded/No error
+  4. 1.502 s (projected, stable): gsr-tapscript-v2/OP_MOD/OP_2DUP+OP_MOD+OP_DROP/divmod-preserve/64KBx64KB/divisor-half-zero-padded/No error
+  5. 1.502 s (projected, stable): gsr-tapscript-v2/OP_DIV/OP_2DUP+OP_DIV+OP_DROP/divmod-scale-tail/64KBx16KB/asymmetric-quarter-top-clear/No error

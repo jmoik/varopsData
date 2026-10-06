@@ -1,0 +1,10 @@
+CONTENTION layout=shared transactions=1 spenders=14 workers=0 weight=3995996 budget=39952960000 consumed=39723955656 total_s=0.4165 ratio=0.2647 min_ratio=0.2642 max_ratio=0.2672
+CONTENTION layout=shared transactions=1 spenders=14 workers=1 weight=3995996 budget=39952960000 consumed=39723955656 total_s=0.3026 ratio=0.1923 min_ratio=0.1732 max_ratio=0.2036
+CONTENTION layout=shared transactions=1 spenders=14 workers=3 weight=3995996 budget=39952960000 consumed=39723955656 total_s=2.4062 ratio=1.5292 min_ratio=1.4776 max_ratio=1.7255
+CONTENTION layout=shared transactions=1 spenders=14 workers=7 weight=3995996 budget=39952960000 consumed=39723955656 total_s=4.9696 ratio=3.1583 min_ratio=2.6208 max_ratio=3.6041
+CONTENTION layout=shared transactions=1 spenders=14 workers=13 weight=3995996 budget=39952960000 consumed=39723955656 total_s=23.5036 ratio=14.9372 min_ratio=14.7952 max_ratio=15.0236
+CONTENTION layout=split transactions=14 spenders=14 workers=0 weight=3995936 budget=39952360000 consumed=39723955656 total_s=0.4062 ratio=0.2582 min_ratio=0.2508 max_ratio=0.2673
+CONTENTION layout=split transactions=14 spenders=14 workers=1 weight=3995936 budget=39952360000 consumed=39723955656 total_s=0.2073 ratio=0.1317 min_ratio=0.1311 max_ratio=0.1432
+CONTENTION layout=split transactions=14 spenders=14 workers=3 weight=3995936 budget=39952360000 consumed=39723955656 total_s=0.1195 ratio=0.0760 min_ratio=0.0756 max_ratio=0.0787
+CONTENTION layout=split transactions=14 spenders=14 workers=7 weight=3995936 budget=39952360000 consumed=39723955656 total_s=0.0632 ratio=0.0402 min_ratio=0.0387 max_ratio=0.0682
+CONTENTION layout=split transactions=14 spenders=14 workers=13 weight=3995936 budget=39952360000 consumed=39723955656 total_s=0.1158 ratio=0.0736 min_ratio=0.0386 max_ratio=0.0853

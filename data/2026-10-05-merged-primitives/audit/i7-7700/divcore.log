@@ -1,0 +1,87 @@
+SHA256 backend: sse4(1way);sse41(4way);avx2(8way)
+Clock tick: 17 ns
+Reference: 3.48372 s (Script evaluation only).
+  Pass 1/5
+  Progress: pass 1/5, 0 fixtures complete; 0 s elapsed; measuring DIVCORE/1/1/17/DIV/normalized
+  DIVCORE: 100 fixtures measured
+  DIVCORE: 200 fixtures measured
+  Progress: pass 1/5, 271 fixtures complete; 5 s elapsed; measuring DIVCORE/6/3/127/MOD/top-clear
+  DIVCORE: 300 fixtures measured
+  DIVCORE: 400 fixtures measured
+  DIVCORE: 500 fixtures measured
+  Progress: pass 1/5, 539 fixtures complete; 10 s elapsed; measuring DIVCORE/40/8/17/MOD/normalized
+  DIVCORE: 600 fixtures measured
+  DIVCORE: 700 fixtures measured
+  Progress: pass 1/5, 770 fixtures complete; 15 s elapsed; measuring DIVCORE/128/32/17/DIV/padded
+  DIVCORE: 800 fixtures measured
+  DIVCORE: 900 fixtures measured
+  Progress: pass 1/5, 990 fixtures complete; 20 s elapsed; measuring DIVCORE/160/128/17/DIV/padded
+  DIVCORE: 1000 fixtures measured
+  DIVCORE: 1100 fixtures measured
+  DIVCORE: 1200 fixtures measured
+  Progress: pass 1/5, 1240 fixtures complete; 25 s elapsed; measuring DIVCORE/1056/1024/127/DIV/top-clear
+  Pass 2/5
+  Progress: pass 2/5, 0 fixtures complete; 26 s elapsed; measuring DIVCORE/1/1/17/DIV/normalized
+  DIVCORE: 100 fixtures measured
+  DIVCORE: 200 fixtures measured
+  DIVCORE: 300 fixtures measured
+  DIVCORE: 400 fixtures measured
+  DIVCORE: 500 fixtures measured
+  DIVCORE: 600 fixtures measured
+  Progress: pass 2/5, 645 fixtures complete; 31 s elapsed; measuring DIVCORE/48/16/17/MOD/top-clear
+  DIVCORE: 700 fixtures measured
+  DIVCORE: 800 fixtures measured
+  DIVCORE: 900 fixtures measured
+  DIVCORE: 1000 fixtures measured
+  DIVCORE: 1100 fixtures measured
+  Progress: pass 2/5, 1166 fixtures complete; 36 s elapsed; measuring DIVCORE/1280/256/17/DIV/padded
+  DIVCORE: 1200 fixtures measured
+  Pass 3/5
+  Progress: pass 3/5, 0 fixtures complete; 37 s elapsed; measuring DIVCORE/1/1/17/DIV/normalized
+  DIVCORE: 100 fixtures measured
+  DIVCORE: 200 fixtures measured
+  DIVCORE: 300 fixtures measured
+  DIVCORE: 400 fixtures measured
+  DIVCORE: 500 fixtures measured
+  DIVCORE: 600 fixtures measured
+  Progress: pass 3/5, 645 fixtures complete; 42 s elapsed; measuring DIVCORE/48/16/17/MOD/top-clear
+  DIVCORE: 700 fixtures measured
+  DIVCORE: 800 fixtures measured
+  DIVCORE: 900 fixtures measured
+  DIVCORE: 1000 fixtures measured
+  DIVCORE: 1100 fixtures measured
+  Progress: pass 3/5, 1166 fixtures complete; 47 s elapsed; measuring DIVCORE/1280/256/17/DIV/padded
+  DIVCORE: 1200 fixtures measured
+  Pass 4/5
+  Progress: pass 4/5, 0 fixtures complete; 48 s elapsed; measuring DIVCORE/1/1/17/DIV/normalized
+  DIVCORE: 100 fixtures measured
+  DIVCORE: 200 fixtures measured
+  DIVCORE: 300 fixtures measured
+  DIVCORE: 400 fixtures measured
+  DIVCORE: 500 fixtures measured
+  DIVCORE: 600 fixtures measured
+  Progress: pass 4/5, 644 fixtures complete; 53 s elapsed; measuring DIVCORE/48/16/17/DIV/top-clear
+  DIVCORE: 700 fixtures measured
+  DIVCORE: 800 fixtures measured
+  DIVCORE: 900 fixtures measured
+  DIVCORE: 1000 fixtures measured
+  DIVCORE: 1100 fixtures measured
+  Progress: pass 4/5, 1164 fixtures complete; 58 s elapsed; measuring DIVCORE/1280/256/17/DIV/top-one
+  DIVCORE: 1200 fixtures measured
+  Pass 5/5
+  Progress: pass 5/5, 0 fixtures complete; 59 s elapsed; measuring DIVCORE/1/1/17/DIV/normalized
+  DIVCORE: 100 fixtures measured
+  DIVCORE: 200 fixtures measured
+  DIVCORE: 300 fixtures measured
+  DIVCORE: 400 fixtures measured
+  DIVCORE: 500 fixtures measured
+  DIVCORE: 600 fixtures measured
+  Progress: pass 5/5, 644 fixtures complete; 64 s elapsed; measuring DIVCORE/48/16/17/DIV/top-clear
+  DIVCORE: 700 fixtures measured
+  DIVCORE: 800 fixtures measured
+  DIVCORE: 900 fixtures measured
+  DIVCORE: 1000 fixtures measured
+  DIVCORE: 1100 fixtures measured
+  Progress: pass 5/5, 1164 fixtures complete; 69 s elapsed; measuring DIVCORE/1280/256/17/DIV/top-one
+  DIVCORE: 1200 fixtures measured
+Wrote /root/audit/divcore.csv, /root/audit/divcore.csv.samples.csv and /root/audit/divcore.csv.produce.csv
