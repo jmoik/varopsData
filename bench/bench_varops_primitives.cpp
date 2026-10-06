@@ -72,6 +72,7 @@
 #include <memory>
 #include <ratio>
 #include <optional>
+#include <random>
 #include <set>
 #include <span>
 #include <sstream>
@@ -496,10 +497,13 @@ struct TransactionFixture {
     Bytes control = Bytes(33, 0);
     ScriptExecutionData context;
 
-    //! One spending input with `witnesses` empty witness items, `inputs - 1` further
-    //! inputs and `outputs` outputs. Extra inputs and outputs have empty scripts, so
+    //! One spending input, `inputs - 1` further inputs and `outputs` outputs. Input
+    //! `witness_input` has `witnesses` witness items of `item_bytes` each; scattered
+    //! items are shuffled against their allocation order, so reading them in witness
+    //! order does not walk the heap. Extra inputs and outputs have empty scripts, so
     //! selecting them does per-record work with the least payload to copy.
-    explicit TransactionFixture(size_t witnesses = 0, size_t inputs = 1, size_t outputs = 1)
+    explicit TransactionFixture(size_t witnesses = 0, size_t inputs = 1, size_t outputs = 1,
+                                size_t item_bytes = 0, size_t witness_input = 0, bool scatter = false)
     {
         Require(inputs > 0 && outputs > 0, "transaction fixture needs an input and an output");
         tx.version = 2;
@@ -509,7 +513,10 @@ struct TransactionFixture {
             tx.vin[i].nSequence = 144;
             tx.vin[i].prevout.n = static_cast<uint32_t>(i);
         }
-        tx.vin[0].scriptWitness.stack.resize(witnesses); // All empty: item work, no payload copying.
+        Require(witness_input < inputs, "witness input out of range");
+        auto& items{tx.vin[witness_input].scriptWitness.stack};
+        items.assign(witnesses, Bytes(item_bytes, 0x01));
+        if (scatter) std::shuffle(items.begin(), items.end(), std::mt19937_64{witnesses});
         CScript p2tr;
         p2tr << OP_1 << Bytes(32, 1);
         tx.vout.emplace_back(1000, p2tr);
@@ -1264,7 +1271,13 @@ void MeasureItems(Runner& r)
         std::function<std::array<size_t, 3>(size_t)> shape;
         //! Charged units for n records.
         std::function<size_t(size_t)> units;
+        //! Witness item size, the input holding the items (a SINGLE scope operand
+        //! below the selector when nonzero) and whether the items are scattered.
+        size_t item_bytes{0};
+        size_t witness_input{0};
+        bool scatter{false};
     };
+    const std::vector<size_t> one_byte_items{8192, 65536, 262144, 1048576, 1950000};
     const std::vector<size_t> items{0, 1, 2, 8, 32, 128, 512, 2048, 4096, 8192, 12288, 16384, 24576, 30000};
     const std::vector<Kind> kinds{
         // Input 0's witness items: a count plus one value per item.
@@ -1277,6 +1290,11 @@ void MeasureItems(Runner& r)
         {"outputs", {0, 1, 0, 0x02, 0, 0x03}, {1, 8, 128, 2048, 16384, 65536, 100000}, [](size_t n) { return std::array<size_t, 3>{0, 1, n}; }, [](size_t n) { return 2 * n; }},
         // Every input field of every input, none with witness items: eight values each.
         {"inputs", {0, 1, 0, 0x20, 0xff, 0}, {1, 8, 128, 2048, 8192, 24000}, [](size_t n) { return std::array<size_t, 3>{0, n, 1}; }, [](size_t n) { return 8 * n; }},
+        // Another input's one-byte witness items, as many as one result holds:
+        // two collated bytes per item unit. Scattered items defeat the allocator's
+        // sequential layout, as witness items deserialized among other allocations may.
+        {"1b_items", {0, 1, 0, 0x30, 0x80, 0}, one_byte_items, [](size_t n) { return std::array<size_t, 3>{n, 2, 1}; }, [](size_t n) { return n + 1; }, 1, 1, false},
+        {"1b_items_scattered", {0, 1, 0, 0x30, 0x80, 0}, one_byte_items, [](size_t n) { return std::array<size_t, 3>{n, 2, 1}; }, [](size_t n) { return n + 1; }, 1, 1, true},
     };
     for (const Kind& kind : kinds) {
         for (bool collate : {true, false}) {
@@ -1285,9 +1303,10 @@ void MeasureItems(Runner& r)
             selector[1] = static_cast<unsigned char>(collate ? selector[1] | 1 : selector[1] & ~1);
             for (size_t n : kind.records) {
                 const auto [witnesses, inputs, outputs]{kind.shape(n)};
-                TransactionFixture fixture(witnesses, inputs, outputs);
+                TransactionFixture fixture(witnesses, inputs, outputs, kind.item_bytes, kind.witness_input, kind.scatter);
                 auto checker = fixture.Checker();
-                const std::vector<Bytes> initial{selector};
+                std::vector<Bytes> initial{selector};
+                if (kind.witness_input != 0) initial.insert(initial.begin(), Bytes{static_cast<unsigned char>(kind.witness_input)});
                 const size_t units{kind.units(n)};
                 const std::string label{"SELECT/" + kind.name + "/" + (collate ? "collated/" : "noncollated/") +
                                         util::ToString(n) + "/" + util::ToString(units)};
@@ -1305,11 +1324,12 @@ void MeasureItems(Runner& r)
                     for (const Bytes& output : frame.stack.GetStack())
                         outputs_cost += varops::WriteCost(output.size());
                     const uint64_t charged{DIAGNOSTIC_BUDGET - frame.budget.Remaining()};
-                    Require(charged == varops::BaseCost() + varops::TxSelectCost(units) + outputs_cost,
+                    const uint64_t operand_cost{kind.witness_input != 0 ? varops::ReadCost(1) : 0};
+                    Require(charged == varops::BaseCost() + operand_cost + varops::TxSelectCost(units) + outputs_cost,
                             "OP_TX fixture unit count mismatch: " + label);
                 }
                 r.Measure(
-                    label, r.PoolLimit(1024 + (witnesses + inputs + outputs) * 96),
+                    label, r.PoolLimit(1024 + (witnesses * (kind.item_bytes + 2) + inputs + outputs) * 96),
                     [&](size_t count) {
                         std::vector<std::unique_ptr<Frame>> v;
                         v.reserve(count);
@@ -1753,25 +1773,51 @@ void MeasureFundingBlock(const Options& o)
 // Contention: every opcode deducts its charge from the transaction's one
 // budget, so inputs of one transaction validated in parallel share a counter.
 // `spenders` 0xC2 inputs each unroll a macro to about four million OP_NOPs,
-// spending the block's budget at the cheapest charge per deduction. In the
+// spending the block's budget at the cheapest charge per deduction, or to
+// DUP/DROP pairs of one large value, so every worker allocates and frees large
+// buffers at once (script=dup-*). In the
 // shared layout they are inputs of one transaction funded by one large input;
 // in the split layout each is its own transaction with its own funding input,
 // so no budget is shared. Both are validated as ConnectBlock does, through a
 // CCheckQueue with `workers` threads besides the caller.
 constexpr size_t CONTENTION_SPENDERS{14};
 
-std::vector<FundingBlock> BuildContentionBlock(const XOnlyPubKey& internal, bool shared)
+//! What every contention spender runs: a loop of 250 NOPs, or DUP/DROP pairs of
+//! one value of 2^doublings bytes, which allocates and frees that value's
+//! storage on every pair in every worker at once.
+struct ContentionLayout {
+    std::string name;
+    int doublings{-1};
+};
+
+const std::vector<ContentionLayout> CONTENTION_LAYOUTS{{"nop"}, {"dup-64KiB", 16}, {"dup-2MiB", 21}};
+
+std::vector<FundingBlock> BuildContentionBlock(const XOnlyPubKey& internal, bool shared, const ContentionLayout& layout)
 {
     CScript body;
-    for (int i{0}; i < 250; ++i) body << OP_NOP;
+    size_t calls{(MAX_TAPLEAF_0XC2_UNROLLED_SIZE - 1) / 250};
+    CScript setup;
+    if (layout.doublings < 0) {
+        for (int i{0}; i < 250; ++i) body << OP_NOP;
+    } else {
+        setup << OP_1;
+        for (int i{0}; i < layout.doublings; ++i) setup << OP_DUP << OP_CAT;
+        for (int i{0}; i < 125; ++i) body << OP_DUP << OP_DROP;
+        // Stay well inside each spender's share of the block's budget.
+        const uint64_t pair{2 * varops::BaseCost() + varops::WriteCost(size_t{1} << layout.doublings) + varops::MoveCost(1)};
+        const uint64_t share{static_cast<uint64_t>(MAX_BLOCK_WEIGHT - BLOCK_RESERVE_WEIGHT) * varops::BUDGET_PER_WEIGHT_UNIT / CONTENTION_SPENDERS};
+        calls = std::min<size_t>(calls, share * 8 / 10 / (125 * pair));
+    }
     CScript loop;
     loop << OP_MACRO;
     AppendMacroCompactSize(loop, body.size());
     loop.insert(loop.end(), body.begin(), body.end());
-    for (size_t i{0}; i < (MAX_TAPLEAF_0XC2_UNROLLED_SIZE - 1) / body.size(); ++i) {
+    loop.insert(loop.end(), setup.begin(), setup.end());
+    for (size_t i{0}; i < calls; ++i) {
         loop << OP_CALLMACRO;
         AppendMacroCompactSize(loop, 0);
     }
+    if (layout.doublings >= 0) loop << OP_DROP;
     loop << OP_1;
     const LeafOutput spender{LeafOutputAtDepth(internal, TAPROOT_LEAF_0XC2, loop)};
     const CScript program{CScript{} << OP_2 << Bytes{0x01, 0x02}};
@@ -1848,8 +1894,9 @@ void MeasureContention(const Options& o)
     std::cout << std::fixed;
     const int hardware{static_cast<int>(std::max(1U, std::thread::hardware_concurrency()))};
     std::set<int> worker_counts{0, 1, 3, 7, hardware - 1};
+    for (const ContentionLayout& layout : CONTENTION_LAYOUTS)
     for (const bool shared : {true, false}) {
-        const std::vector<FundingBlock> txs{BuildContentionBlock(crypto.pubkey, shared)};
+        const std::vector<FundingBlock> txs{BuildContentionBlock(crypto.pubkey, shared, layout)};
         int64_t weight{0};
         for (const auto& tx : txs) weight += GetTransactionWeight(tx.tx);
         for (const int workers : worker_counts) {
@@ -1862,9 +1909,9 @@ void MeasureContention(const Options& o)
             }
             std::ranges::sort(runs, {}, &BlockRun::seconds);
             const BlockRun& m{runs[runs.size() / 2]};
-            std::cout << strprintf("CONTENTION layout=%s transactions=%u spenders=%u workers=%d weight=%d budget=%u consumed=%u "
+            std::cout << strprintf("CONTENTION layout=%s script=%s transactions=%u spenders=%u workers=%d weight=%d budget=%u consumed=%u "
                                    "total_s=%.4f ratio=%.4f min_ratio=%.4f max_ratio=%.4f\n",
-                                   shared ? "shared" : "split", txs.size(), CONTENTION_SPENDERS, workers, weight, m.budget,
+                                   shared ? "shared" : "split", layout.name, txs.size(), CONTENTION_SPENDERS, workers, weight, m.budget,
                                    m.consumed, m.seconds, m.seconds / o.reference_sec, runs.front().seconds / o.reference_sec,
                                    runs.back().seconds / o.reference_sec);
             std::cout.flush();
@@ -1953,9 +2000,10 @@ void Help()
                  "  --funding-shape S   Time only this funding shape (c4, c2-op1, v2, p2a, c4-path128,\n"
                  "                      c2-success-path128, c2-success-stack, v2-stack, c2-success-nops,\n"
                  "                      c2-success-macros); repeatable\n"
-                 "  --contention        Time a block of 0xC2 OP_NOP loops sharing one transaction's budget against\n"
-                 "                      the same loops in separate transactions, through a script-check queue\n"
-                 "                      with 0 to (cores - 1) worker threads, then exit\n"
+                 "  --contention        Time a block of 0xC2 loops (OP_NOPs, or DUP/DROP of a 64 KiB or 2 MiB value)\n"
+                 "                      sharing one transaction's budget against the same loops in separate\n"
+                 "                      transactions, through a script-check queue with 0 to (cores - 1)\n"
+                 "                      worker threads, then exit\n"
                  "  --connect-block     Time ConnectBlock of each funding-shape block on a regtest chain, with the\n"
                  "                      spent coins in memory and in LevelDB (--funding-shape selects), then exit\n";
 }
