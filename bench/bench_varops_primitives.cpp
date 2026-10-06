@@ -461,7 +461,10 @@ struct Crypto {
         std::array<unsigned char, 32> bytes{};
         Require(secp256k1_xonly_pubkey_serialize(ctx.get(), bytes.data(), &key) == 1, "xonly serialize");
         pubkey = XOnlyPubKey{std::span<const unsigned char>{bytes}};
-        tweak.back() = 1;
+        // A hash-sized tweak: the multiplication walks the tweak's bits, so a small
+        // tweak would cost less than one a script can supply.
+        const std::string seed{"TWEAK"};
+        CSHA256().Write(UCharCast(seed.data()), seed.size()).Finalize(tweak.data());
     }
     std::array<unsigned char, 64> Sign(const Bytes& message) const
     {

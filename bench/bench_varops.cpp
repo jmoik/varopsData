@@ -1643,9 +1643,11 @@ static void AddExtendedPrimitiveCases(std::vector<CaseSpec>& specs, opcodetype o
         }
     } else if (opcode == OP_TWEAKADD) {
         const auto [pubkey, signature]{SignedMessage({})};
-        valtype tweak(32, 0);
-        tweak.back() = 1;
-        AddCase(specs, opcode, HeadlineRole::NEW_GSR, "tweakadd-valid", "32B+32B", "tweak-one",
+        // A hash-sized tweak: the multiplication walks the tweak's bits.
+        valtype tweak(32);
+        const std::string seed{"TWEAK"};
+        CSHA256().Write(UCharCast(seed.data()), seed.size()).Finalize(tweak.data());
+        AddCase(specs, opcode, HeadlineRole::NEW_GSR, "tweakadd-valid", "32B+32B", "hash-tweak",
                 Ops({OP_2DUP, OP_TWEAKADD, OP_DROP}), FixedStack({tweak, pubkey}));
     } else if (opcode == OP_BYTEREV) {
         // The value is reversed in place, so every repetition does the same work.
