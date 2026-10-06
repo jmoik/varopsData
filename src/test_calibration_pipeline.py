@@ -358,6 +358,43 @@ class CalibrationPipelineTests(unittest.TestCase):
         self.assertAlmostEqual(step, 500, delta=5)
         self.assertAlmostEqual(cell, 50, delta=1)
 
+    def test_divcore_patterns_enveloped(self):
+        # A value pattern with a thirteenth of the fixtures and a 1.4x dearer cell sets
+        # the machine's cell, which a joint fit pulls toward the cheaper patterns.
+        points = []
+        for pattern, seeds, cell in (('normalized', 4, 30), ('top-one', 4, 30), ('padded', 4, 30), ('add-back', 1, 42)):
+            for u, v in ((1026, 1), (34, 2), (1032, 8), (80, 16), (1088, 64), (128, 64)):
+                for seed in range(seeds):
+                    point = calibration.fixture(dict(probe=f'DIVCORE/{u}/{v}/{seed}/DIV/{pattern}', ns_per_execution=1))
+                    point['y'] = 500 * point['c'] + cell * point['v']
+                    point['machine'] = 'a'
+                    points.append(point)
+        joint = calibration.fit_divcore(points, 100)
+        curve, patterns = calibration.fit_patterns('DIVCORE', points, 100)
+        self.assertEqual(set(patterns), {'DIV/normalized', 'DIV/top-one', 'DIV/padded', 'DIV/add-back'})
+        self.assertAlmostEqual(curve[2], 42, delta=0.5)
+        self.assertGreater(curve[2], joint[2] + 1)
+        self.assertTrue(all(calibration.predict('DIVCORE', p, curve, {}) >= 0.999 * p['y'] for p in points))
+
+    def test_one_pattern_outside_div_and_mul(self):
+        # Path groups of other families are different operations, weighted in one fit.
+        point = dict(family='WRITE', group='churn', label='WRITE/churn/2000000')
+        self.assertEqual(calibration.operand_pattern(point), '')
+        self.assertEqual(calibration.operand_pattern(dict(family='MULCORE', group='v=2', label='MULCORE/9/2/ones')), 'ones')
+
+    def test_dearest_operand_values(self):
+        # At each size the fit sees the dearer of an operation's value variants, under
+        # the operation's group; other operations and sizes are kept as they are.
+        def point(group, x, y):
+            return dict(family='ARITH', group=group, x=x, y=y, machine='a', label=f'ARITH/{group}/{x}')
+        points = [point('add/equal/carry-chain', 8, 300), point('add/equal/borrow-chain', 8, 200),
+                  point('add/equal/carry-chain', 64, 400), point('add/equal/borrow-chain', 64, 500),
+                  point('up/1', 8, 100), point('up/63', 8, 120), point('invert', 8, 90)]
+        kept = {(p['group'], p['x']): p['y'] for p in calibration.dearest_values(points)}
+        self.assertEqual(kept, {('add/equal', 8): 300, ('add/equal', 64): 500, ('up', 8): 120, ('invert', 8): 90})
+        move = [dict(family='MOVE', group=g, x=9, y=y, machine='a', label='') for g, y in (('empty', 50), ('nonempty', 60))]
+        self.assertEqual([(p['group'], p['y']) for p in calibration.dearest_values(move)], [('rotate', 60)])
+
     def test_mulcore_artifact(self):
         # The frozen model records MULCORE in place of the MUL row kernel.
         data = artifact()

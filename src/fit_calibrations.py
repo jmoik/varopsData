@@ -505,40 +505,118 @@ REFIT_PARTS = ('MULCORE', 'DIVCORE', 'other')
 FIT_PROCESSES = 12
 
 
+def operand_pattern(point):
+    """The operand pattern of a fixture: the operand values of the same operation at the
+    same sizes, which a script chooses. DIVCORE times DIV and MOD with several value
+    patterns and MULCORE with two; every other family's fixtures form one pattern,
+    whose path groups the fit weighs equally."""
+    parts = point['label'].split('/')
+    if point['family'] == 'DIVCORE':
+        # DIVCORE/<dividend>/<divisor>/<seed>/<DIV|MOD>/<pattern>
+        return '/'.join(parts[4:])
+    if point['family'] == 'MULCORE':
+        # MULCORE/<u>/<v>/<pattern>
+        return '/'.join(parts[3:])
+    return ''
+
+
+def value_variant(point):
+    """The operation and operand values of an ARITH, BIT or MOVE fixture whose
+    operation is timed with several values at the same sizes, or None: Add and
+    Subtract with carry- and borrow-chain operands, shifts by 1, 7 and 63 bits, and
+    rotations over empty and nonempty entries."""
+    group = point['group']
+    if point['family'] in {'ARITH', 'BIT'}:
+        if group.endswith(('/carry-chain', '/borrow-chain')):
+            return tuple(group.rsplit('/', 1))
+        if group.split('/')[0] in {'up', 'down', 'upshift'} and '/' in group:
+            return tuple(group.split('/', 1))
+    if point['family'] == 'MOVE':
+        return 'rotate', group
+    return None
+
+
+def dearest_values(points):
+    """At each size of an operation timed with several operand values, keep only the
+    dearest value's fixture, as the operation's group: a script chooses its values,
+    so the fit sees the most expensive one. Other fixtures are kept as they are."""
+    kept, dearest = [], {}
+    for point in points:
+        variant = value_variant(point)
+        if variant is None:
+            kept.append(point)
+            continue
+        key = (point['family'], point['machine'], variant[0], point['x'])
+        if key not in dearest or point['y'] > dearest[key]['y']:
+            dearest[key] = dict(point, group=variant[0])
+    return kept + list(dearest.values())
+
+
+def fit_family(family, points, penalty):
+    """One curve of a family over the given fixtures, in the family's feature basis."""
+    if family == 'DIVCORE':
+        return tuple(fit_divcore(points, penalty))
+    if family == 'MULCORE':
+        return tuple(fit_mulcore(points, penalty))
+    mode = 'residual' if family == 'SIG' else 'constant' if family in CONSTANT else 'affine'
+    return tuple(fit(points, mode, penalty))
+
+
+def fit_patterns(family, points, penalty):
+    """One machine's curve of a family and its pattern curves.
+
+    Each operand pattern is fitted on its own, and the machine's curve is the ENVELOPE
+    of the pattern curves over the family's sizes, so the cheaper patterns cannot
+    average away an expensive one."""
+    by_pattern = defaultdict(list)
+    for point in points:
+        by_pattern[operand_pattern(point)].append(point)
+    patterns = {pattern: fit_family(family, members, penalty) for pattern, members in sorted(by_pattern.items())}
+    if len(patterns) == 1:
+        return next(iter(patterns.values())), patterns
+    curve = envelope_coefficients(family, [patterns], points, tuple(patterns),
+                                  {pattern: feature_domain(family) for pattern in patterns}, operand_pattern)
+    return curve, patterns
+
+
 def refit_part(path, part):
-    """One part of machine_model's fits from the recorded samples."""
+    """One part of machine_fits from the recorded samples."""
     points, _ = load_calibration(Path(path))
     series = defaultdict(list)
-    for point in points:
-        if point['included']:
-            series[point['family']].append(point)
+    for point in dearest_values([p for p in points if p['included']]):
+        series[point['family']].append(point)
 
     if part == 'DIVCORE':
-        return {'DIVCORE': tuple(fit_divcore(series['DIVCORE'], 100))}
+        return {'DIVCORE': fit_patterns('DIVCORE', series['DIVCORE'], 100)}
     if part == 'MULCORE':
-        return {'MULCORE': tuple(fit_mulcore(series['MULCORE'], 100))} if series['MULCORE'] else {}
-    model = {}
+        return {'MULCORE': fit_patterns('MULCORE', series['MULCORE'], 100)} if series['MULCORE'] else {}
+    fits = {}
     # SIG is fitted last: its background is the challenge hash at the H256 fit.
     families = [f for f in series if f not in {'MULCORE', 'DIVCORE'} | CHECKS]
     for family in sorted(families, key=lambda f: f == 'SIG'):
         for point in series[family]:
-            point['background'] = background(family, point['x'], model)
-        mode = 'residual' if family == 'SIG' else 'constant' if family in CONSTANT else 'affine'
-        model[family] = tuple(fit(series[family], mode, 100))
-    return model
+            point['background'] = background(family, point['x'], {f: curve for f, (curve, _) in fits.items()})
+        fits[family] = fit_patterns(family, series[family], 100)
+    return fits
 
 
-def machine_model(path, refits=None):
-    """One machine's 100x under-penalty fit in varops, from its recorded samples.
+def machine_fits(path, refits=None):
+    """One machine's 100x under-penalty fits in varops, from its recorded samples: for
+    each family, its curve and the curves of its operand patterns.
 
     refits maps each of REFIT_PARTS to its refit_part result, when computed elsewhere.
     """
     if refits is None:
         refits = {part: refit_part(path, part) for part in REFIT_PARTS}
-    model = {}
+    fits = {}
     for part in ('DIVCORE', 'MULCORE', 'other'):
-        model.update(refits[part])
-    return model
+        fits.update(refits[part])
+    return fits
+
+
+def machine_model(path, refits=None):
+    """One machine's curve of every family (machine_fits without the pattern curves)."""
+    return {family: curve for family, (curve, _) in machine_fits(path, refits).items()}
 
 
 ENVELOPE = ("Envelope: the cheapest curve of each family's form that covers every machine's fitted curve at every "
@@ -589,21 +667,24 @@ def solve(rows, rhs):
     return [m[i][n] / m[i][i] for i in range(n)]
 
 
-def envelope_coefficients(family, models, points, parts=None):
+def envelope_coefficients(family, models, points, parts=None, domains=None, part_of=None):
     """The ENVELOPE curve of one family: an exact linear program over the family's
     few coefficients, solved by checking every vertex of the feasible region.
 
     points are one machine's included fixtures of the family (all machines share them).
     parts are the measured families of a primitive that takes the larger of them: the
-    curve then covers every machine's curve of each part over that part's sizes."""
+    curve then covers every machine's curve of each part over that part's sizes.
+    domains maps a part to its sizes when they are not feature_domain(part), and
+    part_of names a point's part when it is not the point's family."""
     parts = parts or (family,)
+    part_of = part_of or (lambda p: p['family'])
     curves = {part: [tuple(model[part]) for model in models] for part in parts}
     if family in CONSTANT:
-        return tuple(max(curve[i] for curve in curves[family]) for i in range(len(curves[family][0])))
+        return tuple(max(curve[i] for part in parts for curve in curves[part]) for i in range(len(curves[parts[0]][0])))
     k = len(curves[parts[0]][0])
     constraints = {}
     for part in parts:
-        corners, rays = feature_domain(part)
+        corners, rays = (domains or {}).get(part) or feature_domain(part)
         for direction in corners + rays:
             bound = max(sum(t * e for t, e in zip(curve, direction)) for curve in curves[part])
             constraints[direction] = max(constraints.get(direction, bound), bound)
@@ -614,12 +695,12 @@ def envelope_coefficients(family, models, points, parts=None):
                    (lambda p: (1, p['c'], p['v'])) if k == 3 else (lambda p: (p['c'], p['v'])))
     if len(parts) > 1:
         # Paths of different parts are different groups.
-        points = [dict(p, group=f"{p['family']}/{p['group']}") for p in points]
+        points = [dict(p, group=f"{part_of(p)}/{p['group']}", part=part_of(p)) for p in points]
     ws = weights(points)
     gradient = [0.0] * k
     for w, p in zip(ws, points):
         phi = features_of(p)
-        own = curves[p['family']] if len(parts) > 1 else curves[family]
+        own = curves[p['part']] if len(parts) > 1 else curves[family]
         target = max(sum(t * f for t, f in zip(curve, phi)) for curve in own)
         for i in range(k):
             gradient[i] += w * phi[i] / target
@@ -651,8 +732,9 @@ def envelope_model(models, series, measured=None, parts=None):
     return out
 
 
-def independent_models(paths):
-    """Pricing curves: one fit per machine in a single feature basis per family.
+def independent_fits(paths):
+    """Every machine's machine_fits: one fit per machine and operand pattern in a single
+    feature basis per family.
 
     DIVCORE is fixed + step + cell on every machine. Maxima over mixed bases
     (e.g. adding a fixed + cell fit) would charge the per-row work twice.
@@ -664,7 +746,13 @@ def independent_models(paths):
                            [part for _, part in tasks])
         for (index, part), result in zip(tasks, results):
             refits[index][part] = result
-    return [machine_model(path, refits[index]) for index, path in enumerate(paths)]
+    return [machine_fits(path, refits[index]) for index, path in enumerate(paths)]
+
+
+def independent_models(paths):
+    """Pricing curves: every machine's curve of every family (independent_fits without
+    the pattern curves)."""
+    return [{family: curve for family, (curve, _) in fits.items()} for fits in independent_fits(paths)]
 
 
 # Size-dependent rates are priced per byte of the padded length the operation processes:
@@ -763,8 +851,11 @@ def candidate_charge(family, point, candidates):
     return coeff[0] * c + coeff[1] * v
 
 
-def quality_gate(series, models, machine_keys, machine_names):
-    """Every machine fit against its own included fixtures, per path and size decade."""
+def quality_gate(series, models, machine_keys, machine_names, patterns=None):
+    """Every machine fit against its own included fixtures, per path and size decade.
+
+    patterns holds each machine's pattern curves (machine_fits); a fixture is then
+    compared with the curve of its own operand pattern, which the fit is."""
     gate_failures, bins = [], Counter()
     for family, points in series.items():
         if family in CHECKS or family not in models[0]:
@@ -776,7 +867,9 @@ def quality_gate(series, models, machine_keys, machine_names):
                     groups[p["group"], decade(p["x"])].append(p)
             for (group, size_decade), ps in sorted(groups.items()):
                 bins[machine] += 1
-                errors = [math.log(predict(family, p, models[index][family], models[index]) / p["y"]) for p in ps]
+                curve = ((lambda p: patterns[index][family][operand_pattern(p)]) if patterns else
+                         (lambda p: models[index][family]))
+                errors = [math.log(predict(family, p, curve(p), models[index]) / p["y"]) for p in ps]
                 rms = math.exp(math.sqrt(sum(e * e for e in errors) / len(errors)))
                 within = sum(abs(e) <= math.log(QUALITY_GATE["within_factor"]) for e in errors) / len(errors)
                 if rms > QUALITY_GATE["max_rms_factor"] or within < QUALITY_GATE["min_within_share"]:
@@ -967,7 +1060,9 @@ def main():
     if any(fixtures != fixture_sets[0] for fixtures in fixture_sets[1:]):
         raise ValueError("inputs have different fixture sets")
     model_id = machines[0]['model_id']
-    models = independent_models(paths)
+    fits = independent_fits(paths)
+    models = [{family: curve for family, (curve, _) in machine.items()} for machine in fits]
+    patterns = [{family: curves for family, (_, curves) in machine.items()} for machine in fits]
     measured_envelope = envelope_model(models, series)
     charged = charged_by(model_id)
     priced = [priced_model(model, model_id) for model in models]
@@ -994,10 +1089,10 @@ def main():
     result = dict(schema="varop-joint-fit-v3", status=status,
                   model_id=model_id,
                   pricing_basis="envelope",
-                  schedule_combination="Envelope of machine curves, each fitted independently from the samples recorded on that machine after same-machine normalization (see envelope_combination); DIVCORE rows are trimmed-length quotient rows, fitted as fixed + step + cell. Round after combining; SIG and TWEAK remain fixed at SIGCHECK, 500000. Coefficientwise maxima are kept for comparison."
+                  schedule_combination="Envelope of machine curves, each fitted independently from the samples recorded on that machine after same-machine normalization, DIVCORE and MULCORE as the envelope of that machine's operand-pattern curves (see envelope_combination); DIVCORE rows are trimmed-length quotient rows, fitted as fixed + step + cell. Round after combining; SIG and TWEAK remain fixed at SIGCHECK, 500000. Coefficientwise maxima are kept for comparison."
                                        + composition_text(composed),
                   envelope_combination=ENVELOPE,
-                  method=f"Per-machine median of raw fixture epochs, normalized so that a full 40-billion-varop budget of fitted work takes {TARGET_FRACTION:g}× the recorded local pre-v2 reference (rate derived from the recorded reference time, whatever normalization the artifact was collected with); equal path-group and size-decade weights; weighted squared log error with a 100× underprediction penalty; nonnegative predefined coefficients; no coefficient rounding. SIG and TWEAK diagnostic fits do not replace the fixed 500000 SIGCHECK.",
+                  method=f"Per-machine median of raw fixture epochs, normalized so that a full 40-billion-varop budget of fitted work takes {TARGET_FRACTION:g}× the recorded local pre-v2 reference (rate derived from the recorded reference time, whatever normalization the artifact was collected with); DIVCORE and MULCORE fitted per operand pattern (DIV or MOD and the operand values; MULCORE the operand values), each machine's curve the envelope of its pattern curves; ARITH, BIT and MOVE operations timed with several operand values (carry and borrow chains, shift amounts, empty and nonempty entries) fitted on the dearest value at each size; equal path-group and size-decade weights within a pattern; weighted squared log error with a 100× underprediction penalty; nonnegative predefined coefficients; no coefficient rounding. SIG and TWEAK diagnostic fits do not replace the fixed 500000 SIGCHECK.",
                   machines=machines, source_check=source_check, bench_check=bench_check,
                   schedule_rounding=dict(coefficient="flats to a multiple of 10 below 100 and of 50 from 100, and to no more than two significant figures; rates to two significant figures, and at least to a whole varop", sig_policy=500000,
                                          rule="Ceiling each coefficient independently: flats to a multiple of 10 below 100 and of 50 from 100, never to more than two significant figures; rates (per byte of W(n) or H(n) or per counted item) to two significant figures and at least to a whole varop; preserve zero/exact multiples; no refitting. A price composed from rounded parts is rounded again by the same rule.",
@@ -1038,7 +1133,12 @@ def main():
         schedules[f"implemented ({implemented['source']})"] = implemented["coefficients"]
     lifetimes = [lifetime_checks(path, model, label) for path, model, label in zip(paths, priced, labels)]
     result["diagnostics"] = dict(
-        quality_gate=quality_gate(series, models, keys, labels),
+        # The gate checks the fixtures the fits saw: the dearest operand values.
+        quality_gate=quality_gate({family: dearest_values([p for p in points if p['included']])
+                                   for family, points in series.items()}, models, keys, labels, patterns),
+        pattern_fits={label: {family: {pattern: list(curve) for pattern, curve in curves.items()}
+                              for family, curves in machine.items() if len(curves) > 1}
+                      for label, machine in zip(labels, patterns)},
         charge_coverage={name: charge_coverage(series, schedule, keys, labels, charged)
                          for name, schedule in schedules.items()},
         held_out_lifetimes=dict(checked=sum(checked for checked, _ in lifetimes),
