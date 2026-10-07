@@ -381,6 +381,8 @@ class CalibrationPipelineTests(unittest.TestCase):
         point = dict(family='WRITE', group='churn', label='WRITE/churn/2000000')
         self.assertEqual(calibration.operand_pattern(point), '')
         self.assertEqual(calibration.operand_pattern(dict(family='MULCORE', group='v=2', label='MULCORE/9/2/ones')), 'ones')
+        self.assertEqual(calibration.operand_pattern(dict(family='SELECT', group='outputs/collated',
+                                                          label='SELECT/outputs/collated/8/16/80')), 'outputs')
 
     def test_dearest_operand_values(self):
         # At each size the fit sees the dearer of an operation's value variants, under

@@ -553,9 +553,15 @@ FIT_PROCESSES = 12
 def operand_pattern(point):
     """The operand pattern of a fixture: the operand values of the same operation at the
     same sizes, which a script chooses. DIVCORE times DIV and MOD with several value
-    patterns and MULCORE with two; every other family's fixtures form one pattern,
+    patterns and MULCORE with two. SELECT's kinds are the transaction shapes a script
+    selects from (witness items in allocation order or deserialized into a churned
+    heap, scans, outputs, inputs), each fitted on its own so that no kind's rate is
+    averaged with cheaper kinds'. Every other family's fixtures form one pattern,
     whose path groups the fit weighs equally."""
     parts = point['label'].split('/')
+    if point['family'] == 'SELECT':
+        # SELECT/<kind>/<format>/<records>/<units>[/<result bytes>]
+        return parts[1]
     if point['family'] == 'DIVCORE':
         # DIVCORE/<dividend>/<divisor>/<seed>/<DIV|MOD>/<pattern>
         return '/'.join(parts[4:])
@@ -1148,10 +1154,10 @@ def main():
     result = dict(schema="varop-joint-fit-v3", status=status,
                   model_id=model_id,
                   pricing_basis="envelope",
-                  schedule_combination="Envelope of machine curves, each fitted independently from the samples recorded on that machine after same-machine normalization, DIVCORE and MULCORE as the envelope of that machine's operand-pattern curves (see envelope_combination); DIVCORE rows are trimmed-length quotient rows, fitted as fixed + step + cell. Round after combining; SIG and TWEAK remain fixed at SIGCHECK, 500000. Coefficientwise maxima are kept for comparison."
+                  schedule_combination="Envelope of machine curves, each fitted independently from the samples recorded on that machine after same-machine normalization, DIVCORE, MULCORE and SELECT as the envelope of that machine's operand-pattern curves (see envelope_combination); DIVCORE rows are trimmed-length quotient rows, fitted as fixed + step + cell. Round after combining; SIG and TWEAK remain fixed at SIGCHECK, 500000. Coefficientwise maxima are kept for comparison."
                                        + composition_text(composed),
                   envelope_combination=ENVELOPE,
-                  method=f"Per-machine median of raw fixture epochs, normalized so that a full 40-billion-varop budget of fitted work takes {TARGET_FRACTION:g}× the recorded local pre-v2 reference (rate derived from the recorded reference time, whatever normalization the artifact was collected with); DIVCORE and MULCORE fitted per operand pattern (DIV or MOD and the operand values; MULCORE the operand values), each machine's curve the envelope of its pattern curves; ARITH, BIT and MOVE operations timed with several operand values (carry and borrow chains, shift amounts, empty and nonempty entries) fitted on the dearest value at each size; equal path-group and size-decade weights within a pattern; weighted squared log error with a 100× underprediction penalty; nonnegative predefined coefficients; no coefficient rounding. SIG and TWEAK diagnostic fits do not replace the fixed 500000 SIGCHECK.",
+                  method=f"Per-machine median of raw fixture epochs, normalized so that a full 40-billion-varop budget of fitted work takes {TARGET_FRACTION:g}× the recorded local pre-v2 reference (rate derived from the recorded reference time, whatever normalization the artifact was collected with); DIVCORE, MULCORE and SELECT fitted per operand pattern (DIV or MOD and the operand values; MULCORE the operand values; SELECT the transaction shape, net of the result's WRITE and a scope operand's READ), each machine's curve the envelope of its pattern curves; ARITH, BIT and MOVE operations timed with several operand values (carry and borrow chains, shift amounts, empty and nonempty entries) fitted on the dearest value at each size; equal path-group and size-decade weights within a pattern; weighted squared log error with a 100× underprediction penalty; nonnegative predefined coefficients; no coefficient rounding. SIG and TWEAK diagnostic fits do not replace the fixed 500000 SIGCHECK.",
                   machines=machines, source_check=source_check, bench_check=bench_check,
                   schedule_rounding=dict(coefficient="flats to a multiple of 10 below 100 and of 50 from 100, and to no more than two significant figures; rates to two significant figures, and at least to a whole varop", sig_policy=500000,
                                          rule="Ceiling each coefficient independently: flats to a multiple of 10 below 100 and of 50 from 100, never to more than two significant figures; rates (per byte of W(n) or H(n) or per counted item) to two significant figures and at least to a whole varop; preserve zero/exact multiples; no refitting. A price composed from rounded parts is rounded again by the same rule.",
