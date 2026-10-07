@@ -11,7 +11,7 @@ How the costs of Tapleaf 0xC2 operations are measured and priced. [BIP 440](http
 3. **Measure.** Time every primitive on prepared operands over a grid of sizes (dense near zero, at word and block boundaries, then up to the 4 MB element limit) in 7 passes, and take the median. A run whose passes disagree by more than 1.5% is repeated.
 4. **Fit.** For each machine, fit each formula to its measurements, penalizing under-prediction 100 times more than over-prediction, so that a full budget of fitted work takes 0.9 × `T_pre`. A quality gate checks the fit at every size decade.
 5. **Combine.** Take the cheapest formula that covers every machine's fit at every size.
-6. **Round** up: rates to two significant figures, flat costs to multiples of 10 or 50. Signature checks stay at 500,000, matching today's signature allowance.
+6. **Round** up: rates to whole varops below 10 and from 10 to two significant figures whose second is 0 or 5, flat costs to multiples of 10 or 50. Signature checks stay at 500,000, matching today's signature allowance.
 7. **Check.** Run complete scripts for every operation, operand shape and boundary, plus searches for the worst ones, and compare each machine's slowest against its `T_pre`. A schedule is accepted only when every machine stays below 1.0.
 
 Formulas stay simple: a cheap path may be over-charged, and a formula changes only when complete scripts exceed the requirement. Machines are admitted by fixed criteria (release builds of supported platforms, idle, full settings), never by their results.
@@ -20,16 +20,17 @@ The details of every step, each primitive's measurements and the acceptance stat
 
 ## Machines
 
-The current dataset, [`data/2026-10-01-full-runs-one-deduction`](data/2026-10-01-full-runs-one-deduction/), has full runs on six machines. It measured READ, WRITE and ARITH in two parts each, from which the fit composes them; the current benchmarks measure them directly. SHA256, RIPEMD160 and SHA1 are measured separately and share one price, HASH. A non-Apple ARM64 machine and a low-end home-node device are still needed.
+The current dataset, [`data/2026-10-07-full-runs-seven-machines`](data/2026-10-07-full-runs-seven-machines/), has full runs on seven machines. SHA256, RIPEMD160 and SHA1 are measured separately and share one price, HASH. A non-Apple ARM64 machine and a low-end home-node device are still needed.
 
 | Machine | OS | Reference `T_pre` | Slowest existing workload |
 |---|---|---|---|
 | Apple M1 Pro | macOS | 2.26 s | repeated RIPEMD160 |
-| Intel i5-12500 | Linux | 2.73 s | signature checks |
-| AMD Ryzen 9 9950X | Windows | 1.59 s | signature checks |
+| Intel i5-12500 | Linux | 1.87 s | signature checks |
+| AMD Ryzen 9 9950X | Windows | 1.64 s | signature checks |
 | Intel i7-7700 | Linux | 3.48 s | repeated HASH256 (no SHA-NI) |
-| AMD Ryzen 5 3600 | Linux | 3.20 s | signature checks |
-| Apple M4 Pro | macOS | 1.59 s | repeated RIPEMD160 |
+| AMD Ryzen 5 3600 | Linux | 2.78 s | signature checks |
+| Apple M4 Pro | macOS | 1.56 s | repeated RIPEMD160 |
+| AMD Ryzen 7 7700 | Linux | 1.96 s | signature checks |
 
 ## Reproduce
 
