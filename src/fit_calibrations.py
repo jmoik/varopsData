@@ -628,8 +628,18 @@ def fit_patterns(family, points, penalty):
     if len(patterns) == 1:
         return next(iter(patterns.values())), patterns
     curve = envelope_coefficients(family, [patterns], points, tuple(patterns),
-                                  {pattern: feature_domain(family) for pattern in patterns}, operand_pattern)
+                                  {pattern: pattern_domain(family, by_pattern[pattern]) for pattern in patterns},
+                                  operand_pattern)
     return curve, patterns
+
+
+def pattern_domain(family, points):
+    """The sizes a pattern curve is covered over. A SELECT kind is covered from its
+    smallest measured count up: kinds measured only at large counts say nothing about
+    a selection's fixed cost, which the kinds measured from one unit up determine."""
+    if family == 'SELECT':
+        return [(1, min(p['x'] for p in points))], [(0, 1)]
+    return feature_domain(family)
 
 
 def refit_part(path, part):
