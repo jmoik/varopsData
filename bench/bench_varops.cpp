@@ -99,9 +99,11 @@ constexpr uint64_t COST_READ_FIXED{ReadCost(0)};
 constexpr uint64_t COST_READ{(ReadCost(8) - ReadCost(0)) / 8};
 constexpr uint64_t COST_ARITH_FIXED{ArithCost(0)};
 constexpr uint64_t COST_ARITH_BYTE{(ArithCost(8) - ArithCost(0)) / 8};
+// DIV = fixed + per divisor byte + per byte of Q(n, m) + per byte of Q(n, m) per divisor byte.
 constexpr uint64_t COST_DIV_FIXED{DivCost(0, 0)};
-constexpr uint64_t COST_DIV_STEP{DivCost(1, 0) - DivCost(0, 0)};
-constexpr uint64_t COST_DIV_CELL{DivCost(1, 1) - DivCost(1, 0)};
+constexpr uint64_t COST_DIV_DIVISOR_BYTE{(DivCost(0, 8) - DivCost(0, 0)) / 8};
+constexpr uint64_t COST_DIV_ROW_BYTE{(DivCost(8, 0) - DivCost(0, 0)) / 8};
+constexpr uint64_t COST_DIV_CELL{(DivCost(16, 8) - DivCost(8, 8) - 8 * COST_DIV_ROW_BYTE) / 64};
 // Hash rates are per byte of the padded 64-byte-block span; an empty message is one block.
 constexpr uint64_t COST_HASH_BYTE{(HashCost(64) - HashCost(0)) / 64};
 constexpr uint64_t COST_HASH_FIXED{HashCost(0) - 64 * COST_HASH_BYTE};
@@ -363,9 +365,10 @@ static void IndependentAdd(uint64_t& q, uint64_t coefficient, uint64_t units = 1
     q = term > MAX - q ? MAX : q + term;
 }
 
-static uint64_t IndependentDivSteps(uint64_t dividend_limbs, uint64_t divisor_limbs)
+/** Q(n, m) from padded spans: bytes by which the dividend exceeds the divisor. */
+static uint64_t IndependentDivExcess(uint64_t dividend_words, uint64_t divisor_words)
 {
-    return std::max<uint64_t>(1, dividend_limbs + 2 - std::min(divisor_limbs, dividend_limbs + 2));
+    return dividend_words > divisor_words ? dividend_words - divisor_words : 0;
 }
 
 /** Process resource usage around one timed sample; -1 marks an unavailable counter. */
@@ -1831,15 +1834,13 @@ static uint64_t MulSequenceCost(size_t left, size_t right)
 {
     const uint64_t left_words{varops::WordSpan(left)};
     const uint64_t right_words{varops::WordSpan(right)};
-    const uint64_t rows{std::max(left_words, right_words) / 8};
-    const uint64_t row_limbs{std::min(left_words, right_words) / 8};
     const size_t output_size{left + right};
     const uint64_t storage{varops::WriteCost(left_words + right_words) - varops::WriteCost(varops::WordSpan(output_size))};
     return storage + 3 * varops::COST_BASE + 2 * varops::COST_WRITE_FIXED +
            varops::COST_WRITE_BYTE * (left_words + right_words) +
            2 * varops::COST_READ_FIXED +
            varops::COST_READ * (left_words + right_words) +
-           varops::MulCost(rows, row_limbs) +
+           varops::MulCost(std::max(left, right), std::min(left, right)) +
            varops::COST_WRITE_FIXED +
            varops::COST_WRITE_BYTE * varops::WordSpan(output_size);
 }
@@ -1929,17 +1930,15 @@ static uint64_t DivModSequenceCost(size_t dividend, size_t divisor)
 {
     const uint64_t dividend_words{varops::WordSpan(dividend)};
     const uint64_t divisor_words{varops::WordSpan(divisor)};
-    const uint64_t dividend_limbs{dividend_words / 8};
-    const uint64_t divisor_limbs{divisor_words / 8};
-    const uint64_t steps{IndependentDivSteps(dividend_limbs, divisor_limbs)};
+    const uint64_t excess{IndependentDivExcess(dividend_words, divisor_words)};
     // OP_2DUP, target, OP_DROP. The result is charged at the dividend's padded
     // width, which a quotient or remainder does not reach once trimmed, so the
     // estimate over-states the charge; it only sizes cases.
     return 3 * varops::COST_BASE + 2 * varops::COST_WRITE_FIXED +
            varops::COST_WRITE_BYTE * (dividend_words + divisor_words) +
            2 * varops::COST_READ_FIXED + varops::COST_READ * (dividend_words + divisor_words) +
-           varops::COST_DIV_FIXED + varops::COST_DIV_STEP * steps +
-           varops::COST_DIV_CELL * steps * divisor_limbs +
+           varops::COST_DIV_FIXED + varops::COST_DIV_DIVISOR_BYTE * divisor_words +
+           varops::COST_DIV_ROW_BYTE * excess + varops::COST_DIV_CELL * excess * divisor_words +
            varops::COST_WRITE_FIXED + varops::COST_WRITE_BYTE * dividend_words;
 }
 
@@ -2760,7 +2759,8 @@ static std::map<std::string, opcodetype> SupportedOpcodeMap()
  * charges for each registry opcode, and the primitives whose coefficients the
  * charge uses. Sizes are byte lengths: n of the only operand or the copied value,
  * n1, n2, n3 of the operands from the deepest, or named after an operand or the
- * result; u >= v are the operands' limbs. Every primitive applies its byte rate to
+ * result; n >= m are the operands' lengths for MUL, without trailing zero bytes for
+ * DIV. Every primitive applies its byte rate to
  * W(n), or H(n) for a hash. Initial witness values pay WRITE once per script.
  */
 static std::pair<std::string, std::string> CandidateFormula(opcodetype opcode)
@@ -2829,10 +2829,10 @@ static std::pair<std::string, std::string> CandidateFormula(opcodetype opcode)
     case OP_LEFT: case OP_RIGHT:
         return {"BASE + READ(size) + WRITE(out)", "BASE,READ,WRITE"};
     case OP_MUL:
-        return {"BASE + READ(n1) + READ(n2) + MUL(u, v) + WRITE(8(u + v))", "BASE,READ,MUL,WRITE"};
+        return {"BASE + READ(n1) + READ(n2) + MUL(n, m) + WRITE(W(n1) + W(n2))", "BASE,READ,MUL,WRITE"};
     case OP_DIV: case OP_MOD:
-        return {"BASE + READ(n1) + READ(n2) + DIV(s, v) + WRITE(out); "
-                "s and v count limbs without trailing zero bytes", "BASE,READ,DIV,WRITE"};
+        return {"BASE + READ(n1) + READ(n2) + DIV(n, m) + WRITE(out); "
+                "n and m are lengths without trailing zero bytes", "BASE,READ,DIV,WRITE"};
     case OP_LSHIFT: case OP_RSHIFT:
         return {"BASE + READ(n1) + READ(bits) + ARITH(n1) + WRITE(out)", "BASE,READ,ARITH,WRITE"};
     case OP_CHECKSIG:
