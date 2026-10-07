@@ -60,7 +60,8 @@ GSR_SOURCES = (
     "src/script/valtype_stack.h",
     "src/script/valtype_stack.cpp",
 )
-BENCH_SOURCES = (BENCH / "bench_varops.cpp", BENCH / "bench_varops_primitives.cpp", BENCH / "varops_bench.cmake")
+BENCH_SOURCES = (BENCH / "bench_varops.cpp", BENCH / "bench_varops_primitives.cpp", BENCH / "heap_churn.h",
+                 BENCH / "varops_bench.cmake")
 
 
 def run(*command):

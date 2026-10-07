@@ -27,6 +27,7 @@
 #include <secp256k1_extrakeys.h>
 #include <secp256k1_schnorrsig.h>
 #include <serialize.h>
+#include <streams.h>
 #include <span.h>
 #include <tinyformat.h>
 #include <uint256.h>
@@ -81,6 +82,8 @@
 #elif defined(__GLIBC__)
 #include <malloc.h>
 #endif
+
+#include "heap_churn.h"
 
 bool CastToBool(const std::vector<unsigned char>& vch);
 
@@ -221,12 +224,17 @@ struct CryptoFixture {
 
 struct TransactionFixture {
     // Script-only OP_TX context; this benchmark does not verify UTXO commitments.
+    // A deserialized transaction keeps the churned heap it was read into alive.
+    const std::unique_ptr<const HeapChurn> churn;
     const CTransaction tx;
     const std::vector<CTxOut> spent_outputs;
     const valtype control_block;
 
     TransactionFixture(const CMutableTransaction& mutable_tx, valtype control_block_in)
         : tx{mutable_tx}, spent_outputs(tx.vin.size(), CTxOut{0, CScript{}}), control_block{std::move(control_block_in)} {}
+    TransactionFixture(DataStream& serialized, std::unique_ptr<const HeapChurn> churn_in, valtype control_block_in)
+        : churn{std::move(churn_in)}, tx{deserialize, TX_WITH_WITNESS, serialized},
+          spent_outputs(tx.vin.size(), CTxOut{0, CScript{}}), control_block{std::move(control_block_in)} {}
 };
 
 class BenchSignatureChecker final : public BaseSignatureChecker
@@ -272,6 +280,8 @@ struct OpTxShape {
     size_t extra_inputs{0};
     size_t extra_outputs{0};
     size_t item_bytes{0};
+    //! Read the transaction back from its serialization into a churned heap (HeapChurn).
+    bool deserialize{false};
 };
 
 struct CaseOptions {
@@ -867,7 +877,13 @@ static std::shared_ptr<const TransactionFixture> MakeOpTxContext(const OpTxShape
     if (GetTransactionWeight(CTransaction{tx}) < TARGET_WEIGHT - 3) {
         throw std::runtime_error("OP_TX fixture did not reach weight target");
     }
-    return std::make_shared<TransactionFixture>(tx, V2ControlBlock());
+    if (!shape.deserialize) return std::make_shared<TransactionFixture>(tx, V2ControlBlock());
+    DataStream serialized;
+    serialized << TX_WITH_WITNESS(tx);
+    // Free the built transaction before the churn, so its storage is churned too.
+    tx = CMutableTransaction{};
+    auto churn{std::make_unique<const HeapChurn>(shape.empty_items)};
+    return std::make_shared<TransactionFixture>(serialized, std::move(churn), V2ControlBlock());
 }
 
 static uint64_t CalibrateRepeatVarops(const CaseSpec& spec, const std::vector<valtype>& stack,
@@ -1618,6 +1634,10 @@ static void AddOpTxCases(std::vector<CaseSpec>& specs, opcodetype opcode)
         const size_t items{std::min(fill(2, {}), (size_t{MAX_TAPLEAF_0XC2_STACK_ELEMENT_SIZE} - 64) / 2)};
         add("collated-witness-1B-items", strprintf("%u-items", items), valtype{0, 1, 0, 0x30, 0x80, 0}, true,
             {.empty_items = items, .item_bytes = 1});
+        // The same transaction read back from its serialization, as a node reads
+        // one, into a heap fragmented as a long-running node's may be.
+        add("collated-witness-1B-items-deserialized", strprintf("%u-items", items), valtype{0, 1, 0, 0x30, 0x80, 0}, true,
+            {.empty_items = items, .item_bytes = 1, .deserialize = true});
     }
     // One witness item as large as the transaction and the result allow:
     // collating it zero-fills the result and then copies the item into it.

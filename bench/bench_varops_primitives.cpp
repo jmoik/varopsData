@@ -41,11 +41,14 @@
 #include <secp256k1.h>
 #include <secp256k1_extrakeys.h>
 #include <secp256k1_schnorrsig.h>
+#include <streams.h>
 #include <sync.h>
 #include <test/util/setup_common.h>
 #include <tinyformat.h>
 #include <util/string.h>
 #include <validation.h>
+
+#include "heap_churn.h"
 
 #ifdef _WIN32
 #include <compat/compat.h>
@@ -500,10 +503,15 @@ struct TransactionFixture {
     //! One spending input, `inputs - 1` further inputs and `outputs` outputs. Input
     //! `witness_input` has `witnesses` witness items of `item_bytes` each; scattered
     //! items are shuffled against their allocation order, so reading them in witness
-    //! order does not walk the heap. Extra inputs and outputs have empty scripts, so
-    //! selecting them does per-record work with the least payload to copy.
+    //! order does not walk the heap. A deserialized transaction is read back from its
+    //! serialization, as a node reads one, into a heap churned first (HeapChurn).
+    //! Extra inputs and outputs have empty scripts, so selecting them does
+    //! per-record work with the least payload to copy.
+    std::unique_ptr<HeapChurn> churn;
+
     explicit TransactionFixture(size_t witnesses = 0, size_t inputs = 1, size_t outputs = 1,
-                                size_t item_bytes = 0, size_t witness_input = 0, bool scatter = false)
+                                size_t item_bytes = 0, size_t witness_input = 0, bool scatter = false,
+                                bool deserialize = false)
     {
         Require(inputs > 0 && outputs > 0, "transaction fixture needs an input and an output");
         tx.version = 2;
@@ -521,6 +529,14 @@ struct TransactionFixture {
         p2tr << OP_1 << Bytes(32, 1);
         tx.vout.emplace_back(1000, p2tr);
         tx.vout.resize(outputs, CTxOut{0, CScript{}});
+        if (deserialize) {
+            DataStream stream;
+            stream << TX_WITH_WITNESS(tx);
+            // Free the built transaction before the churn, so its storage is churned too.
+            tx = CMutableTransaction{};
+            churn = std::make_unique<HeapChurn>(witnesses);
+            stream >> TX_WITH_WITNESS(tx);
+        }
         std::vector<CTxOut> spent;
         spent.emplace_back(2000, p2tr);
         spent.resize(inputs, CTxOut{0, CScript{}});
@@ -1277,6 +1293,7 @@ void MeasureItems(Runner& r)
         size_t item_bytes{0};
         size_t witness_input{0};
         bool scatter{false};
+        bool deserialize{false};
     };
     const std::vector<size_t> one_byte_items{8192, 65536, 262144, 1048576, 1950000};
     const std::vector<size_t> items{0, 1, 2, 8, 32, 128, 512, 2048, 4096, 8192, 12288, 16384, 24576, 30000};
@@ -1296,6 +1313,8 @@ void MeasureItems(Runner& r)
         // sequential layout, as witness items deserialized among other allocations may.
         {"1b_items", {0, 1, 0, 0x30, 0x80, 0}, one_byte_items, [](size_t n) { return std::array<size_t, 3>{n, 2, 1}; }, [](size_t n) { return n + 1; }, 1, 1, false},
         {"1b_items_scattered", {0, 1, 0, 0x30, 0x80, 0}, one_byte_items, [](size_t n) { return std::array<size_t, 3>{n, 2, 1}; }, [](size_t n) { return n + 1; }, 1, 1, true},
+        // The same items deserialized, as a node reads them, into a churned heap.
+        {"1b_items_deserialized", {0, 1, 0, 0x30, 0x80, 0}, one_byte_items, [](size_t n) { return std::array<size_t, 3>{n, 2, 1}; }, [](size_t n) { return n + 1; }, 1, 1, false, true},
     };
     for (const Kind& kind : kinds) {
         for (bool collate : {true, false}) {
@@ -1304,7 +1323,8 @@ void MeasureItems(Runner& r)
             selector[1] = static_cast<unsigned char>(collate ? selector[1] | 1 : selector[1] & ~1);
             for (size_t n : kind.records) {
                 const auto [witnesses, inputs, outputs]{kind.shape(n)};
-                TransactionFixture fixture(witnesses, inputs, outputs, kind.item_bytes, kind.witness_input, kind.scatter);
+                TransactionFixture fixture(witnesses, inputs, outputs, kind.item_bytes, kind.witness_input, kind.scatter,
+                                           kind.deserialize);
                 auto checker = fixture.Checker();
                 std::vector<Bytes> initial{selector};
                 if (kind.witness_input != 0) initial.insert(initial.begin(), Bytes{static_cast<unsigned char>(kind.witness_input)});
