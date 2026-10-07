@@ -187,14 +187,12 @@ COMPOSED_TEXT = {
              '{shares}, and each machine&#39;s curve adds its two fits. A value that is not a number pays for the '
              'conversion as well.',
     'ARITH': 'This dataset measured ARITH in two parts: passes with a carry chain and passes without one. An opcode '
-             'makes one kind of pass, so the price takes the larger flat and the larger rate of the two parts&#39; '
-             'rounded prices, {shares}, and its envelope covers every machine&#39;s fit of both parts.',
-    'HASH': 'SHA256, RIPEMD160 and SHA1 are measured separately, and one price covers all three: it takes the larger '
-            'flat of their rounded prices, {shares}, and SHA256&#39;s rate, raised only as far as RIPEMD160 and SHA1 '
-            'need at their largest size, 520 bytes; a rate a fraction of a varop higher on 576 bytes costs less than '
-            'the flat covers. As the envelope covers every machine, it also '
-            'covers every hash function, each over the sizes it takes: SHA256 any size, RIPEMD160 and SHA1 at most '
-            '520 bytes.',
+             'makes one kind of pass, so the price is the rounded envelope of every machine&#39;s fit of both parts, '
+             'whose own prices would be {shares}.',
+    'HASH': 'SHA256, RIPEMD160 and SHA1 are measured separately, and one price covers all three: the rounded envelope '
+            'of every machine&#39;s fit of each hash function, each over the sizes it takes: SHA256 any size, RIPEMD160 '
+            'and SHA1 at most 520 bytes. A hash processes at least one 64-byte block, so the rate carries most of the '
+            'cost and the flat stays small. Apart, they would be priced {shares}.',
 }
 # Parts of a primitive that a dataset measured separately (fit_calibrations.COMPOSED):
 # what each part times.
@@ -977,9 +975,9 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
                  'formula, penalizing under-estimates 100 times more than over-estimates.</li>'
                  '<li><strong>Combine.</strong> The envelope is the cheapest formula of the same form that lies on or '
                  'above every machine&#39;s fit at every size.</li>'
-                 '<li><strong>Round.</strong> Each price rounds the envelope up: rates to two significant figures, flat '
-                 'parts to multiples of 10 below 100 and of 50 from 100. SIG stays at 500,000.'
-                 + (' A price composed from parts is rounded again.' if composed else '') + '</li>'
+                 '<li><strong>Round.</strong> Each price rounds the envelope up: flat parts to multiples of 50, rates '
+                 'to whole varops. SIG stays at 500,000.'
+                 + (' A price that adds parts is rounded again.' if composed else '') + '</li>'
                  '<li><strong>Check.</strong> Complete scripts of every opcode run on every machine; prices are accepted '
                  'only if no block of them takes longer than the reference.</li>'
                  f'</ol><p>The full method is in <a href="{METHODOLOGY_URL}">METHODOLOGY.md</a>.</p></div>')

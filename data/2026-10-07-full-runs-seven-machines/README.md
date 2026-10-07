@@ -22,21 +22,21 @@ The Windows artifact records its benchmark sources with CRLF line endings; the f
 sources.
 
 `joint-calibration.json` and `fit.log` come from `src/fit_calibrations.py` over the seven artifacts in the order
-above, with `--source-root` on the gsr repository. The rounded candidates are implemented at gsr `e3826037e7`:
+above, with `--source-root` on the gsr repository. The rounded candidates (flats up to multiples of 50, rates up
+to whole varops) are:
 
     BASE    300
     READ    350 + 2 W(n)
     WRITE   750 + 7 W(n)
     ARITH   200 + 3 W(n)
-    MOVE    200 + 25 k
-    MUL     650 + 1 W(n) + 20 W(m) + 1 W(n) W(m)
-    DIV     1200 + 65 Q(n, m) + 10 W(m) + 1 Q(n, m) W(m),  Q(n, m) = MAX(0, W(n) - W(m))
-    HASH    250 + 40 H(n)
+    MOVE    200 + 23 k
+    MUL     650 + 1 W(n) + 18 W(m) + 1 W(n) W(m)
+    DIV     1150 + 61 Q(n, m) + 10 W(m) + 1 Q(n, m) W(m),  Q(n, m) = MAX(0, W(n) - W(m))
+    HASH    50 + 40 H(n)
     SIG     500000
-    SELECT  1400 + 650 k
+    SELECT  1350 + 615 k
 
 New in this dataset: MUL and DIV are priced per byte of `W` (their products per unit of `W(n) W(m)`), DIV in terms
 of `Q(n, m)` with no constants besides its coefficients, OP_TX SELECT net of its result's WRITE and fitted per
-transaction shape (one-byte witness items deserialized into a churned heap included), HASH's rate from SHA256 with
-RIPEMD160 and SHA1 covered at their 520-byte limit, and rates of 10 or more rounded to two significant figures whose
-second is 0 or 5.
+transaction shape (one-byte witness items deserialized into a churned heap included), and HASH priced as its
+rounded envelope over all three hash functions.

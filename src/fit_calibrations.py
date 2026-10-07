@@ -81,27 +81,15 @@ def priced_model(model, model_id):
     return out
 
 
-def compose_candidates(candidates, model_id, envelopes=None):
-    """Prices of the priced primitives composed from rounded prices of the measured
-    families, then rounded again: a sum of rounded flats need not be a rounded flat.
-
-    With the parts' envelopes, a larger-of price takes its rate only from parts of
-    unbounded size; a part of bounded size (RIPEMD160 and SHA1 take at most 520 bytes)
-    is covered by the larger flat and the smallest whole rate that keeps its envelope
-    below the price at its largest size, rather than by its own rounded-up rate."""
+def compose_candidates(candidates, model_id):
+    """Prices of the primitives whose parts add, composed from the parts' rounded prices
+    and rounded again: a sum of rounded flats need not be a rounded flat. A primitive
+    that takes the larger of its parts is priced as its rounded envelope instead, which
+    covers every machine's curve of every part over the part's own sizes."""
     composed = priced_model({family: tuple(c) for family, c in candidates.items()}, model_id)
-    for family, (how, parts) in COMPOSED[model_id].items():
-        if how != "max" or envelopes is None or family not in composed:
-            continue
-        flat = composed[family][0]
-        bounded = [part for part in parts if not feature_domain(part)[1]]
-        rate = max(candidates[part][1] for part in parts if part not in bounded)
-        for part in bounded:
-            for corner in feature_domain(part)[0]:
-                need = (sum(a * x for a, x in zip(envelopes[part], corner)) - flat) / corner[1]
-                rate = max(rate, round_coefficient(need))
-        composed[family] = (flat, rate)
     return {family: tuple(rounded_candidate(family, curve)) for family, curve in composed.items()}
+
+
 BUDGET_VAROPS = 40_000_000_000
 # BIP 440 measurement condition: a run whose epoch noise exceeds this is repeated,
 # not priced. Load average and reference drift, which earlier runners recorded,
@@ -879,31 +867,15 @@ def ceil_to(value, step):
     return int(step * math.ceil(value / step - 1e-9))
 
 
-def two_figures(value):
-    """Up to two significant figures, and at least to a whole varop."""
-    if value <= 0:
-        return 0
-    return ceil_to(value, max(1, 10 ** (math.floor(math.log10(value)) - 1)))
-
-
 def round_coefficient(value):
-    """A rate: a whole varop below 10; from 10, two significant figures whose second is 0
-    or 5 (25, 65, 650), so prices read as round numbers. That adds at most 50% just above
-    a power of ten and less than 10% from 50 up to the next power."""
-    if value <= 0:
-        return 0
-    if value < 10:
-        return ceil_to(value, 1)
-    return ceil_to(value, 5 * 10 ** (math.floor(math.log10(value)) - 1))
+    """A rate: up to a whole varop, the smallest charge there is."""
+    return ceil_to(value, 1) if value > 0 else 0
 
 
 def round_flat(value):
-    """Flats round up in coarser steps than rates: to a multiple of 10 below 100 and of 50
-    from 100, and never to more than two significant figures. A flat is the intercept of a
-    fit, which moves most between runs; coarse steps keep it from changing on every refit."""
-    if value <= 0:
-        return 0
-    return max(two_figures(value), ceil_to(value, 10 if value < 100 else 50))
+    """A flat: up to a multiple of 50. A flat is the intercept of a fit, which moves most
+    between runs; a coarse step keeps it from changing on every refit."""
+    return ceil_to(value, 50) if value > 0 else 0
 
 
 # MUL and DIV are fitted on word counts (rows, words, word products) and priced per byte
@@ -1133,15 +1105,15 @@ def composition_text(composed):
     maxima = [family for family, (how, _) in composed.items() if how == "max"]
     rules = []
     if sums:
-        rules.append(f"{' and '.join(sums)} add{'' if len(sums) > 1 else 's'} the parts' prices")
+        rules.append(f"{' and '.join(sums)} add{'' if len(sums) > 1 else 's'} the parts' rounded prices, "
+                     "rounded again")
     if maxima:
-        rules.append(f"{' and '.join(maxima)} take{'' if len(maxima) > 1 else 's'} the larger flat and the larger rate "
-                     f"of {'their' if len(maxima) > 1 else 'its'} parts of unbounded size; a part of bounded size "
-                     "(RIPEMD160, SHA1) only needs its envelope covered at its largest size")
-    return (" Primitives measured in parts (composed_from) are priced by composing the parts' rounded prices and "
-            "rounding the result again: " + "; ".join(rules) + ". The envelope of a sum covers each machine's composed "
-            "curve, that of a larger-of every machine's curve of each part over the part's own sizes; it is compared "
-            "with the price.")
+        rules.append(f"{' and '.join(maxima)} take{'' if len(maxima) > 1 else 's'} the larger of "
+                     f"{'their' if len(maxima) > 1 else 'its'} parts and {'are' if len(maxima) > 1 else 'is'} "
+                     "priced as the rounded envelope, which covers every machine's curve of each part over the "
+                     "part's own sizes")
+    return (" Primitives measured in parts (composed_from): " + "; ".join(rules) + ". The envelope of a sum covers "
+            "each machine's composed curve; it is compared with the price.")
 
 
 def main():
@@ -1223,13 +1195,14 @@ def main():
                               {family: members for family, (how, members) in composed.items() if how == "max"})
     order = [family for family in PRICED if family in envelope]
     parts = [part for _, (_, members) in composed.items() for part in members]
-    # A composed primitive's price composes its parts' rounded prices, as varops.h
-    # merges them, rounded again; its envelope, which covers each machine's composed
-    # curve or every machine's curve of each part, is compared with that price.
+    # A sum of parts is priced from the parts' rounded prices, rounded again; a larger-of
+    # primitive (HASH) is priced as its rounded envelope, which covers every machine's
+    # curve of each part over the part's own sizes.
     part_candidates = {part: rounded_candidate(part, measured_envelope[part]) for part in parts}
     part_maxima = {part: rounded_candidate(part, maximum_coefficients(models)[part]) for part in parts}
-    composed_candidates = compose_candidates(part_candidates, model_id, measured_envelope)
-    composed_maxima = compose_candidates(part_maxima, model_id, maximum_coefficients(models))
+    composed_candidates = compose_candidates(part_candidates, model_id)
+    composed_maxima = compose_candidates(part_maxima, model_id)
+    sums = {family for family, (how, _) in composed.items() if how == "sum"}
     status = ("exploratory multi-machine fit with unresolved source differences" if unmatched else
               "exploratory multi-machine fit including runs that failed their measurement conditions" if failed else
               "provisional multi-machine fit, not an accepted consensus schedule")
@@ -1241,15 +1214,15 @@ def main():
                   envelope_combination=ENVELOPE,
                   method=f"Per-machine median of raw fixture epochs, normalized so that a full 40-billion-varop budget of fitted work takes {TARGET_FRACTION:g}× the recorded local pre-v2 reference (rate derived from the recorded reference time, whatever normalization the artifact was collected with); DIVCORE, MULCORE and SELECT fitted per operand pattern (DIV or MOD and the operand values; MULCORE the operand values; SELECT the transaction shape, net of the result's WRITE and a scope operand's READ), each machine's curve the envelope of its pattern curves; ARITH, BIT and MOVE operations timed with several operand values (carry and borrow chains, shift amounts, empty and nonempty entries) fitted on the dearest value at each size; equal path-group and size-decade weights within a pattern; weighted squared log error with a 100× underprediction penalty; nonnegative predefined coefficients; no coefficient rounding. SIG and TWEAK diagnostic fits do not replace the fixed 500000 SIGCHECK.",
                   machines=machines, source_check=source_check, bench_check=bench_check,
-                  schedule_rounding=dict(coefficient="flats to a multiple of 10 below 100 and of 50 from 100, and to no more than two significant figures; rates to a whole varop below 10, and from 10 to two significant figures whose second is 0 or 5", sig_policy=500000,
-                                         rule="Ceiling each coefficient independently: flats to a multiple of 10 below 100 and of 50 from 100, never to more than two significant figures; rates (per byte of W(n) or H(n) or per counted item) to a whole varop below 10 and from 10 to two significant figures whose second is 0 or 5, MUL's and DIV's rates per byte of W(n) and W(m) and per unit of W(n) × W(m); preserve zero/exact multiples; no refitting. A price composed from rounded parts is rounded again by the same rule.",
+                  schedule_rounding=dict(coefficient="flats up to a multiple of 50; rates up to a whole varop", sig_policy=500000,
+                                         rule="Ceiling each coefficient independently: flats to a multiple of 50, rates (per byte of W(n) or H(n), per counted item, and MUL's and DIV's per byte of W(n) and W(m) and per unit of W(n) × W(m)) to a whole varop; no refitting. A price that adds rounded parts is rounded again by the same rule.",
                                          status="Installed as provisional research candidate; source discrepancy and multi-machine script confirmation remain open."),
                   primitives={}, measured_parts={})
     print("Primitive  Envelope (varops, unrounded)                   Rounded candidate                      Maximum coefficients (unrounded)")
     for family in order:
-        candidate = (list(composed_candidates[family]) if family in composed else
+        candidate = (list(composed_candidates[family]) if family in sums else
                      rounded_candidate(family, envelope[family]))
-        maximum_candidate = (list(composed_maxima[family]) if family in composed else
+        maximum_candidate = (list(composed_maxima[family]) if family in sums else
                              rounded_candidate(family, max_coeff[family]))
         record = dict(envelope_coefficients=envelope[family],
                       candidate_coefficients=candidate,

@@ -91,28 +91,27 @@ class CalibrationPipelineTests(unittest.TestCase):
         self.assertLess(env[1], 40)
 
     def test_schedule_rounding(self):
+        # Flats round up to a multiple of 50, rates up to a whole varop.
         # Hashes are priced per byte of the block-padded length: 49.0253 per byte is charged as 50.
-        self.assertEqual(calibration.rounded_candidate('H256', [3043.03, 49.0253]), [3100, 50])
+        self.assertEqual(calibration.rounded_candidate('H256', [3043.03, 49.0253]), [3050, 50])
         # Every rate is a whole number of varops per byte of W(n): PREP's 0.0301 is charged as 1.
         self.assertEqual(calibration.rounded_candidate('PREP', [241.381, .0301]), [250, 1])
         self.assertEqual(calibration.rounded_candidate('PREP', [241.381, 1.3]), [250, 2])
         self.assertEqual(calibration.formulas('PREP', [250, 1], candidate=True), '250 + 1 × W(n)')
         # MUL and DIV are priced per byte of W(n) and W(m) and per unit of W(n) × W(m),
         # each rate a whole varop: 50.9444 per word product is 0.796 per pair of bytes, charged as 1.
+        self.assertEqual(calibration.rounded_candidate('DIVCORE', [1280.4, 490.0, 101.9, 50.9444]), [1300, 496, 104, 64])
         self.assertEqual(calibration.formulas('DIVCORE', [1300, 496, 104, 64], candidate=True),
                          '1300 + 62 × Q(n, m) + 13 × W(m) + 1 × Q(n, m) × W(m)')
-        self.assertEqual(calibration.rounded_candidate('DIVCORE', [3977.26, 0, 0, 158.884]), [4000, 0, 0, 192])
-        self.assertEqual(calibration.rounded_candidate('DIVCORE', [1280.4, 483.272, 101.9, 50.9444]), [1300, 520, 120, 64])
+        self.assertEqual(calibration.rounded_candidate('DIVCORE', [3997.26, 0, 0, 158.884]), [4000, 0, 0, 192])
+        self.assertEqual(calibration.rounded_candidate('MULCORE', [338.305, 4.32306, 109.887, 28.2557]), [350, 8, 112, 64])
         self.assertEqual(calibration.formulas('MULCORE', [650, 8, 112, 64], candidate=True),
                          '650 + 1 × W(n) + 14 × W(m) + 1 × W(n) × W(m)')
         # Byte rates are charged per byte of W(n) >= n: 6.40246 per byte of n is charged as 7 × W(n).
-        self.assertEqual(calibration.rounded_candidate('PRODUCE', [2120.63, 6.40246]), [2200, 7])
-        self.assertEqual(calibration.formulas('PRODUCE', [2200, 7], candidate=True), '2200 + 7 × W(n)')
-        # Rates round to two significant figures; flats to multiples of 10 below 100 and of 50
-        # from 100, but never to more than two significant figures.
-        self.assertEqual(calibration.rounded_candidate('SELECT', [3454.87, 1643.3]), [3500, 2000])
-        self.assertEqual(calibration.rounded_candidate('MULCORE', [338.305, 4.32306, 109.887, 28.2557]), [350, 8, 120, 64])
-        self.assertEqual(calibration.rounded_candidate('READ', [80.6, 1.01]), [90, 2])
+        self.assertEqual(calibration.rounded_candidate('PRODUCE', [2130.63, 6.40246]), [2150, 7])
+        self.assertEqual(calibration.formulas('PRODUCE', [2150, 7], candidate=True), '2150 + 7 × W(n)')
+        self.assertEqual(calibration.rounded_candidate('SELECT', [3494.87, 1643.3]), [3500, 1644])
+        self.assertEqual(calibration.rounded_candidate('READ', [81.6, 1.02]), [100, 2])
         self.assertEqual(calibration.rounded_candidate('TWEAK', [168855, 0]), [500000, 0])
         self.assertEqual(calibration.formulas('H256', [192, 39], candidate=True), '192 + 39 × H(n)')
         self.assertEqual(calibration.formulas('HASH', [300, 40], candidate=True), '300 + 40 × H(n)')
@@ -122,14 +121,10 @@ class CalibrationPipelineTests(unittest.TestCase):
         self.assertEqual(calibration.rounded_candidate('F', [300, 0]), [300, 0])
         self.assertEqual(calibration.rounded_candidate('DIVCORE', [1000, 120, 8, 64]), [1000, 120, 8, 64])
         self.assertEqual(calibration.rounded_candidate('SIG', [490446, 0]), [500000, 0])
-        # Step boundaries: whole varops below 10, then two significant figures whose second
-        # is 0 or 5: steps of 5 up to 100, then 50, 500, ...
-        self.assertEqual([calibration.round_coefficient(v) for v in
-                          (0.0012, 9.2, 10, 10.1, 22.8, 99.1, 100, 100.1, 614.3, 999.1, 1000, 1000.1, 9950.5, 10000, 10001)],
-                         [1, 10, 10, 15, 25, 100, 100, 150, 650, 1000, 1000, 1500, 10000, 10000, 15000])
-        self.assertEqual([calibration.round_flat(v) for v in
-                          (0, 0.2, 10, 53.7, 99.1, 100, 100.1, 142.2, 950.1, 1000, 1712.1, 9950.5, 168100.2)],
-                         [0, 10, 10, 60, 100, 100, 150, 150, 1000, 1000, 1800, 10000, 170000])
+        self.assertEqual([calibration.round_coefficient(v) for v in (0, 0.0012, 9.2, 10, 10.1, 22.8, 60.04, 614.3)],
+                         [0, 1, 10, 10, 11, 23, 61, 615])
+        self.assertEqual([calibration.round_flat(v) for v in (0, 0.2, 41.4, 50, 53.7, 142.2, 602.465, 1147.94, 1315.57)],
+                         [0, 50, 50, 50, 100, 150, 650, 1150, 1350])
 
     def test_candidate_charge_uses_pricing_units(self):
         c = {'PRODUCE': [680, 7], 'PREP': [180, 1], 'HASH': [280, 38], 'MOVE': [180, 23], 'SIG': [500000, 0],
@@ -274,13 +269,10 @@ class CalibrationPipelineTests(unittest.TestCase):
                                   'MOVE': (200, 37), 'HASH': (300, 40)})
         # The composed price is rounded again: 200 + 90 is charged as 300.
         self.assertEqual(calibration.compose_candidates({k: list(v) for k, v in parts.items()}, 'producer-normalize-v1'),
-                         dict(priced, READ=(300, 3), MOVE=(200, 40)))
-        # RIPEMD160 and SHA1 take at most 520 bytes: their envelopes need only be covered
-        # there, so a RIPEMD160 rate just above 40 does not raise HASH's rate to 45.
-        envelopes = {'H256': (211.0, 37.31), 'H160': (13.17, 40.0124), 'H1': (172.2, 23.83)}
-        rounded = {'H256': [250, 38], 'H160': [20, 41], 'H1': [200, 24]}
-        self.assertEqual(calibration.compose_candidates(rounded, calibration.MODEL_ID, envelopes)['HASH'], (250, 40))
-        self.assertEqual(calibration.compose_candidates(rounded, calibration.MODEL_ID)['HASH'], (250, 45))
+                         dict(priced, READ=(300, 3)))
+        # HASH, a larger-of primitive, is priced as its rounded envelope: the seven-machine
+        # envelope 41.45 + 39.96 H(n) is charged 50 + 40 H(n).
+        self.assertEqual(calibration.rounded_candidate('HASH', [41.4478, 39.9633]), [50, 40])
         # A model that measures READ, WRITE and ARITH directly composes only HASH.
         direct = {'READ': (300, 3), 'WRITE': (1000, 8), 'ARITH': (200, 3),
                   'H256': (300, 38), 'H160': (60, 40), 'H1': (200, 24)}
@@ -514,9 +506,9 @@ class CalibrationPipelineTests(unittest.TestCase):
         self.assertEqual((point['x'], point['y'], point['group']), (261.5, 5, 'push'))
         self.assertEqual((point['units'], point['bytes'], point['charged']), (200, 52300, 60000))
         self.assertNotIn('UNROLL', calibration.fit_all({'UNROLL': [point]}, 100))
-        # Coefficients round up to two significant figures, and at least to a whole varop.
+        # Rates round up to a whole varop.
         self.assertEqual([calibration.round_coefficient(v) for v in (0, 27.04, 88.2, 283.3, 2234.7, 168514.1, 300)],
-                         [0, 30, 90, 300, 2500, 200000, 300])
+                         [0, 28, 89, 284, 2235, 168515, 300])
 
 
 if __name__ == '__main__':
