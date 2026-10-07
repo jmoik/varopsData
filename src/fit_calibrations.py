@@ -81,10 +81,26 @@ def priced_model(model, model_id):
     return out
 
 
-def compose_candidates(candidates, model_id):
+def compose_candidates(candidates, model_id, envelopes=None):
     """Prices of the priced primitives composed from rounded prices of the measured
-    families, then rounded again: a sum of rounded flats need not be a rounded flat."""
+    families, then rounded again: a sum of rounded flats need not be a rounded flat.
+
+    With the parts' envelopes, a larger-of price takes its rate only from parts of
+    unbounded size; a part of bounded size (RIPEMD160 and SHA1 take at most 520 bytes)
+    is covered by the larger flat and the smallest whole rate that keeps its envelope
+    below the price at its largest size, rather than by its own rounded-up rate."""
     composed = priced_model({family: tuple(c) for family, c in candidates.items()}, model_id)
+    for family, (how, parts) in COMPOSED[model_id].items():
+        if how != "max" or envelopes is None or family not in composed:
+            continue
+        flat = composed[family][0]
+        bounded = [part for part in parts if not feature_domain(part)[1]]
+        rate = max(candidates[part][1] for part in parts if part not in bounded)
+        for part in bounded:
+            for corner in feature_domain(part)[0]:
+                need = (sum(a * x for a, x in zip(envelopes[part], corner)) - flat) / corner[1]
+                rate = max(rate, round_coefficient(need))
+        composed[family] = (flat, rate)
     return {family: tuple(rounded_candidate(family, curve)) for family, curve in composed.items()}
 BUDGET_VAROPS = 40_000_000_000
 # BIP 440 measurement condition: a run whose epoch noise exceeds this is repeated,
@@ -138,9 +154,20 @@ def check_bench_sources(machines):
     benches = [machine.get('bench') for machine in machines]
     if not any(benches):
         return None
-    if not all(benches) or any(bench['source_sha256'] != benches[0]['source_sha256'] for bench in benches[1:]):
+    root = Path(__file__).resolve().parents[1]
+
+    def canonical(bench):
+        """Source hashes with a checkout's CRLF line endings (Windows) taken as LF."""
+        out = {}
+        for name, digest in bench['source_sha256'].items():
+            raw = subprocess.check_output(['git', '-C', str(root), 'show', f"{bench['head']}:{name.replace(chr(92), '/')}"])
+            lf = raw.replace(b'\r\n', b'\n')
+            same = digest == hashlib.sha256(lf.replace(b'\n', b'\r\n')).hexdigest()
+            out[name.replace(chr(92), '/')] = hashlib.sha256(lf).hexdigest() if same else digest
+        return out
+    if not all(benches) or any(canonical(bench) != canonical(benches[0]) for bench in benches[1:]):
         raise ValueError('inputs were measured with different benchmark sources')
-    return check_source_snapshots(Path(__file__).resolve().parents[1], [
+    return check_source_snapshots(root, [
         dict(file=machine['file'], head=bench['head'], source_sha256=bench['source_sha256'])
         for machine, bench in zip(machines, benches)])
 
@@ -196,12 +223,12 @@ def fixture(row, producer_manifest=None):
         # MOVE/<depth>/...: rolling from depth takes depth + 1 entries off and puts them back.
         x, group = int(parts[1]) + 1, parts[2]
     elif family == "MULCORE":
-        # MULCORE/<u>/<v>/<pattern>: u rows of v limbs each.
+        # MULCORE/<u>/<v>/<pattern>: u rows of v words each.
         x, group = int(parts[1]), f"v={int(parts[2])}"
     elif family == "DIVCORE":
         dividend, divisor = int(parts[1]), int(parts[2])
-        # Quotient limbs plus a normalization carry row; one comparison row for a shorter dividend.
-        x, group = max(1, dividend - divisor + 2), f"v={divisor}"
+        # Words by which the dividend exceeds the divisor: the rows beyond a fixed few.
+        x, group = max(0, dividend - divisor), f"v={divisor}"
     elif family == "H256":
         x, group = int(parts[2]), parts[1]
     elif family == "SELECT":
@@ -425,14 +452,21 @@ def fit(points, mode, penalty):
 
 
 def fit_divcore(points, penalty):
-    """Fit fixed setup + quotient rows + row-by-divisor-limb cells."""
-    return fit_terms(points, penalty, [(1, p["c"], p["v"]) for p in points])
+    """Fit fixed setup + rows beyond the divisor's length + divisor words + row-by-divisor-word cells.
+
+    A division makes one row per word by which the dividend exceeds the divisor, plus a
+    fixed few; the fixed rows' work is the flat and the divisor-word term."""
+    rows = [(1, p["c"], mul_rows(p), p["v"]) for p in points]
+    ws = weights(points)
+    def loss(coeff):
+        return log_loss([sum(a * x for a, x in zip(coeff, row)) for row in rows], points, ws, penalty)
+    return refine(loss, fit_terms(points, penalty, rows))
 
 
 def fit_mulcore(points, penalty):
-    """Fit fixed setup + longer-operand limbs + one row per shorter-operand limb + cells.
+    """Fit fixed setup + longer-operand words + one row per shorter-operand word + cells.
 
-    The product makes one row call per limb of the shorter operand, whose fixed
+    The product makes one row call per word of the shorter operand, whose fixed
     overhead the cells alone would spread over every cell."""
     rows = [(1, p["c"], mul_rows(p), p["v"]) for p in points]
     ws = weights(points)
@@ -486,7 +520,9 @@ def fit_terms(points, penalty, rows):
         return log_loss([sum(a * x for a, x in zip(coeff, row)) for row in rows],
                         points, ws, penalty)
     constant, _ = fit(points, "constant", penalty)
-    step, trial = fit(points, "affine", penalty)
+    # Starting rates from the fixtures with a nonzero size term (a division's dividend
+    # may not exceed its divisor).
+    step, trial = fit([p for p in points if p["c"] > 0] or points, "affine", penalty)
     middle = [0] * (k - 3)
     starts = [(constant, 0, *middle, 0), (0, step, *middle, trial), (constant / 3, step / 3, *middle, trial / 3)]
     candidates = []
@@ -520,14 +556,15 @@ def background(family, x, fits):
 
 
 def mul_rows(point):
-    """Limbs of the shorter MULCORE operand: one row of the schoolbook product each."""
+    """Words of the shorter MULCORE operand (one row of the schoolbook product each), or
+    of the DIVCORE divisor."""
     return int(point["group"].split("=")[1])
 
 
 def predict(family, point, coeff, fits):
     if family in CONSTANT:
         return coeff[0] + background(family, point["x"], fits)
-    if family == "MULCORE" and len(coeff) == 4:
+    if family in {"MULCORE", "DIVCORE"} and len(coeff) == 4:
         return coeff[0] + coeff[1] * point["c"] + coeff[2] * mul_rows(point) + coeff[3] * point["v"]
     if family in {"DIVCORE", "MULCORE"}:
         return coeff[0] + coeff[1] * point["c"] + coeff[2] * point["v"]
@@ -700,7 +737,7 @@ ENVELOPE = ("Envelope: the cheapest curve of each family's form that covers ever
             "path-group and size-decade weights as the fits), subject to theta.phi(x) >= theta_m.phi(x) for every "
             "machine m and every chargeable size x, and theta >= 0. Sizes start at zero except where an operation "
             "cannot be smaller: a hash processes at least one 64-byte block, a division has at least one quotient row "
-            "and one divisor limb, and a multiplication's shorter operand is at most as long as the longer one. RIPEMD160 and SHA1 take at most 520 bytes; other sizes are unbounded. Where sizes "
+            "and one divisor word, and a multiplication's shorter operand is at most as long as the longer one. RIPEMD160 and SHA1 take at most 520 bytes; other sizes are unbounded. Where sizes "
             "start at zero and are unbounded, the envelope equals the coefficientwise maximum. Constant primitives "
             "and SIG use the maximum. A primitive that takes the larger of measured parts (ARITH, HASH) covers every "
             "machine's curve of every part, each over the part's own chargeable sizes, and weighs each fixture "
@@ -712,11 +749,12 @@ def feature_domain(family):
     directions. Covering a linear curve there is equivalent to covering it at the
     corners and not falling behind along the directions."""
     if family == 'DIVCORE':
-        # s >= 1 quotient rows, v >= 1 divisor limbs (a zero divisor fails before dividing);
-        # features (1, s, s*v) = (1, 1, 1) + (s - 1)(0, 1, 1) + s(v - 1)(0, 0, 1).
-        return [(1, 1, 1)], [(0, 1, 1), (0, 0, 1)]
+        # q >= 0 words beyond the divisor, v >= 1 divisor words (a zero divisor fails before
+        # dividing); features (1, q, v, q*v) = (1, 0, 1, 0) + q(0, 1, 0, 1) + (v - 1)(0, 0, 1, 0)
+        # + q(v - 1)(0, 0, 0, 1).
+        return [(1, 0, 1, 0)], [(0, 1, 0, 1), (0, 0, 1, 0), (0, 0, 0, 1)]
     if family == 'MULCORE':
-        # u >= v >= 0 limbs; features (1, u, v, u*v) = (1, 0, 0, 0) + (u - v)(0, 1, 0, 0)
+        # u >= v >= 0 words; features (1, u, v, u*v) = (1, 0, 0, 0) + (u - v)(0, 1, 0, 0)
         # + v(0, 1, 1, 0) + u*v(0, 0, 0, 1).
         return [(1, 0, 0, 0)], [(0, 1, 0, 0), (0, 1, 1, 0), (0, 0, 0, 1)]
     if family in {'H160', 'H1'}:
@@ -811,7 +849,7 @@ def independent_fits(paths):
     """Every machine's machine_fits: one fit per machine and operand pattern in a single
     feature basis per family.
 
-    DIVCORE is fixed + step + cell on every machine. Maxima over mixed bases
+    DIVCORE is fixed + rows + divisor words + cells on every machine. Maxima over mixed bases
     (e.g. adding a fixed + cell fit) would charge the per-row work twice.
     """
     tasks = [(index, part) for part in REFIT_PARTS for index in range(len(paths))]
@@ -841,12 +879,22 @@ def ceil_to(value, step):
     return int(step * math.ceil(value / step - 1e-9))
 
 
-def round_coefficient(value):
-    """Up to two significant figures, and at least to a whole varop: the step is at most
-    a tenth of the value from 10 up, so rounding adds at most 10% there."""
+def two_figures(value):
+    """Up to two significant figures, and at least to a whole varop."""
     if value <= 0:
         return 0
     return ceil_to(value, max(1, 10 ** (math.floor(math.log10(value)) - 1)))
+
+
+def round_coefficient(value):
+    """A rate: a whole varop below 10; from 10, two significant figures whose second is 0
+    or 5 (25, 65, 650), so prices read as round numbers. That adds at most 50% just above
+    a power of ten and less than 10% from 50 up to the next power."""
+    if value <= 0:
+        return 0
+    if value < 10:
+        return ceil_to(value, 1)
+    return ceil_to(value, 5 * 10 ** (math.floor(math.log10(value)) - 1))
 
 
 def round_flat(value):
@@ -855,34 +903,55 @@ def round_flat(value):
     fit, which moves most between runs; coarse steps keep it from changing on every refit."""
     if value <= 0:
         return 0
-    return max(round_coefficient(value), ceil_to(value, 10 if value < 100 else 50))
+    return max(two_figures(value), ceil_to(value, 10 if value < 100 else 50))
+
+
+# MUL and DIV are fitted on word counts (rows, words, word products) and priced per byte
+# of W: a coefficient per word is 8 per byte of W(n), one per word product 64 per unit of
+# W(n) × W(m). These are the bytes each fitted coefficient's word count stands for.
+BYTE_SPANS = {'MULCORE': {4: (1, 8, 8, 64), 3: (1, 8, 64)}, 'DIVCORE': {4: (1, 8, 8, 64)}}
+
+
+def byte_spans(family, coeff):
+    return BYTE_SPANS.get(family, {}).get(len(coeff), (1,) * len(coeff))
 
 
 def rounded_candidate(family, coeff):
     """Schedule adoption, not refitting: each coefficient rounded up on its own, the flat
-    with round_flat and rates with round_coefficient; SIG and TWEAK stay at SIGCHECK."""
+    with round_flat and rates with round_coefficient (MUL and DIV per byte of W);
+    SIG and TWEAK stay at SIGCHECK."""
     if family in SIGCHECK_FAMILIES:
         return [500000, 0]
-    return [round_flat(coeff[0])] + [round_coefficient(v) for v in coeff[1:]]
+    # MUL's and DIV's rates are rounded per byte and kept per word count for charging.
+    spans = byte_spans(family, coeff)
+    return [round_flat(coeff[0])] + [round_coefficient(v / span) * span for v, span in zip(coeff[1:], spans[1:])]
 
 
 def terms(*pairs):
-    """Sum of coefficient × variable terms as BIP 440 writes them: zero terms are left out,
-    and a coefficient of one is not written."""
-    shown = [f"{c:.6g}" if not v else v if c == 1 else f"{c:.6g} × {v}" for c, v in pairs if c != 0]
+    """Sum of coefficient × variable terms: zero terms are left out, and every other
+    coefficient is written, a one too, since each is fitted."""
+    shown = [f"{c:.6g}" if not v else f"{c:.6g} × {v}" for c, v in pairs if c != 0]
     return " + ".join(shown) or "0"
 
 
+# The bytes by which a division's dividend exceeds its divisor: one row each word.
+DIV_ROWS = "Q(n, m)"  # Q(n, m) = MAX(0, W(n) − W(m))
+
+
 def formulas(family, coeff, candidate=False):
-    """Formula text; candidates are charged on W(n) where the fit is per byte of n."""
+    """Formula text; candidates are charged on W(n) where the fit is per byte of n,
+    MUL and DIV per byte of the operands' W (fitted per word, shown per byte)."""
     if family in CONSTANT:
         return f"{coeff[0]:.6g}"
-    if family == "MULCORE" and len(coeff) == 4:
-        return terms((coeff[0], ''), (coeff[1], 'u'), (coeff[2], 'v'), (coeff[3], 'u × v'))
     if family == "MULCORE":
-        return terms((coeff[0], ''), (coeff[1], 'u'), (coeff[2], 'u × v'))
+        names = (('W(n)', 'W(m)', 'W(n) × W(m)') if len(coeff) == 4 else
+                 ('W(n)', 'W(n) × W(m)'))
+        return terms((coeff[0], ''), *[(c / span, v) for c, v, span in
+                                       zip(coeff[1:], names, byte_spans(family, coeff)[1:])])
     if family == "DIVCORE":
-        return terms((coeff[0], ''), (coeff[1], 's'), (coeff[2], 's × v'))
+        # Q(n, m), the bytes by which the dividend exceeds the divisor, stands where MUL has W(n).
+        return terms((coeff[0], ''), (coeff[1] / 8, DIV_ROWS), (coeff[2] / 8, 'W(m)'),
+                     (coeff[3] / 64, f'{DIV_ROWS} × W(m)'))
     if candidate and family in WORD_PRICED:
         variable = "W(n)"
     else:
@@ -1067,7 +1136,8 @@ def composition_text(composed):
         rules.append(f"{' and '.join(sums)} add{'' if len(sums) > 1 else 's'} the parts' prices")
     if maxima:
         rules.append(f"{' and '.join(maxima)} take{'' if len(maxima) > 1 else 's'} the larger flat and the larger rate "
-                     f"of {'their' if len(maxima) > 1 else 'its'} parts")
+                     f"of {'their' if len(maxima) > 1 else 'its'} parts of unbounded size; a part of bounded size "
+                     "(RIPEMD160, SHA1) only needs its envelope covered at its largest size")
     return (" Primitives measured in parts (composed_from) are priced by composing the parts' rounded prices and "
             "rounding the result again: " + "; ".join(rules) + ". The envelope of a sum covers each machine's composed "
             "curve, that of a larger-of every machine's curve of each part over the part's own sizes; it is compared "
@@ -1158,21 +1228,21 @@ def main():
     # curve or every machine's curve of each part, is compared with that price.
     part_candidates = {part: rounded_candidate(part, measured_envelope[part]) for part in parts}
     part_maxima = {part: rounded_candidate(part, maximum_coefficients(models)[part]) for part in parts}
-    composed_candidates = compose_candidates(part_candidates, model_id)
-    composed_maxima = compose_candidates(part_maxima, model_id)
+    composed_candidates = compose_candidates(part_candidates, model_id, measured_envelope)
+    composed_maxima = compose_candidates(part_maxima, model_id, maximum_coefficients(models))
     status = ("exploratory multi-machine fit with unresolved source differences" if unmatched else
               "exploratory multi-machine fit including runs that failed their measurement conditions" if failed else
               "provisional multi-machine fit, not an accepted consensus schedule")
     result = dict(schema="varop-joint-fit-v3", status=status,
                   model_id=model_id,
                   pricing_basis="envelope",
-                  schedule_combination="Envelope of machine curves, each fitted independently from the samples recorded on that machine after same-machine normalization, DIVCORE, MULCORE and SELECT as the envelope of that machine's operand-pattern curves (see envelope_combination); DIVCORE rows are trimmed-length quotient rows, fitted as fixed + step + cell. Round after combining; SIG and TWEAK remain fixed at SIGCHECK, 500000. Coefficientwise maxima are kept for comparison."
+                  schedule_combination="Envelope of machine curves, each fitted independently from the samples recorded on that machine after same-machine normalization, DIVCORE, MULCORE and SELECT as the envelope of that machine's operand-pattern curves (see envelope_combination); DIVCORE fitted as fixed + divisor words + rows beyond the divisor + row-by-divisor-word cells, over trimmed lengths. Round after combining; SIG and TWEAK remain fixed at SIGCHECK, 500000. Coefficientwise maxima are kept for comparison."
                                        + composition_text(composed),
                   envelope_combination=ENVELOPE,
                   method=f"Per-machine median of raw fixture epochs, normalized so that a full 40-billion-varop budget of fitted work takes {TARGET_FRACTION:g}× the recorded local pre-v2 reference (rate derived from the recorded reference time, whatever normalization the artifact was collected with); DIVCORE, MULCORE and SELECT fitted per operand pattern (DIV or MOD and the operand values; MULCORE the operand values; SELECT the transaction shape, net of the result's WRITE and a scope operand's READ), each machine's curve the envelope of its pattern curves; ARITH, BIT and MOVE operations timed with several operand values (carry and borrow chains, shift amounts, empty and nonempty entries) fitted on the dearest value at each size; equal path-group and size-decade weights within a pattern; weighted squared log error with a 100× underprediction penalty; nonnegative predefined coefficients; no coefficient rounding. SIG and TWEAK diagnostic fits do not replace the fixed 500000 SIGCHECK.",
                   machines=machines, source_check=source_check, bench_check=bench_check,
-                  schedule_rounding=dict(coefficient="flats to a multiple of 10 below 100 and of 50 from 100, and to no more than two significant figures; rates to two significant figures, and at least to a whole varop", sig_policy=500000,
-                                         rule="Ceiling each coefficient independently: flats to a multiple of 10 below 100 and of 50 from 100, never to more than two significant figures; rates (per byte of W(n) or H(n) or per counted item) to two significant figures and at least to a whole varop; preserve zero/exact multiples; no refitting. A price composed from rounded parts is rounded again by the same rule.",
+                  schedule_rounding=dict(coefficient="flats to a multiple of 10 below 100 and of 50 from 100, and to no more than two significant figures; rates to a whole varop below 10, and from 10 to two significant figures whose second is 0 or 5", sig_policy=500000,
+                                         rule="Ceiling each coefficient independently: flats to a multiple of 10 below 100 and of 50 from 100, never to more than two significant figures; rates (per byte of W(n) or H(n) or per counted item) to a whole varop below 10 and from 10 to two significant figures whose second is 0 or 5, MUL's and DIV's rates per byte of W(n) and W(m) and per unit of W(n) × W(m); preserve zero/exact multiples; no refitting. A price composed from rounded parts is rounded again by the same rule.",
                                          status="Installed as provisional research candidate; source discrepancy and multi-machine script confirmation remain open."),
                   primitives={}, measured_parts={})
     print("Primitive  Envelope (varops, unrounded)                   Rounded candidate                      Maximum coefficients (unrounded)")

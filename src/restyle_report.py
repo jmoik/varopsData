@@ -27,6 +27,7 @@ SERIES = {
     '#b91c1c': 'intel',
     '#be185d': 'i7',
     '#4a3aa7': 'r5',
+    '#8f5a2b': 'r7',
     '#172536': 'basis',
 }
 MACHINES = {
@@ -36,16 +37,20 @@ MACHINES = {
     'Intel Core i5-12500': 'intel',
     'Intel Core i7-7700': 'i7',
     'AMD Ryzen 5 3600': 'r5',
+    'AMD Ryzen 7 7700': 'r7',
 }
 # Colour words in the generated prose that must follow the new palette.
 TEXT_FIXES = [
     ('orange squares', 'amber squares'),
     ('purple diamonds', 'teal diamonds'),
 ]
-W_NOTE = 'W(n) is n rounded up to a multiple of 8 bytes.'
+W_NOTE = 'W(n) is n rounded up to a multiple of 8 bytes, the bytes of the 64-bit words that hold n bytes.'
 H_NOTE = 'H(n) is the bytes a hash processes: n plus padding, in whole 64-byte blocks.'
-SYMBOLS = ('n is a size in bytes. ' + W_NOTE + ' ' + H_NOTE + ' k counts stack entries or charged units, u and v '
-           'are the 64-bit limbs of the longer and shorter operand, and s the quotient rows of a division.')
+DIV_NOTE = ('Q(n, m) = MAX(0, W(n) − W(m)) is the bytes by which the dividend exceeds the divisor. A division makes one row per word of Q(n, m), plus '
+            'a fixed few: each row estimates and corrects a quotient word, then subtracts that multiple of the divisor. '
+            'The flat and the W(m) term pay for the fixed rows.')
+SYMBOLS = ('<span class="coef">Blue</span> numbers are coefficients from the fit, rounded up; the rest is notation. n is a size in bytes. ' + W_NOTE + ' ' + H_NOTE + ' k counts stack entries or charged units. MUL and DIV take the byte lengths n and m of the longer and '
+           'shorter operand, or of the dividend and divisor. ' + DIV_NOTE)
 
 CSS = r'''
 :root{
@@ -57,7 +62,7 @@ CSS = r'''
   --accent:#2f5fd0;--accent-soft:#e8eefc;
   --warn:#9a5b00;--warn-bg:#fff6e5;--warn-border:#f0c46b;
   --hi:#b42318;--hi-bg:#fdecea;--mid:#8a5a00;--mid-bg:#fff4dc;
-  --m1:#2a78d6;--m4:#eda100;--ryzen:#1baf7a;--intel:#e34948;--i7:#a3548c;--r5:#4a3aa7;--basis:#11151c;
+  --m1:#2a78d6;--m4:#eda100;--ryzen:#1baf7a;--intel:#e34948;--i7:#a3548c;--r5:#4a3aa7;--r7:#8f5a2b;--basis:#11151c;
   --shadow:0 1px 2px rgba(16,24,40,.04),0 1px 3px rgba(16,24,40,.06);
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
@@ -69,7 +74,7 @@ CSS = r'''
   --accent:#8fb0ff;--accent-soft:#1d2536;
   --warn:#f4c46a;--warn-bg:#2a2214;--warn-border:#6b5020;
   --hi:#ff8f84;--hi-bg:#3a1d1b;--mid:#f0c46a;--mid-bg:#2f2615;
-  --m1:#3987e5;--m4:#b38e00;--ryzen:#199e70;--intel:#e66767;--i7:#a3548c;--r5:#9085e9;--basis:#f1f2f4;
+  --m1:#3987e5;--m4:#b38e00;--ryzen:#199e70;--intel:#e66767;--i7:#a3548c;--r5:#9085e9;--r7:#c08552;--basis:#f1f2f4;
   --shadow:none;
 }}
 :root[data-theme="dark"]{
@@ -81,7 +86,7 @@ CSS = r'''
   --accent:#8fb0ff;--accent-soft:#1d2536;
   --warn:#f4c46a;--warn-bg:#2a2214;--warn-border:#6b5020;
   --hi:#ff8f84;--hi-bg:#3a1d1b;--mid:#f0c46a;--mid-bg:#2f2615;
-  --m1:#3987e5;--m4:#b38e00;--ryzen:#199e70;--intel:#e66767;--i7:#a3548c;--r5:#9085e9;--basis:#f1f2f4;
+  --m1:#3987e5;--m4:#b38e00;--ryzen:#199e70;--intel:#e66767;--i7:#a3548c;--r5:#9085e9;--r7:#c08552;--basis:#f1f2f4;
   --shadow:none;
 }
 *{box-sizing:border-box}
@@ -187,6 +192,7 @@ article{scroll-margin-top:72px}
 .price-label{font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
 .price-val{font:650 20px ui-monospace,"SF Mono",Menlo,monospace;color:var(--text);background:var(--surface-2);border:1px solid var(--border);padding:4px 12px;border-radius:9px;white-space:nowrap}
 .price-val .u{font:500 12px system-ui;color:var(--muted)}
+.coef{color:var(--accent)}
 .rounding{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;font-size:13px;color:var(--muted);margin:0 0 10px}
 .rounding .chip{font-family:ui-monospace,monospace;font-size:12px}
 .note{font-size:14px;color:var(--text-2)}
@@ -204,10 +210,11 @@ article>p,article>details>p,.chart>p{color:var(--text-2);max-width:86ch}
 .plot-mark.intel{background:var(--intel);clip-path:polygon(50% 0,100% 100%,0 100%);width:10px;height:10px}
 .plot-mark.i7{background:var(--i7);clip-path:polygon(0 0,100% 0,50% 100%);width:10px;height:10px}
 .plot-mark.r5{background:var(--r5);clip-path:polygon(0 50%,100% 0,100% 100%);width:10px;height:10px}
+.plot-mark.r7{background:var(--r7);clip-path:polygon(100% 50%,0 0,0 100%);width:10px;height:10px}
 .plot-mark.dot{width:9px;height:9px;border-radius:50%;transform:none;clip-path:none}
 .plot-mark.hollow{background:transparent;border:1.5px solid var(--muted);border-radius:50%}
 .plot-line{display:inline-block;width:22px;height:0;border-top:2px dashed;flex:0 0 22px}
-.plot-line.m1{border-color:var(--m1)}.plot-line.m4{border-color:var(--m4)}.plot-line.ryzen{border-color:var(--ryzen)}.plot-line.intel{border-color:var(--intel)}.plot-line.i7{border-color:var(--i7)}.plot-line.r5{border-color:var(--r5)}
+.plot-line.m1{border-color:var(--m1)}.plot-line.m4{border-color:var(--m4)}.plot-line.ryzen{border-color:var(--ryzen)}.plot-line.intel{border-color:var(--intel)}.plot-line.i7{border-color:var(--i7)}.plot-line.r5{border-color:var(--r5)}.plot-line.r7{border-color:var(--r7)}
 .plot-line.basis{border-color:var(--basis);border-top-style:solid;border-top-width:3px}
 .plot-line.candidate{border-color:var(--basis);border-top-style:dotted;border-top-width:3px}
 .legend-icon{width:14px;height:14px;flex:0 0 14px}
@@ -284,7 +291,7 @@ SCRIPT = r'''
   addEventListener('hashchange', markCurrent); markCurrent();
 
   // Point tooltips: move native <title>s into data attributes on first hover.
-  const MACHINE = { m1: ['Apple M1 Pro', 'm1'], m4: ['Apple M4 Pro', 'm4'], ryzen: ['AMD Ryzen 9 9950X', 'ryzen'], intel: ['Intel Core i5-12500', 'intel'], i7: ['Intel Core i7-7700', 'i7'], r5: ['AMD Ryzen 5 3600', 'r5'] };
+  const MACHINE = { m1: ['Apple M1 Pro', 'm1'], m4: ['Apple M4 Pro', 'm4'], ryzen: ['AMD Ryzen 9 9950X', 'ryzen'], intel: ['Intel Core i5-12500', 'intel'], i7: ['Intel Core i7-7700', 'i7'], r5: ['AMD Ryzen 5 3600', 'r5'], r7: ['AMD Ryzen 7 7700', 'r7'] };
   const tip = document.createElement('div'); tip.className = 'tip'; document.body.appendChild(tip);
   const esc = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
   function prepare(svg){
@@ -366,6 +373,38 @@ def sort_facets(body):
     return re.sub(f'(?:{facet})+', reorder, body)
 
 
+# Prices set by policy, not by the fit: SIGCHECK.
+FIXED_PRICES = {'SIG'}
+
+
+def mark_coefficients(formula):
+    """Colour a formula's coefficients: numbers outside function arguments (W(n), H(64 + n),
+    MAX(0, ...)) and not a divisor (/ 64). Tags and entities are left alone."""
+    out, calls, i = [], [], 0
+    while i < len(formula):
+        ch = formula[i]
+        if ch in '<&':
+            end = formula.find('>' if ch == '<' else ';', i)
+            end = len(formula) - 1 if end < 0 else end
+            out.append(formula[i:end + 1])
+            i = end + 1
+            continue
+        if ch == '(':
+            calls.append(i > 0 and (formula[i - 1].isalnum() or formula[i - 1] == '_'))
+        elif ch == ')' and calls:
+            calls.pop()
+        number = re.match(r'\d[\d,]*(?:\.\d+)?', formula[i:]) if ch.isdigit() and (i == 0 or not formula[i - 1].isalnum()) else None
+        if number:
+            text = number.group(0)
+            constant = any(calls) or formula[:i].rstrip().endswith('/')
+            out.append(text if constant else f'<span class="coef">{text}</span>')
+            i += len(text)
+            continue
+        out.append(ch)
+        i += 1
+    return ''.join(out)
+
+
 def restyle(src):
     svgs = []
 
@@ -403,8 +442,8 @@ def restyle(src):
         parts = ['<div class="art-head"><div>',
                  f'<div class="eyebrow">{cat_of.get(pid, "")}</div><h3><a href="#{pid}">{name}</a></h3></div>',
                  '<div class="price"><span class="price-label">Price</span>',
-                 f'<code class="price-val">{formula} <span class="u">varops</span></code></div></div>']
-        symbols = (W_NOTE if 'W(' in formula else '') + (H_NOTE if 'H(' in formula else '')
+                 f'<code class="price-val">{formula if pid in FIXED_PRICES else mark_coefficients(formula)} <span class="u">varops</span></code></div></div>']
+        symbols = ' '.join(note for token, note in (('W(', W_NOTE), ('H(', H_NOTE), ('Q(n, m)', DIV_NOTE)) if token in formula)
         extra = ' '.join(x for x in (symbols, rest.strip()) if x)
         if extra:
             parts.append(f'<p class="note">{extra}</p>')
@@ -451,6 +490,9 @@ def restyle(src):
         header = header[first.end():]
     header = re.sub(r'<nav class="nav".*?</nav>', '', header, flags=re.S)
     diagnostics = re.search(r'<div id="diagnostics"><h2>(.*?)</h2>(.*?)</div><!--/diagnostics-->', header, re.S)
+    body = re.sub(r'(<th>Fitted cost \(varops\)</th>.*?</table>)',
+                  lambda m: re.sub(r'<code>(.*?)</code>', lambda c: f'<code>{mark_coefficients(c.group(1))}</code>', m.group(1)),
+                  body, flags=re.S)
     header = header.replace(diagnostics.group(0), '') if diagnostics else header
     header = re.sub(r'<table>(.*?)</table>',
                     lambda m: f'<div class="table-wrap"><table>{restyle_table_rows(m.group(1))}</table></div>',
@@ -464,8 +506,8 @@ def restyle(src):
             continue
         rows.append(f'<tr class="group"><td colspan="3">{cname}</td></tr>')
         for pid, name, price, basis in prims:
-            rows.append(f'<tr><td><a href="#{pid}">{name}</a></td><td class="pcol"><code>{price}</code></td>'
-                        f'<td class="basis">{f"<code>{basis}</code>" if basis else "—"}</td></tr>')
+            rows.append(f'<tr><td><a href="#{pid}">{name}</a></td><td class="pcol"><code>{price if pid in FIXED_PRICES else mark_coefficients(price)}</code></td>'
+                        f'<td class="basis">{f"<code>{mark_coefficients(basis)}</code>" if basis else "—"}</td></tr>')
 
     sidebar = ['<aside class="sidebar" aria-label="Primitives"><h4>Overview</h4><a href="#prices"><span>Prices</span></a>']
     for anchor, label in (('opcodes', 'How opcodes are charged'), ('method', 'How prices are derived'),

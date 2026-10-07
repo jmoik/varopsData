@@ -14,7 +14,7 @@ from pathlib import Path
 import tempfile
 
 from restyle_report import restyle
-from fit_calibrations import COMPOSED, MAX_EPOCH_NOISE, TARGET_FRACTION, candidate_charge, charged_by, check_source_snapshots, envelope_model, features, formulas, hash_span, failed_conditions, independent_models, load_calibration, predict, priced_model, selection_time
+from fit_calibrations import COMPOSED, MAX_EPOCH_NOISE, TARGET_FRACTION, candidate_charge, charged_by, check_source_snapshots, envelope_model, features, byte_spans, formulas, hash_span, failed_conditions, independent_models, load_calibration, predict, priced_model, selection_time
 
 
 # Sections: the BIP 440 primitive categories, then one section per later BIP. A
@@ -36,7 +36,7 @@ SECTIONS = [
          groups=[("Numeric and bit operations", ("ARITH", "MULCORE", "DIVCORE"))]),
     dict(slug="category-crypto", title="Hashing and signatures",
          intro="Hashes are charged per 64-byte block they process, at one price for SHA256, RIPEMD160 and SHA1. Every elliptic-curve operation, a signature check or a public key tweak, costs one SIGCHECK.",
-         groups=[("Hashing and signatures", ("HASH", "SIG", "TWEAK"))]),
+         groups=[("Hashing and signatures", ("HASH", "SIG"))]),
     dict(slug="section-extended-primitives", title="Extended Primitives · OP_CHECKSIGFROMSTACK, OP_TWEAKADD, OP_BYTEREV",
          intro="These opcodes add no primitive. OP_CHECKSIGFROMSTACK and OP_TWEAKADD each pay one SIGCHECK (OP_TWEAKADD's tweak is measured under Hashing and signatures); their measurements are compared with that charge.",
          groups=[("Opcodes", ("CSFS", "BYTEREV"))]),
@@ -48,14 +48,15 @@ SECTIONS = [
          groups=[("Unrolling", ("UNROLL",))]),
 ]
 # Prices implemented in src/script/varops.h, compared against the joint candidate.
-IMPLEMENTED_AT = 'd4121fe10f'
-CURRENT_COSTS = {'F': '350', 'READ': '300 + 3 × W(n)', 'WRITE': '1000 + 8 × W(n)', 'ARITH': '200 + 3 × W(n)',
-                 'MOVE': '200 + 37 × k',
-                 'MULCORE': '400 + 6 × u + 120 × v + 29 × u × v', 'DIVCORE': '510 × s + 33 × s × v',
-                 'HASH': '300 + 40 × H(n)', 'SIG': '500000', 'TWEAK': '500000',
-                 'SELECT': '2400 + 270 × k'}
-BASE, WRITE, READ, HASH, SIGCHECK = 350, (1000, 8), (300, 3), (300, 40), 500_000  # rates per byte of W(n), H(n)
-ARITH, MOVE, MUL, SELECT = (200, 3), (200, 37), (400, 6, 120, 29), (2400, 270)
+IMPLEMENTED_AT = 'e3826037e7'
+CURRENT_COSTS = {'F': '300', 'READ': '350 + 2 × W(n)', 'WRITE': '750 + 7 × W(n)', 'ARITH': '200 + 3 × W(n)',
+                 'MOVE': '200 + 25 × k',
+                 'MULCORE': '650 + 1 × W(n) + 20 × W(m) + 1 × W(n) × W(m)',
+                 'DIVCORE': '1200 + 65 × Q(n, m) + 10 × W(m) + 1 × Q(n, m) × W(m)',
+                 'HASH': '250 + 40 × H(n)', 'SIG': '500000',
+                 'SELECT': '1400 + 650 × k'}
+BASE, WRITE, READ, HASH, SIGCHECK = 300, (750, 7), (350, 2), (250, 40), 500_000  # rates per byte of W(n), H(n)
+ARITH, MOVE, MUL, SELECT = (200, 3), (200, 25), (650, 1, 20, 1), (1400, 650)  # MUL per byte of W(n), W(m), W(n) × W(m)
 
 
 def unroll_charge(units, length, base=BASE, write=WRITE, read=READ, padded=True):
@@ -86,8 +87,8 @@ def opcode_examples():
          BASE + read(1) + MOVE[0] + MOVE[1] * 11),
         ('OP_ADD', 'BASE + READ(a) + READ(b) + ARITH(max(a, b)) + WRITE(r)',
          'two 8-byte numbers, 8-byte sum', BASE + 2 * read(8) + ARITH[0] + ARITH[1] * 8 + write(8)),
-        ('OP_MUL', 'BASE + READ(a) + READ(b) + MUL(u, v) + WRITE(8 × (u + v))', 'two 8-byte numbers',
-         BASE + 2 * read(8) + MUL[0] + MUL[1] + MUL[2] + MUL[3] + write(16)),
+        ('OP_MUL', 'BASE + READ(a) + READ(b) + MUL(n, m) + WRITE(W(a) + W(b))', 'two 8-byte numbers',
+         BASE + 2 * read(8) + MUL[0] + MUL[1] * 8 + MUL[2] * 8 + MUL[3] * 64 + write(16)),
         ('OP_BYTEREV', 'BASE + ARITH(n) + WRITE(n)', 'a 32-byte value', BASE + ARITH[0] + ARITH[1] * 32 + write(32)),
         ('OP_SHA256', 'BASE + HASH(n) + WRITE(32)', 'a 32-byte value', BASE + hash_cost(32) + write(32)),
         ('OP_HASH160', 'BASE + HASH(n) + HASH(32) + WRITE(20)', 'a 33-byte public key',
@@ -161,11 +162,11 @@ MODELS = {
     'WRITE': 'Creating one stack value of <code>n</code> bytes: converting a numeric result back to bytes, or allocating and filling a buffer, then inserting it and eventually releasing it.',
     'ARITH': 'One pass over the operands’ words, with or without a carry between words: addition, subtraction, bitwise logic, shifts and OP_BYTEREV’s byte reversal.',
     'MOVE': 'Taking the top <code>k</code> entries off a stack and putting back some or all of them, in any order and on either stack, without copying their contents.',
-    'MULCORE': 'Schoolbook multiplication of a <code>u</code>-limb number by a <code>v</code>-limb number (<code>v</code> ≤ <code>u</code>, 64-bit limbs), including scratch space.',
-    'DIVCORE': 'Long division or remainder: <code>s</code> quotient rows, each working through the <code>v</code> limbs of the divisor.',
+    'MULCORE': 'Schoolbook multiplication of an <code>n</code>-byte number by an <code>m</code>-byte number (<code>m</code> ≤ <code>n</code>): one row per 64-bit word of the shorter operand over the words of the longer, including scratch space.',
+    'DIVCORE': 'Long division or remainder of an <code>n</code>-byte dividend by an <code>m</code>-byte divisor: one row per word by which the dividend exceeds the divisor, plus a fixed few, each working through the words of the divisor.',
     'HASH': 'One SHA256, RIPEMD160 or SHA1 pass over an <code>n</code>-byte message, in whole 64-byte blocks. RIPEMD160 and SHA1 take at most 520 bytes.',
     'SIG': 'One BIP 340 signature check. Its price is fixed at 500,000 varops, which keeps today’s allowance of one signature check per 50 weight units; the challenge hash is charged separately as HASH.',
-    'TWEAK': 'One BIP 449 x-only public key tweak (OP_TWEAKADD), P + t·G. It is the same elliptic-curve work as a signature check without the challenge hash, at about 80% of its time, and is charged one SIGCHECK. The 2026-10-01 fixture tweaked by 1, which makes the scalar multiplication nearly free; it is shown as measured.',
+    'TWEAK': 'One BIP 449 x-only public key tweak (OP_TWEAKADD), P + t·G: the same elliptic-curve work as a signature check without the challenge hash, at about 80% of its time, so it is charged one SIGCHECK too.',
     'SELECT': 'One OP_TX selection with <code>k</code> charged units: each value selected and each record scanned, including planning and framing; the result’s WRITE is charged separately.',
 }
 
@@ -189,7 +190,9 @@ COMPOSED_TEXT = {
              'makes one kind of pass, so the price takes the larger flat and the larger rate of the two parts&#39; '
              'rounded prices, {shares}, and its envelope covers every machine&#39;s fit of both parts.',
     'HASH': 'SHA256, RIPEMD160 and SHA1 are measured separately, and one price covers all three: it takes the larger '
-            'flat and the larger rate of their rounded prices, {shares}. As the envelope covers every machine, it also '
+            'flat of their rounded prices, {shares}, and SHA256&#39;s rate, raised only as far as RIPEMD160 and SHA1 '
+            'need at their largest size, 520 bytes; a rate a fraction of a varop higher on 576 bytes costs less than '
+            'the flat covers. As the envelope covers every machine, it also '
             'covers every hash function, each over the sizes it takes: SHA256 any size, RIPEMD160 and SHA1 at most '
             '520 bytes.',
 }
@@ -260,7 +263,7 @@ def publish_names(page):
                 piece = re.sub(pattern, replacement, piece)
             out.append(piece)
     return ''.join(out)
-COLORS = {"m1": "#2563eb", "m4": "#dc6b18", "ryzen": "#7c3aed", "intel": "#b91c1c", "i7": "#be185d", "r5": "#4a3aa7", "envelope": "#172536", "basis": "#172536",
+COLORS = {"m1": "#2563eb", "m4": "#dc6b18", "ryzen": "#7c3aed", "intel": "#b91c1c", "i7": "#be185d", "r5": "#4a3aa7", "r7": "#8f5a2b", "envelope": "#172536", "basis": "#172536",
           "no_step": "#172536", "cells_only": "#b91c1c",
           "prep_constant": "#b91c1c", "prep_current": "#172536"}
 WIDTH, HEIGHT = 880, 420
@@ -327,11 +330,13 @@ def curve(family, x, group, model):
 
 # One name per machine, used everywhere on the page.
 MACHINE_NAMES = {'m1': 'Apple M1 Pro', 'm4': 'Apple M4 Pro', 'ryzen': 'AMD Ryzen 9 9950X',
-                 'intel': 'Intel Core i5-12500', 'i7': 'Intel Core i7-7700', 'r5': 'AMD Ryzen 5 3600'}
+                 'intel': 'Intel Core i5-12500', 'i7': 'Intel Core i7-7700', 'r5': 'AMD Ryzen 5 3600',
+                 'r7': 'AMD Ryzen 7 7700'}
 LEGEND_MACHINES = [(key, name, name) for key, name in MACHINE_NAMES.items()]
 LEGEND_DESC = [(key, MACHINE_NAMES[key], marker) for key, marker in
                [('m1', 'Blue circles'), ('m4', 'orange squares'), ('ryzen', 'purple diamonds'),
-                ('intel', 'red triangles'), ('i7', 'plum inverted triangles'), ('r5', 'indigo left-pointing triangles')]]
+                ('intel', 'red triangles'), ('i7', 'plum inverted triangles'), ('r5', 'indigo left-pointing triangles'),
+                ('r7', 'brown right-pointing triangles')]]
 
 
 def describe(path):
@@ -357,8 +362,6 @@ def chart(family, points, models, group=None, id_prefix="", candidates=None, pri
     line_group = group if group is not None else groups[0]
     sample_x = sorted({round(math.expm1(math.log1p(max_x) * i / 159)) for i in range(160)} |
                       {p["x"] for p in shown if p["x"] in {0, 1, max_x}})
-    if family == "DIVCORE":
-        sample_x = [x for x in sample_x if x >= 1]
     lines = {key: [(x, curve(family, x, line_group, model)) for x in sample_x]
              for key, model in models.items()}
     if candidates is not None:
@@ -403,9 +406,11 @@ def chart(family, points, models, group=None, id_prefix="", candidates=None, pri
         px, _ = xy(value, ymin)
         if px - last_tick < 43 and value != max_x:
             continue
-        pieces.append(f'<text x="{px:.2f}" y="{BOTTOM+21}" text-anchor="middle" class="tick">{short(value)}</text>')
+        tick = value * 8 if family in {"MULCORE", "DIVCORE"} else value  # word counts shown as bytes
+        pieces.append(f'<text x="{px:.2f}" y="{BOTTOM+21}" text-anchor="middle" class="tick">{short(tick)}</text>')
         last_tick = px
-    xlabel = ("Quotient rows s" if family == "DIVCORE" else "Limbs of the longer operand u" if family == "MULCORE" else
+    xlabel = ("Bytes the dividend exceeds the divisor, Q(n, m)" if family == "DIVCORE" else
+              "Longer operand, W(n) bytes" if family == "MULCORE" else
               "Charged units k" if family == "SELECT" else "Stack entries moved k" if family == "MOVE" else
               "Unrolled bytes per charged unit" if family == "UNROLL" else "Size in bytes")
     pieces.append(f'<text x="{(LEFT+RIGHT)/2:.1f}" y="{HEIGHT-12}" text-anchor="middle" class="axis">{xlabel} (log scale)</text>')
@@ -425,7 +430,7 @@ def chart(family, points, models, group=None, id_prefix="", candidates=None, pri
                         for i, (x, y) in enumerate(lines['candidate']))
         pieces.append(f'<path class="candidate" d="{path}" fill="none" stroke="{COLORS["basis"]}" stroke-width="3"'
                       ' stroke-dasharray="0.1 6" stroke-linecap="round"/>')
-    for key in ("m1", "m4", "ryzen", "intel", "i7", "r5"):
+    for key in ("m1", "m4", "ryzen", "intel", "i7", "r5", "r7"):
         color = COLORS[key]
         for p in shown:
             if p["machine_key"] != key:
@@ -447,6 +452,8 @@ def chart(family, points, models, group=None, id_prefix="", candidates=None, pri
                 mark = f'<path d="M{px:.2f},{py+3.6:.2f}L{px+3.6:.2f},{py-3:.2f}L{px-3.6:.2f},{py-3:.2f}Z" fill="{fill}" stroke="{color}" stroke-width=".8"/>'
             elif key == "r5":
                 mark = f'<path d="M{px-3.6:.2f},{py:.2f}L{px+3:.2f},{py-3.6:.2f}L{px+3:.2f},{py+3.6:.2f}Z" fill="{fill}" stroke="{color}" stroke-width=".8"/>'
+            elif key == "r7":
+                mark = f'<path d="M{px+3.6:.2f},{py:.2f}L{px-3:.2f},{py-3.6:.2f}L{px-3:.2f},{py+3.6:.2f}Z" fill="{fill}" stroke="{color}" stroke-width=".8"/>'
             else:
                 mark = f'<path d="M{px:.2f},{py-3.4:.2f}L{px+3.4:.2f},{py:.2f}L{px:.2f},{py+3.4:.2f}L{px-3.4:.2f},{py:.2f}Z" fill="{fill}" stroke="{color}" stroke-width=".8"/>'
             pieces.append(f'<g><title>{esc(key)} · {esc(p.get("label", p["group"]))}: {p["y"]:.6g} varops</title>{mark}</g>')
@@ -481,6 +488,8 @@ def machine_mark(key, px, py):
         return f'<path d="M{px:.2f},{py+3.6:.2f}L{px+3.6:.2f},{py-3:.2f}L{px-3.6:.2f},{py-3:.2f}Z" fill="{color}" stroke="{color}" stroke-width=".8"/>'
     if key == "r5":
         return f'<path d="M{px-3.6:.2f},{py:.2f}L{px+3:.2f},{py-3.6:.2f}L{px+3:.2f},{py+3.6:.2f}Z" fill="{color}" stroke="{color}" stroke-width=".8"/>'
+    if key == "r7":
+        return f'<path d="M{px+3.6:.2f},{py:.2f}L{px-3:.2f},{py-3.6:.2f}L{px-3:.2f},{py+3.6:.2f}Z" fill="{color}" stroke="{color}" stroke-width=".8"/>'
     return f'<path d="M{px:.2f},{py-3.4:.2f}L{px+3.4:.2f},{py:.2f}L{px:.2f},{py+3.4:.2f}L{px-3.4:.2f},{py:.2f}Z" fill="{color}" stroke="{color}" stroke-width=".8"/>'
 
 
@@ -527,7 +536,7 @@ def check_chart(key, points):
         for p in points:
             px, py = xy(p["x"], p["charged"])
             pieces.append(f'<path d="M{px-5:.2f} {py:.2f}H{px+5:.2f}" stroke="{COLORS["basis"]}" stroke-width="2.5"/>')
-    for machine in ("m1", "m4", "ryzen", "intel", "i7", "r5"):
+    for machine in ("m1", "m4", "ryzen", "intel", "i7", "r5", "r7"):
         for p in points:
             if p["machine_key"] != machine:
                 continue
@@ -584,15 +593,14 @@ SCREEN_OPCODES = {
     'MULCORE': ('OP_MUL',),
     'MOVE': ('OP_ROLL', 'OP_PICK', 'OP_ROT', 'OP_2ROT'),
     'SELECT': ('OP_TX',),
-    'SIG': ('OP_CHECKSIG', 'OP_CHECKSIGVERIFY', 'OP_CHECKSIGADD', 'OP_CHECKSIGFROMSTACK'),
-    'TWEAK': ('OP_TWEAKADD',),
+    'SIG': ('OP_CHECKSIG', 'OP_CHECKSIGVERIFY', 'OP_CHECKSIGADD', 'OP_CHECKSIGFROMSTACK', 'OP_TWEAKADD'),
 }
 # Why a primitive's single measurements above the reference do not carry over to complete opcodes.
 ABOVE_REFERENCE_NOTES = {
     'WRITE': 'Buffer growth and first use of fresh memory pages, which depend on what the allocator did before. '
              'Complete scripts that build and copy large values stay below the reference.',
     'ARITH': 'Short OP_BYTEREV values on one machine; the complete opcode also pays BASE and WRITE.',
-    'DIVCORE': 'Divisions of 64 and 128 limbs on the two Intel machines; complete OP_DIV and OP_MOD also pay '
+    'DIVCORE': 'Divisions by 512- and 1,024-byte divisors on the two Intel machines; complete OP_DIV and OP_MOD also pay '
                'READ and WRITE.',
 }
 
@@ -880,7 +888,7 @@ def render(joint_path, output, source_root=None, title=TITLE):
         source = Path(meta["file"])
         points, _ = load_calibration(source)
         identity = (meta['cpu'] + ' ' + source.name).lower()
-        key = next((key for key, token in [('m1', 'm1'), ('m4', 'm4'), ('r5', 'ryzen 5 3600'), ('ryzen', 'ryzen'), ('i7', 'i7-7700'), ('intel', 'intel')] if token in identity), None)
+        key = next((key for key, token in [('m1', 'm1'), ('m4', 'm4'), ('r5', 'ryzen 5 3600'), ('r7', 'ryzen 7 7700'), ('ryzen', 'ryzen'), ('i7', 'i7-7700'), ('intel', 'intel')] if token in identity), None)
         if key is None or any(m['key'] == key for m in machines):
             raise ValueError(f'Unknown or duplicate machine identity: {identity}')
         label = MACHINE_NAMES[key]
@@ -1035,7 +1043,8 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
 
     def fitted(family, coefficients):
         """A fitted formula to three significant figures."""
-        return group_digits(formulas(family, [float(f'{c:.3g}') for c in coefficients]))
+        spans = byte_spans(family, coefficients)  # MUL and DIV shown per byte
+        return group_digits(formulas(family, [float(f'{c / span:.3g}') * span for c, span in zip(coefficients, spans)]))
 
     def sha_note():
         """Why one machine sets SHA256's byte rate, when one machine without SHA extensions does."""
@@ -1091,6 +1100,9 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
         out.append('<details open><summary>Measurements and fits</summary>')
         if family == 'SIG':
             out.extend(signature_table(pts))
+            if series.get('TWEAK'):
+                out.append(f'<p><strong>Key tweak.</strong> {MODELS["TWEAK"]} Measured with {FIXTURES["TWEAK"]}</p>')
+                out.extend(charts('TWEAK', series['TWEAK'], candidates))
             out.append('</details></article>')
             return out
         out.extend(charts(family, pts, candidates))

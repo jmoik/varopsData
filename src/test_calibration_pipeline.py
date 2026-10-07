@@ -39,10 +39,10 @@ def artifact(model_id=calibration.MODEL_ID):
 
 class CalibrationPipelineTests(unittest.TestCase):
     def test_maximum_coefficients(self):
-        a = {'PRODUCE': (100, 6), 'DIVCORE': (10, 0, 4)}
-        b = {'PRODUCE': (200, 3), 'DIVCORE': (20, 0, 2)}
+        a = {'PRODUCE': (100, 6), 'DIVCORE': (10, 0, 1, 4)}
+        b = {'PRODUCE': (200, 3), 'DIVCORE': (20, 0, 0, 2)}
         combined = maximum_coefficients([a, b])
-        self.assertEqual(combined, {'PRODUCE': (200, 6), 'DIVCORE': (20, 0, 4)})
+        self.assertEqual(combined, {'PRODUCE': (200, 6), 'DIVCORE': (20, 0, 1, 4)})
         self.assertEqual(maximum_coefficients([a, b, a]), combined)
         for n in (0, 1, 100, 4000000):
             self.assertGreaterEqual(combined['PRODUCE'][0] + combined['PRODUCE'][1]*n,
@@ -53,18 +53,19 @@ class CalibrationPipelineTests(unittest.TestCase):
     def test_envelope(self):
         def points(family, sizes):
             return [dict(machine='m', group='g', x=x, c=c, v=v, included=True) for x, c, v in sizes]
-        grid = [(s, s, s * v) for s in (1, 2, 3, 10, 100, 1000) for v in (1, 2, 4, 64, 1024)]
-        # A large flat on one machine and a larger row rate on another: at one row and
-        # one limb the envelope covers the sum, so its flat may drop below the maximum.
-        a = {'DIVCORE': (3000, 400, 40), 'PRODUCE': (2000, 4), 'H1': (300, 20)}
-        b = {'DIVCORE': (100, 570, 43), 'PRODUCE': (500, 6), 'H1': (20, 25)}
+        grid = [(q, q, q * v, f'v={v}') for q in (0, 1, 2, 10, 100, 1000) for v in (1, 2, 4, 64, 1024)]
+        # A large flat on one machine and a larger divisor-word rate on another: at one
+        # divisor word the envelope covers the sum, so its flat may drop below the maximum.
+        a = {'DIVCORE': (3000, 400, 100, 40), 'PRODUCE': (2000, 4), 'H1': (300, 20)}
+        b = {'DIVCORE': (100, 570, 1000, 43), 'PRODUCE': (500, 6), 'H1': (20, 25)}
         maximum = maximum_coefficients([a, b])
-        env = calibration.envelope_coefficients('DIVCORE', [a, b], points('DIVCORE', grid))
+        env = calibration.envelope_coefficients('DIVCORE', [a, b], [dict(machine='m', group=g, x=x, c=c, v=v, included=True) for x, c, v, g in grid])
         self.assertLess(env[0], maximum['DIVCORE'][0])
-        for s in (1, 2, 7, 10**6):
+        def charge(m, q, v):
+            return m[0] + m[1] * q + m[2] * v + m[3] * q * v
+        for q in (0, 1, 7, 10**6):
             for v in (1, 3, 10**6):
-                charge = env[0] + env[1] * s + env[2] * s * v
-                self.assertGreaterEqual(charge * (1 + 1e-9), max(m['DIVCORE'][0] + m['DIVCORE'][1] * s + m['DIVCORE'][2] * s * v for m in (a, b)))
+                self.assertGreaterEqual(charge(env, q, v) * (1 + 1e-9), max(charge(m['DIVCORE'], q, v) for m in (a, b)))
         # Sizes from zero, unbounded: covering both needs the largest flat and the largest rate.
         env = calibration.envelope_coefficients('PRODUCE', [a, b], points('PRODUCE', [(n, 1, n) for n in (0, 8, 4096)]))
         self.assertEqual(tuple(round(x, 6) for x in env), (2000, 6))
@@ -95,16 +96,22 @@ class CalibrationPipelineTests(unittest.TestCase):
         # Every rate is a whole number of varops per byte of W(n): PREP's 0.0301 is charged as 1.
         self.assertEqual(calibration.rounded_candidate('PREP', [241.381, .0301]), [250, 1])
         self.assertEqual(calibration.rounded_candidate('PREP', [241.381, 1.3]), [250, 2])
-        self.assertEqual(calibration.formulas('PREP', [250, 1], candidate=True), '250 + W(n)')
-        self.assertEqual(calibration.formulas('DIVCORE', [0, 500, 33], candidate=True), '500 × s + 33 × s × v')
-        self.assertEqual(calibration.rounded_candidate('DIVCORE', [3977.26, 0, 158.884]), [4000, 0, 160])
+        self.assertEqual(calibration.formulas('PREP', [250, 1], candidate=True), '250 + 1 × W(n)')
+        # MUL and DIV are priced per byte of W(n) and W(m) and per unit of W(n) × W(m),
+        # each rate a whole varop: 50.9444 per word product is 0.796 per pair of bytes, charged as 1.
+        self.assertEqual(calibration.formulas('DIVCORE', [1300, 496, 104, 64], candidate=True),
+                         '1300 + 62 × Q(n, m) + 13 × W(m) + 1 × Q(n, m) × W(m)')
+        self.assertEqual(calibration.rounded_candidate('DIVCORE', [3977.26, 0, 0, 158.884]), [4000, 0, 0, 192])
+        self.assertEqual(calibration.rounded_candidate('DIVCORE', [1280.4, 483.272, 101.9, 50.9444]), [1300, 520, 120, 64])
+        self.assertEqual(calibration.formulas('MULCORE', [650, 8, 112, 64], candidate=True),
+                         '650 + 1 × W(n) + 14 × W(m) + 1 × W(n) × W(m)')
         # Byte rates are charged per byte of W(n) >= n: 6.40246 per byte of n is charged as 7 × W(n).
         self.assertEqual(calibration.rounded_candidate('PRODUCE', [2120.63, 6.40246]), [2200, 7])
         self.assertEqual(calibration.formulas('PRODUCE', [2200, 7], candidate=True), '2200 + 7 × W(n)')
         # Rates round to two significant figures; flats to multiples of 10 below 100 and of 50
         # from 100, but never to more than two significant figures.
-        self.assertEqual(calibration.rounded_candidate('SELECT', [3454.87, 1643.3]), [3500, 1700])
-        self.assertEqual(calibration.rounded_candidate('MULCORE', [338.305, 4.32306, 109.887, 28.2557]), [350, 5, 110, 29])
+        self.assertEqual(calibration.rounded_candidate('SELECT', [3454.87, 1643.3]), [3500, 2000])
+        self.assertEqual(calibration.rounded_candidate('MULCORE', [338.305, 4.32306, 109.887, 28.2557]), [350, 8, 120, 64])
         self.assertEqual(calibration.rounded_candidate('READ', [80.6, 1.01]), [90, 2])
         self.assertEqual(calibration.rounded_candidate('TWEAK', [168855, 0]), [500000, 0])
         self.assertEqual(calibration.formulas('H256', [192, 39], candidate=True), '192 + 39 × H(n)')
@@ -113,12 +120,13 @@ class CalibrationPipelineTests(unittest.TestCase):
         self.assertEqual(calibration.formulas('NORMALIZE', [200, 0], candidate=True), '200')
         # Zero stays zero and exact multiples keep their value.
         self.assertEqual(calibration.rounded_candidate('F', [300, 0]), [300, 0])
-        self.assertEqual(calibration.rounded_candidate('DIVCORE', [1000, 100, 10]), [1000, 100, 10])
+        self.assertEqual(calibration.rounded_candidate('DIVCORE', [1000, 120, 8, 64]), [1000, 120, 8, 64])
         self.assertEqual(calibration.rounded_candidate('SIG', [490446, 0]), [500000, 0])
-        # Step boundaries: whole varops below 100, then a tenth of the leading power of ten.
+        # Step boundaries: whole varops below 10, then two significant figures whose second
+        # is 0 or 5: steps of 5 up to 100, then 50, 500, ...
         self.assertEqual([calibration.round_coefficient(v) for v in
-                          (0.0012, 9.2, 10, 10.1, 99.1, 100, 100.1, 999.1, 1000, 1000.1, 9950.5, 10000, 10001)],
-                         [1, 10, 10, 11, 100, 100, 110, 1000, 1000, 1100, 10000, 10000, 11000])
+                          (0.0012, 9.2, 10, 10.1, 22.8, 99.1, 100, 100.1, 614.3, 999.1, 1000, 1000.1, 9950.5, 10000, 10001)],
+                         [1, 10, 10, 15, 25, 100, 100, 150, 650, 1000, 1000, 1500, 10000, 10000, 15000])
         self.assertEqual([calibration.round_flat(v) for v in
                           (0, 0.2, 10, 53.7, 99.1, 100, 100.1, 142.2, 950.1, 1000, 1712.1, 9950.5, 168100.2)],
                          [0, 10, 10, 60, 100, 100, 150, 150, 1000, 1000, 1800, 10000, 170000])
@@ -208,7 +216,12 @@ class CalibrationPipelineTests(unittest.TestCase):
             result = calibration.check_bench_sources([dict(file='a.json', bench=bench),
                                                       dict(file='b.json', bench=dict(bench, head='c' * 40))])
         self.assertEqual((result['unmatched'], result['checked']), ([], 2))
-        with self.assertRaises(ValueError):
+        # A Windows checkout's CRLF line endings are the same sources.
+        windows = dict(bench, source_sha256={'bench/bench_varops.cpp': hashlib.sha256(b'bench\r\n').hexdigest()})
+        with patch.object(calibration.subprocess, 'check_output', return_value=raw):
+            result = calibration.check_bench_sources([dict(file='a.json', bench=bench), dict(file='w.json', bench=windows)])
+        self.assertEqual(result['unmatched'], [])
+        with self.assertRaises(ValueError), patch.object(calibration.subprocess, 'check_output', return_value=raw):
             calibration.check_bench_sources([dict(file='a.json', bench=bench),
                                              dict(file='b.json', bench=dict(bench, source_sha256={'bench/bench_varops.cpp': '0' * 64}))])
         with self.assertRaises(ValueError):
@@ -261,7 +274,13 @@ class CalibrationPipelineTests(unittest.TestCase):
                                   'MOVE': (200, 37), 'HASH': (300, 40)})
         # The composed price is rounded again: 200 + 90 is charged as 300.
         self.assertEqual(calibration.compose_candidates({k: list(v) for k, v in parts.items()}, 'producer-normalize-v1'),
-                         dict(priced, READ=(300, 3)))
+                         dict(priced, READ=(300, 3), MOVE=(200, 40)))
+        # RIPEMD160 and SHA1 take at most 520 bytes: their envelopes need only be covered
+        # there, so a RIPEMD160 rate just above 40 does not raise HASH's rate to 45.
+        envelopes = {'H256': (211.0, 37.31), 'H160': (13.17, 40.0124), 'H1': (172.2, 23.83)}
+        rounded = {'H256': [250, 38], 'H160': [20, 41], 'H1': [200, 24]}
+        self.assertEqual(calibration.compose_candidates(rounded, calibration.MODEL_ID, envelopes)['HASH'], (250, 40))
+        self.assertEqual(calibration.compose_candidates(rounded, calibration.MODEL_ID)['HASH'], (250, 45))
         # A model that measures READ, WRITE and ARITH directly composes only HASH.
         direct = {'READ': (300, 3), 'WRITE': (1000, 8), 'ARITH': (200, 3),
                   'H256': (300, 38), 'H160': (60, 40), 'H1': (200, 24)}
@@ -291,8 +310,9 @@ class CalibrationPipelineTests(unittest.TestCase):
         for u, v in ((9, 2), (1, 1), (9, 1), (1, 2), (1, 9)):
             point = calibration.fixture(dict(probe=f'DIVCORE/{u}/{v}/17/DIV/top-one', ns_per_execution=1))
             rows[u, v] = (point['x'], point['c'], point['v'])
-        self.assertEqual(rows, {(9, 2): (9, 9, 18), (1, 1): (2, 2, 2), (9, 1): (10, 10, 10),
-                                (1, 2): (1, 1, 2), (1, 9): (1, 1, 9)})
+        # Words by which the dividend exceeds the divisor; none for a shorter dividend.
+        self.assertEqual(rows, {(9, 2): (7, 7, 14), (1, 1): (0, 0, 0), (9, 1): (8, 8, 8),
+                                (1, 2): (0, 0, 0), (1, 9): (0, 0, 0)})
 
     def test_lifetime_checks(self):
         # A numeric result of 9 bytes: one WRITE event, then READ and WRITE at its
@@ -347,17 +367,17 @@ class CalibrationPipelineTests(unittest.TestCase):
                 series[p['family']].append(point)
         fits = calibration.fit_all(series, 100)
         self.assertEqual(set(fits), set(calibration.FAMILIES[calibration.MODEL_ID]) - calibration.CHECKS)
-        self.assertEqual(len(fits['DIVCORE']), 3)
+        self.assertEqual(len(fits['DIVCORE']), 4)
 
     def test_divcore_per_row_term(self):
         # Many rows at a small divisor separate the per-row term from the cells.
         points = []
         for u, v in ((1026, 1), (1026, 2), (34, 2), (8, 4), (1032, 8), (80, 16), (1088, 64), (128, 64)):
             point = calibration.fixture(dict(probe=f'DIVCORE/{u}/{v}/17/DIV/top-one', ns_per_execution=1))
-            point['y'] = 1000 + 500 * point['c'] + 50 * point['v']
+            point['y'] = 1000 + 500 * point['c'] + 100 * calibration.mul_rows(point) + 50 * point['v']
             point['machine'] = 'a'
             points.append(point)
-        fixed, step, cell = calibration.fit_divcore(points, 100)
+        fixed, step, divisor, cell = calibration.fit_divcore(points, 100)
         self.assertAlmostEqual(step, 500, delta=5)
         self.assertAlmostEqual(cell, 50, delta=1)
 
@@ -369,14 +389,14 @@ class CalibrationPipelineTests(unittest.TestCase):
             for u, v in ((1026, 1), (34, 2), (1032, 8), (80, 16), (1088, 64), (128, 64)):
                 for seed in range(seeds):
                     point = calibration.fixture(dict(probe=f'DIVCORE/{u}/{v}/{seed}/DIV/{pattern}', ns_per_execution=1))
-                    point['y'] = 500 * point['c'] + cell * point['v']
+                    point['y'] = 1000 + 500 * point['c'] + cell * point['v']
                     point['machine'] = 'a'
                     points.append(point)
         joint = calibration.fit_divcore(points, 100)
         curve, patterns = calibration.fit_patterns('DIVCORE', points, 100)
         self.assertEqual(set(patterns), {'DIV/normalized', 'DIV/top-one', 'DIV/padded', 'DIV/add-back'})
-        self.assertAlmostEqual(curve[2], 42, delta=0.5)
-        self.assertGreater(curve[2], joint[2] + 1)
+        self.assertAlmostEqual(curve[3], 42, delta=0.5)
+        self.assertGreater(curve[3], joint[3] + 1)
         self.assertTrue(all(calibration.predict('DIVCORE', p, curve, {}) >= 0.999 * p['y'] for p in points))
 
     def test_one_pattern_outside_div_and_mul(self):
@@ -426,7 +446,7 @@ class CalibrationPipelineTests(unittest.TestCase):
             point['y'] = 1400 + 40 * point['c'] + 42 * point['v']
             point['machine'] = 'a'
             points.append(point)
-        fixed, row, cell = calibration.fit_divcore(points, 100)
+        fixed, row, _, cell = calibration.fit_divcore(points, 100)
         self.assertAlmostEqual(row, 40, delta=1)
         self.assertAlmostEqual(cell, 42, delta=0.5)
 
@@ -496,7 +516,7 @@ class CalibrationPipelineTests(unittest.TestCase):
         self.assertNotIn('UNROLL', calibration.fit_all({'UNROLL': [point]}, 100))
         # Coefficients round up to two significant figures, and at least to a whole varop.
         self.assertEqual([calibration.round_coefficient(v) for v in (0, 27.04, 88.2, 283.3, 2234.7, 168514.1, 300)],
-                         [0, 28, 89, 290, 2300, 170000, 300])
+                         [0, 30, 90, 300, 2500, 200000, 300])
 
 
 if __name__ == '__main__':
