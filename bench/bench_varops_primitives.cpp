@@ -1255,12 +1255,13 @@ void MeasureSignatures(Runner& r, const Crypto& crypto)
 
 // SELECT: complete op_tx::Eval lifetimes with collated output, one fixture per kind of
 // counted unit. k is the charged unit count: every planned value (including each
-// witness item count) plus every record scanned for an aggregate field. The whole
-// time, including planning, collated framing, production of the one result and
-// cleanup, is attributed to SELECT; the result's WRITE is not subtracted.
-// Noncollated output also pays WRITE per value, so it is a diagnostic here and is
-// validated as a whole-script composition by bench_varops.
-// Labels are SELECT/<kind>/<format>/<records>/<k>.
+// witness item count) plus every record scanned for an aggregate field. The time
+// covers planning, collated framing, production of the one result and cleanup; the
+// fit takes off the result's WRITE and a scope operand's READ, which OP_TX charges
+// separately, and attributes the rest to SELECT. Interpreter dispatch, which BASE
+// pays for, is not timed. Noncollated output also pays WRITE per value, so it is a
+// diagnostic here and is validated as a whole-script composition by bench_varops.
+// Labels are SELECT/<kind>/<format>/<records>/<k>/<result bytes>.
 void MeasureItems(Runner& r)
 {
     struct Kind {
@@ -1308,8 +1309,9 @@ void MeasureItems(Runner& r)
                 std::vector<Bytes> initial{selector};
                 if (kind.witness_input != 0) initial.insert(initial.begin(), Bytes{static_cast<unsigned char>(kind.witness_input)});
                 const size_t units{kind.units(n)};
-                const std::string label{"SELECT/" + kind.name + "/" + (collate ? "collated/" : "noncollated/") +
-                                        util::ToString(n) + "/" + util::ToString(units)};
+                const std::string name{"SELECT/" + kind.name + "/" + (collate ? "collated/" : "noncollated/") +
+                                       util::ToString(n) + "/" + util::ToString(units)};
+                std::string label;
                 size_t output_entries{0};
                 {
                     // Untimed check that the fixture is charged for exactly `units`.
@@ -1317,12 +1319,16 @@ void MeasureItems(Runner& r)
                     ValtypeStack alt;
                     ScriptError error{SCRIPT_ERR_UNKNOWN_ERROR};
                     Require(RunOpTx(frame, alt, checker, &error) == op_tx::Result::NORMAL,
-                            "OP_TX fixture failed: " + label);
+                            "OP_TX fixture failed: " + name);
                     output_entries = frame.stack.size();
-                    uint64_t outputs_cost{0};
+                    uint64_t outputs_cost{0}, output_bytes{0};
                     // Collated output and noncollated witness items are byte values.
-                    for (const Bytes& output : frame.stack.GetStack())
+                    for (const Bytes& output : frame.stack.GetStack()) {
                         outputs_cost += varops::WriteCost(output.size());
+                        output_bytes += output.size();
+                    }
+                    // The result's bytes, so a fit can take off the result's WRITE.
+                    label = name + "/" + util::ToString(output_bytes);
                     const uint64_t charged{DIAGNOSTIC_BUDGET - frame.budget.Remaining()};
                     const uint64_t operand_cost{kind.witness_input != 0 ? varops::ReadCost(1) : 0};
                     Require(charged == varops::BaseCost() + operand_cost + varops::TxSelectCost(units) + outputs_cost,

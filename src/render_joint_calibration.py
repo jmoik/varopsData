@@ -14,7 +14,7 @@ from pathlib import Path
 import tempfile
 
 from restyle_report import restyle
-from fit_calibrations import COMPOSED, MAX_EPOCH_NOISE, TARGET_FRACTION, candidate_charge, charged_by, check_source_snapshots, envelope_model, features, formulas, hash_span, failed_conditions, independent_models, load_calibration, predict, priced_model
+from fit_calibrations import COMPOSED, MAX_EPOCH_NOISE, TARGET_FRACTION, candidate_charge, charged_by, check_source_snapshots, envelope_model, features, formulas, hash_span, failed_conditions, independent_models, load_calibration, predict, priced_model, selection_time
 
 
 # Sections: the BIP 440 primitive categories, then one section per later BIP. A
@@ -149,7 +149,7 @@ CHECKS = {
 }
 # Fixtures of priced primitives that may not be in every calibration yet.
 FIXTURES = {
-    'SELECT': 'empty witness items, weight and amount scans, outputs, and all fields of every input, each with <code>k</code> charged units. Only collated output is fitted; noncollated output also pays WRITE per value.',
+    'SELECT': 'empty witness items, weight and amount scans, outputs, all fields of every input, and one-byte witness items of another input, each with <code>k</code> charged units. Only collated output is fitted, net of the result’s WRITE and a scope operand’s READ, which OP_TX charges separately; noncollated output also pays WRITE per value. One-byte items shuffled against their allocation order are measured but not fitted.',
     'TWEAK': 'one x-only key tweak of a valid key by a hash-sized tweak.',
 }
 
@@ -166,7 +166,7 @@ MODELS = {
     'HASH': 'One SHA256, RIPEMD160 or SHA1 pass over an <code>n</code>-byte message, in whole 64-byte blocks. RIPEMD160 and SHA1 take at most 520 bytes.',
     'SIG': 'One BIP 340 signature check. Its price is fixed at 500,000 varops, which keeps today’s allowance of one signature check per 50 weight units; the challenge hash is charged separately as HASH.',
     'TWEAK': 'One BIP 449 x-only public key tweak (OP_TWEAKADD), P + t·G. It is the same elliptic-curve work as a signature check without the challenge hash, at about 80% of its time, and is charged one SIGCHECK. The 2026-10-01 fixture tweaked by 1, which makes the scalar multiplication nearly free; it is shown as measured.',
-    'SELECT': 'One OP_TX selection with <code>k</code> charged units: each value selected and each record scanned, including planning, framing and cleanup.',
+    'SELECT': 'One OP_TX selection with <code>k</code> charged units: each value selected and each record scanned, including planning and framing; the result’s WRITE is charged separately.',
 }
 
 # Additional explanation shown under a primitive's description.
@@ -886,6 +886,11 @@ def render(joint_path, output, source_root=None, title=TITLE):
         label = MACHINE_NAMES[key]
         for point in points:
             point["machine_key"] = key
+            if point["family"] == "SELECT":
+                # Charts show what SELECT prices: the time less the result's WRITE
+                # and a scope operand's READ at this machine's fits.
+                point["y"] = selection_time(point, model)
+                del point["result_bytes"]
         machines.append(dict(meta=meta, points=points, model=model, key=key, label=label))
     models = {machine["key"]: machine["model"] for machine in machines}
     priced = {machine["key"]: priced_model(machine["model"], model_id) for machine in machines}

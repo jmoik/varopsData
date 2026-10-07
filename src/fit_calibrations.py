@@ -203,9 +203,14 @@ def fixture(row, producer_manifest=None):
     elif family == "H256":
         x, group = int(parts[2]), parts[1]
     elif family == "SELECT":
-        # SELECT/<kind>/<format>/<records>/<units>.
+        # SELECT/<kind>/<format>/<records>/<units>[/<result bytes>]. Witness items
+        # shuffled against their allocation order are a diagnostic: deserialization
+        # allocates a transaction's witness items in order.
         x = int(parts[4])
-        group, included = parts[1] + "/" + parts[2], parts[2] == "collated"
+        group = parts[1] + "/" + parts[2]
+        included = parts[2] == "collated" and parts[1] != "1b_items_scattered"
+        return dict(label=row["probe"], family=family, x=x, y=y, c=1, v=x, group=group, included=included,
+                    result_bytes=select_result_bytes(parts), scope_operands=int(parts[1].startswith("1b_items")))
     elif family == "UNROLL":
         # UNROLL/<shape>/<units>/<unrolled bytes>/<charged varops>: time per charged
         # unit against bytes per unit; the charge covers the complete script.
@@ -220,6 +225,44 @@ def fixture(row, producer_manifest=None):
     c, v = features(family, x, group)
     return dict(label=row["probe"], family=family, x=x, y=y, c=c, v=v,
                 group=group, included=included)
+
+
+def compact_size(n):
+    return 1 if n < 253 else 3 if n <= 0xffff else 5 if n <= 0xffffffff else 9
+
+
+def select_result_bytes(parts):
+    """Bytes of a collated SELECT fixture's result. Labels record them since the
+    fixtures did; earlier labels are sized from the fixture transactions, whose
+    first output and spent output are P2TR (34-byte scripts) and the rest empty."""
+    if len(parts) > 5:
+        return int(parts[5])
+    kind, records = parts[1], int(parts[3])
+    sizes = {
+        # A CompactSize count, then each item's CompactSize length and bytes.
+        "empty_items": compact_size(records) + records,
+        "1b_items": compact_size(records) + 2 * records,
+        "1b_items_scattered": compact_size(records) + 2 * records,
+        "weight-scan": 4,
+        "amount-scan": 16,
+        # Amount and length-prefixed scriptPubKey per output.
+        "outputs": 43 + 9 * (records - 1),
+        # Txid, index, amount, scriptPubKey, scriptSig, sequence, witness count and
+        # collated item count per input.
+        "inputs": 55 * records + 34,
+    }
+    return sizes[kind]
+
+
+def select_overhead(point, prices, word_priced=False):
+    """What OP_TX charges a SELECT fixture besides SELECT: the result's WRITE and a
+    scope operand's one-byte READ, at one schedule's prices. Machine fits price
+    WRITE per byte and READ per word span; candidates price both per word span."""
+    if "result_bytes" not in point or "WRITE" not in prices:
+        return 0
+    write, read = prices["WRITE"], prices["READ"]
+    size = word(point["result_bytes"]) if word_priced else point["result_bytes"]
+    return write[0] + write[1] * size + point["scope_operands"] * (read[0] + read[1] * word(1))
 
 
 def load_calibration(path):
@@ -486,6 +529,8 @@ def predict(family, point, coeff, fits):
         return coeff[0] + coeff[1] * point["c"] + coeff[2] * mul_rows(point) + coeff[3] * point["v"]
     if family in {"DIVCORE", "MULCORE"}:
         return coeff[0] + coeff[1] * point["c"] + coeff[2] * point["v"]
+    if family == "SELECT":
+        return coeff[0] + coeff[1] * point["v"] + select_overhead(point, fits)
     return coeff[0] * point["c"] + coeff[1] * point["v"]
 
 
@@ -591,13 +636,25 @@ def refit_part(path, part):
     if part == 'MULCORE':
         return {'MULCORE': fit_patterns('MULCORE', series['MULCORE'], 100)} if series['MULCORE'] else {}
     fits = {}
-    # SIG is fitted last: its background is the challenge hash at the H256 fit.
+    # SIG and SELECT are fitted last: SIG's background is the challenge hash at the
+    # H256 fit, and SELECT is fitted on the time left after the result's WRITE and a
+    # scope operand's READ at this machine's fits.
     families = [f for f in series if f not in {'MULCORE', 'DIVCORE'} | CHECKS]
-    for family in sorted(families, key=lambda f: f == 'SIG'):
-        for point in series[family]:
-            point['background'] = background(family, point['x'], {f: curve for f, (curve, _) in fits.items()})
-        fits[family] = fit_patterns(family, series[family], 100)
+    for family in sorted(families, key=lambda f: f in {'SIG', 'SELECT'}):
+        curves = {f: curve for f, (curve, _) in fits.items()}
+        points = series[family]
+        for point in points:
+            point['background'] = background(family, point['x'], curves)
+        if family == 'SELECT':
+            points = [dict(p, y=selection_time(p, curves)) for p in points]
+        fits[family] = fit_patterns(family, points, 100)
     return fits
+
+
+def selection_time(point, fits):
+    """A SELECT fixture's time less what OP_TX charges besides SELECT. The rest
+    (selector, scopes, the walk over the transaction) is at least a tenth of it."""
+    return max(point['y'] - select_overhead(point, fits), point['y'] / 10)
 
 
 def machine_fits(path, refits=None):
@@ -847,6 +904,8 @@ def candidate_charge(family, point, candidates):
         return predict(family, point, coeff, {})
     if family in WORD_PRICED:
         return coeff[0] + coeff[1] * word(point["x"])
+    if family == "SELECT":
+        return coeff[0] + coeff[1] * point["x"] + select_overhead(point, candidates, word_priced=True)
     c, v = features(family, point["x"], point["group"])
     return coeff[0] * c + coeff[1] * v
 

@@ -471,6 +471,18 @@ class CalibrationPipelineTests(unittest.TestCase):
         point = calibration.fixture(dict(probe='SELECT/inputs/collated/8/64', ns_per_execution=1))
         self.assertEqual((point['x'], point['group'], point['included']), (64, 'inputs/collated', True))
         self.assertFalse(calibration.fixture(dict(probe='SELECT/empty_items/noncollated/8/9', ns_per_execution=1))['included'])
+        self.assertFalse(calibration.fixture(dict(probe='SELECT/1b_items_scattered/collated/8/9', ns_per_execution=1))['included'])
+        # SELECT is fitted on the time left after the result's WRITE and a scope
+        # operand's READ; earlier labels without result bytes are sized from the fixtures.
+        self.assertEqual(point['result_bytes'], 55 * 8 + 34)
+        items = calibration.fixture(dict(probe='SELECT/1b_items/collated/300/301/603', ns_per_execution=100000))
+        self.assertEqual((items['result_bytes'], items['scope_operands']), (603, 1))
+        fits = {'WRITE': (800, 6), 'READ': (200, 1)}
+        self.assertEqual(calibration.select_overhead(items, fits), 800 + 6 * 603 + 208)
+        self.assertEqual(calibration.selection_time(items, fits), 100000 - (800 + 6 * 603 + 208))
+        self.assertEqual(calibration.predict('SELECT', items, (1000, 200), fits), 1000 + 200 * 301 + 800 + 6 * 603 + 208)
+        candidates = {'SELECT': (1400, 220), 'WRITE': (800, 7), 'READ': (200, 2)}
+        self.assertEqual(calibration.candidate_charge('SELECT', items, candidates), 1400 + 220 * 301 + 800 + 7 * 608 + 216)
         # UNROLL is measured per charged unit against unrolled bytes per unit, and
         # checked against BASE and WRITE rather than priced.
         point = calibration.fixture(dict(probe='UNROLL/push-520/200/52300/60000', ns_per_execution=1000))
