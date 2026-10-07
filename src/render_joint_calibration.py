@@ -25,7 +25,6 @@ GSR_URL = "https://github.com/jmoik/bitcoin/tree/gsr"
 
 SECTIONS = [
     dict(slug="category-interpreter", title="Interpreter",
-         intro="Every instruction pays BASE. The opcodes BIP 441 restores add no primitive: each is priced from the primitives on this page.",
          groups=[("Interpreter", ("F",))]),
     dict(slug="category-stack", title="Stack and byte processing",
          intro="Creating, reading and reordering stack values. READ includes converting an operand to a number, WRITE converting a numeric result back to bytes.",
@@ -326,6 +325,11 @@ def curve(family, x, group, model):
 
 
 # One name per machine, used everywhere on the page.
+# Why each machine is in the sample, shown in the machine table.
+MACHINE_NOTES = {'i7': 'Added for SHA256 without hardware acceleration (no SHA extensions)',
+                 'intel': 'Recent Intel desktop', 'r5': 'Older AMD desktop (Zen 2)', 'r7': 'Recent AMD desktop (Zen 4)',
+                 'ryzen': 'Added to represent Windows (clang-cl build)', 'm1': 'Older Apple ARM',
+                 'm4': 'Recent Apple ARM'}
 MACHINE_NAMES = {'m1': 'Apple M1 Pro', 'm4': 'Apple M4 Pro', 'ryzen': 'AMD Ryzen 9 9950X',
                  'intel': 'Intel Core i5-12500', 'i7': 'Intel Core i7-7700', 'r5': 'AMD Ryzen 5 3600',
                  'r7': 'AMD Ryzen 7 7700'}
@@ -457,15 +461,8 @@ def chart(family, points, models, group=None, id_prefix="", candidates=None, pri
     pieces.append("</g></svg>")
     legend = ''
     if family in {'PRODUCE', 'WRITE'}:
-        legend = '<p>Colour is the machine, shape is the path. Each machine is fitted over all its paths.</p><div class="plot-legend">'
-        for key, label in MACHINE_NAMES.items():
-            if not any(p['machine_key'] == key for p in shown): continue
-            legend += f'<span style="color:{COLORS[key]}">● {label}</span>'
-        if 'envelope' in models:
-            legend += '<span style="color:#172536">━ Envelope of the fits</span>'
-        if candidates is not None:
-            legend += f'<span><i class="plot-line candidate" aria-hidden="true"></i>{esc(price_label)}</span>'
-        legend += '</div><div class="plot-legend">'
+        legend = ('<p>Colour is the machine, shape is the path. Each machine is fitted over all its paths.</p>'
+                  '<div class="plot-legend">')
         for path, (_, _, label) in PRODUCE_MARKERS.items():
             if not any(p['group'] == path for p in shown): continue
             legend += f'<span><svg class="legend-icon" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">{produce_marker(path, 7, 7, "#526174")}</svg>{esc(label)}</span>'
@@ -691,11 +688,12 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
                  'only if no block of them takes longer than the reference.</li>'
                  f'</ol><p>The full method is in <a href="{METHODOLOGY_URL}">METHODOLOGY.md</a>.</p></div>')
 
-    rows = ''.join(f'<tr><td>{esc(machine["label"])}</td><td>{esc(describe(machine["meta"]["file"]))}</td>'
+    rows = ''.join(f'<tr><td><i class="plot-mark {machine["key"]}" aria-hidden="true"></i>{esc(machine["label"])}</td><td>{esc(describe(machine["meta"]["file"]))}</td>'
                    f'<td>{machine["meta"]["reference_seconds"]:.2f} s</td>'
-                   f'<td>{esc(reference_workload(machine["meta"]["file"]))}</td></tr>' for machine in machines)
+                   f'<td>{esc(reference_workload(machine["meta"]["file"]))}</td>'
+                   f'<td>{esc(MACHINE_NOTES.get(machine["key"], ""))}</td></tr>' for machine in machines)
     parts.append('<div class="card" id="machines"><div class="card-title">Machines</div><table><thead><tr>'
-                 '<th>Machine</th><th>System</th><th>Reference</th><th>Slowest block today</th></tr></thead>'
+                 '<th>Machine</th><th>System</th><th>Reference</th><th>Slowest block today</th><th>Note</th></tr></thead>'
                  f'<tbody>{rows}</tbody></table><div class="plot-legend">'
                  '<span><i class="plot-line basis" aria-hidden="true"></i>Envelope of the fits</span>'
                  '<span><i class="plot-line candidate" aria-hidden="true"></i>Price</span>'
@@ -735,17 +733,9 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
         parts.append(f'<a href="#{section["slug"]}">{esc(section["title"].split(" · ")[0])}</a>')
     parts.append('</nav></header>')
 
-    def machine_legend(pts, fits=True, charge=None, price_label='Price'):
-        present = [key for key, _, _ in LEGEND_MACHINES if any(q['machine_key'] == key for q in pts)]
-        legend = ''.join(f'<span><i class="plot-mark {key}" aria-hidden="true"></i>{label}</span>'
-                         for key, label, _ in LEGEND_MACHINES if key in present)
-        if fits:
-            legend += '<span><i class="plot-line basis" aria-hidden="true"></i>Envelope of the fits</span>'
-            legend += f'<span><i class="plot-line candidate" aria-hidden="true"></i>{esc(price_label)}</span>'
-        else:
-            legend += ('<span><i class="plot-line basis" aria-hidden="true"></i>Charge'
-                       + (f' <code>{esc(group_digits(charge))}</code>' if charge else '') + '</span>')
-        return f'<div class="plot-legend" aria-label="Plot legend">{legend}</div>'
+    def charge_legend(charge):
+        return ('<div class="plot-legend" aria-label="Plot legend"><span><i class="plot-line basis" aria-hidden="true"></i>'
+                f'Charge <code>{esc(group_digits(charge))}</code></span></div>')
 
     def fitted(family, coefficients):
         """A fitted formula to three significant figures."""
@@ -803,17 +793,16 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
             out.append(f'<p>{note}</p>')
         if family in FIXTURES:
             out.append(f'<p class="muted"><strong>Measured with:</strong> {FIXTURES[family]}</p>')
-        out.append('<details open><summary>Measurements and fits</summary>')
         if family == 'SIG':
             out.extend(signature_table(pts))
             if series.get('TWEAK'):
                 out.append(f'<p><strong>Key tweak.</strong> {MODELS["TWEAK"]} Measured with {FIXTURES["TWEAK"]}</p>')
                 out.extend(charts('TWEAK', series['TWEAK'], candidates))
-            out.append('</details></article>')
+            out.append('</article>')
             return out
         out.extend(charts(family, pts, candidates))
         out.extend(fit_table(family, models, env_model))
-        out.append('</details></article>')
+        out.append('</article>')
         return out
 
     def charts(family, pts, prices, prefix='', price_label='Price',
@@ -821,7 +810,6 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
         """A family's measurements with its envelope and a dotted price line from prices."""
         out = []
         if family not in {'PRODUCE', 'WRITE'}:
-            out.append(machine_legend(pts, price_label=price_label))
             groups = sorted({p["group"] for p in pts})
             if family in {"H256", "DIVCORE", "MULCORE", "NORMALIZE"} and len(groups) > 1:
                 for group in groups:
@@ -905,8 +893,7 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
         if not points:
             out.append('<p>Not yet measured in this dataset.</p></article>')
             return out
-        out.append('<details open><summary>Measurements and charge</summary>')
-        out.append(machine_legend(points, fits=False, charge=spec['charge']))
+        out.append(charge_legend(spec['charge']))
         out.append(f'<div class="chart">{check_chart(key, points)}</div>')
         column = 'Message' if key == 'CSFS' else 'Value' if key == 'BYTEREV' else 'Measurement'
         out.append(f'<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Highest measured ÷ charge</th><th>{column}</th></tr></thead><tbody>')
@@ -918,12 +905,12 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
             size = re.search(r'/(\d+)$', worst['label']) if key in {'CSFS', 'BYTEREV'} else None
             shown = f'{int(size.group(1)):,} bytes' if size else f'<code>{esc(worst["label"])}</code>'
             out.append(f'<tr><td>{esc(machine["label"])}</td><td>{worst["ratio"]:.2f}×</td><td>{shown}</td></tr>')
-        out.append('</tbody></table></div></details></article>')
+        out.append('</tbody></table></div></article>')
         return out
 
     for section in SECTIONS:
         slug = section["slug"]
-        parts.append(f'<section class="category" id="{slug}"><h2>{esc(section["title"])}</h2><p class="section-intro">{esc(section["intro"])}</p>')
+        parts.append(f'<section class="category" id="{slug}"><h2>{esc(section["title"])}</h2>{f'<p class="section-intro">{esc(section["intro"])}</p>' if section.get("intro") else ''}')
         grouped = len(section["groups"]) > 1
         parts.append('<nav class="nav" aria-label="Entries in this BIP">')
         for _, families in section["groups"]:
