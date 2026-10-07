@@ -199,15 +199,18 @@ class CalibrationPipelineTests(unittest.TestCase):
         self.assertEqual(len(result['unmatched']), 1)
         self.assertEqual(result['checked'], 1)
 
-    def test_bench_sources_share_one_commit(self):
+    def test_bench_sources_match(self):
         raw = b'bench\n'
         bench = dict(head='b' * 40, source_sha256={'bench/bench_varops.cpp': hashlib.sha256(raw).hexdigest()})
         self.assertIsNone(calibration.check_bench_sources([dict(file='old.json')]))
+        # Commits that differ only outside the benchmarks are equivalent.
         with patch.object(calibration.subprocess, 'check_output', return_value=raw):
-            result = calibration.check_bench_sources([dict(file='a.json', bench=bench), dict(file='b.json', bench=bench)])
+            result = calibration.check_bench_sources([dict(file='a.json', bench=bench),
+                                                      dict(file='b.json', bench=dict(bench, head='c' * 40))])
         self.assertEqual((result['unmatched'], result['checked']), ([], 2))
         with self.assertRaises(ValueError):
-            calibration.check_bench_sources([dict(file='a.json', bench=bench), dict(file='b.json', bench=dict(bench, head='c' * 40))])
+            calibration.check_bench_sources([dict(file='a.json', bench=bench),
+                                             dict(file='b.json', bench=dict(bench, source_sha256={'bench/bench_varops.cpp': '0' * 64}))])
         with self.assertRaises(ValueError):
             calibration.check_bench_sources([dict(file='a.json', bench=bench), dict(file='old.json')])
 

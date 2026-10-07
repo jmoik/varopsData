@@ -129,15 +129,17 @@ def check_source_snapshots(root, machines):
 
 
 def check_bench_sources(machines):
-    """Check that every machine ran this repository's benchmarks from one recorded commit.
+    """Check that every machine ran the same benchmark sources, each matching the
+    varopsData commit it recorded; commits that differ only outside the benchmarks
+    (the fitter, the report) are equivalent.
 
     None when no artifact records them: runners in the gsr branch built the benchmarks
     from gsr sources, which source_sha256 covers."""
     benches = [machine.get('bench') for machine in machines]
     if not any(benches):
         return None
-    if not all(benches) or len({bench['head'] for bench in benches}) != 1:
-        raise ValueError('inputs were measured with benchmarks from different varopsData commits')
+    if not all(benches) or any(bench['source_sha256'] != benches[0]['source_sha256'] for bench in benches[1:]):
+        raise ValueError('inputs were measured with different benchmark sources')
     return check_source_snapshots(Path(__file__).resolve().parents[1], [
         dict(file=machine['file'], head=bench['head'], source_sha256=bench['source_sha256'])
         for machine, bench in zip(machines, benches)])
