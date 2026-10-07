@@ -686,8 +686,7 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
                  '<li><strong>Combine.</strong> The envelope is the cheapest formula of the same form that lies on or '
                  'above every machine&#39;s fit at every size.</li>'
                  '<li><strong>Round.</strong> Each price rounds the envelope up: flat parts to multiples of 50, rates '
-                 'to whole varops. SIG stays at 500,000.'
-                 + (' A price that adds parts is rounded again.' if composed else '') + '</li>'
+                 'to whole varops. SIG stays at 500,000.</li>'
                  '<li><strong>Check.</strong> Complete scripts of every opcode run on every machine; prices are accepted '
                  'only if no block of them takes longer than the reference.</li>'
                  f'</ol><p>The full method is in <a href="{METHODOLOGY_URL}">METHODOLOGY.md</a>.</p></div>')
