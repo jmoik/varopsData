@@ -3,7 +3,6 @@
 
 import argparse
 from collections import defaultdict
-import csv
 import hashlib
 import html
 import json
@@ -14,7 +13,7 @@ from pathlib import Path
 import tempfile
 
 from restyle_report import restyle
-from fit_calibrations import COMPOSED, MAX_EPOCH_NOISE, TARGET_FRACTION, candidate_charge, charged_by, check_source_snapshots, envelope_model, features, byte_spans, formulas, hash_span, failed_conditions, independent_models, load_calibration, predict, priced_model, selection_time
+from fit_calibrations import COMPOSED, TARGET_FRACTION, candidate_charge, charged_by, check_source_snapshots, envelope_model, features, byte_spans, formulas, hash_span, failed_conditions, independent_models, load_calibration, predict, priced_model, selection_time
 
 
 # Sections: the BIP 440 primitive categories, then one section per later BIP. A
@@ -551,15 +550,6 @@ def reference_row(artifact):
                  and row['Name'] == reference['worst_case'] and row['Wall_Min_Seconds']), None)
 
 
-def reference_spread(artifact):
-    """Per-round spread of the worst Tapleaf 0xC0 reference case, from the artifact's summary row."""
-    row = reference_row(artifact)
-    if row is None:
-        return None
-    low, high = float(row['Wall_Min_Seconds']), float(row['Wall_Max_Seconds'])
-    return dict(case=row['Opcode'], rounds=int(row['Samples']), low=low, high=high, spread=high / low - 1)
-
-
 def reference_workload(artifact):
     """The slowest Tapleaf 0xC0 workload of a machine, in plain words."""
     row = reference_row(artifact)
@@ -570,286 +560,6 @@ def reference_workload(artifact):
         return 'signature checks'
     size = row.get('Operand_Shape', '').removesuffix('B')
     return f'{opcode} of {size}-byte values' if size.isdigit() else opcode
-
-
-def size_range(decade):
-    """Sizes of a quality-gate decade: 10^d to 10^(d+1) - 1, and 0 for decade -1."""
-    return '0' if decade < 0 else f'{10 ** decade:,}–{10 ** (decade + 1) - 1:,}'
-
-
-SCREEN_DIR = 'worst-case'
-# Opcodes whose complete scripts exercise a primitive most, for the worst complete script beside its
-# measurements. Signature checks are left out of the others: their time is the signature itself.
-SCREEN_OPCODES = {
-    'WRITE': ('OP_CAT', 'OP_SUBSTR', 'OP_LEFT', 'OP_RIGHT', 'OP_DUP', 'OP_2DUP', 'OP_3DUP', 'OP_OVER', 'OP_2OVER',
-              'OP_PICK', 'OP_TUCK', 'OP_IFDUP', 'OP_PUSHDATA1', 'OP_PUSHDATA2', 'OP_PUSHDATA4', 'OP_ADD', 'OP_SUB',
-              'OP_MUL', 'OP_DIV', 'OP_MOD', 'OP_1ADD', 'OP_1SUB', 'OP_2MUL', 'OP_2DIV', 'OP_MIN', 'OP_MAX',
-              'OP_LSHIFT', 'OP_RSHIFT'),
-    'ARITH': ('OP_ADD', 'OP_SUB', 'OP_1ADD', 'OP_1SUB', 'OP_BYTEREV', 'OP_INVERT', 'OP_AND', 'OP_OR', 'OP_XOR',
-              'OP_2MUL', 'OP_2DIV', 'OP_LSHIFT', 'OP_RSHIFT'),
-    'DIVCORE': ('OP_DIV', 'OP_MOD'),
-    'MULCORE': ('OP_MUL',),
-    'MOVE': ('OP_ROLL', 'OP_PICK', 'OP_ROT', 'OP_2ROT'),
-    'SELECT': ('OP_TX',),
-    'SIG': ('OP_CHECKSIG', 'OP_CHECKSIGVERIFY', 'OP_CHECKSIGADD', 'OP_CHECKSIGFROMSTACK', 'OP_TWEAKADD'),
-}
-# Why a primitive's single measurements above the reference do not carry over to complete opcodes.
-ABOVE_REFERENCE_NOTES = {
-    'WRITE': 'Buffer growth and first use of fresh memory pages, which depend on what the allocator did before. '
-             'Complete scripts that build and copy large values stay below the reference.',
-    'ARITH': 'Short OP_BYTEREV values on one machine; the complete opcode also pays BASE and WRITE.',
-    'DIVCORE': 'Divisions by 512- and 1,024-byte divisors on the two Intel machines; complete OP_DIV and OP_MOD also pay '
-               'READ and WRITE.',
-}
-
-
-def family_label(family, model_id):
-    """A measured family's name on the page: a part as its primitive and what the part times."""
-    for primitive, (_, parts) in COMPOSED[model_id].items():
-        if family in parts:
-            title = PARTS[family][0]
-            return f'{DISPLAY.get(primitive, primitive)} · {title if title.split()[0].isupper() else title.lower()}'
-    return DISPLAY.get(family, family)
-
-
-def load_screens(dataset):
-    """Per-machine worst Tapleaf 0xC2 scripts from bench_varops screens kept beside the fit, if any.
-
-    The reference is the slowest Tapleaf 0xC0 case of the same screen; a script's time is the larger of its
-    measured and its full-budget projected time, as bench_varops reports it."""
-    manifest = dataset / SCREEN_DIR / 'screens.json'
-    if not manifest.exists():
-        return None
-    meta = json.loads(manifest.read_text())
-    screens = {}
-    for key, name in meta['screens'].items():
-        rows = list(csv.reader(line for line in (dataset / SCREEN_DIR / name).open() if not line.startswith('#')))
-        index = {column: i for i, column in enumerate(rows[0])}
-        number = lambda row, column: float(row[index[column]] or 0)
-        summary = [row for row in rows[1:] if row[index['Record_Type']] == 'summary']
-        reference = max((row for row in summary if row[index['Headline_Role']] == 'pre-baseline'),
-                        key=lambda row: number(row, 'Wall_Seconds'))
-        reference_seconds = number(reference, 'Wall_Seconds')
-        confirmed = load_confirmation(dataset / SCREEN_DIR / meta['confirms'][key]) if key in meta.get('confirms', {}) else {}
-        # A re-measured case counts with the slowest of its confirmation rounds.
-        cases = [(confirmed[row[index['Name']]]['max'] if row[index['Name']] in confirmed else
-                  max(number(row, 'Wall_Seconds'), number(row, 'Full_Varops_Wall_Seconds')) / reference_seconds,
-                  row[index['Opcode']], row[index['Name']])
-                 for row in summary if row[index['Domain']] == 'gsr-tapscript-v2']
-        worst = max(cases)
-        screens[key] = dict(file=name, reference=reference[index['Name']], reference_seconds=reference_seconds,
-                            ratio=worst[0], case=worst[2], above=sum(ratio > 1 for ratio, _, _ in cases),
-                            count=len(cases), cases=cases, confirmed=confirmed)
-    return dict(commit=meta['commit'], screens=screens)
-
-
-def load_confirmation(path):
-    """Cases a bench_varops --confirm run re-measured, from its "# Confirmation:" lines."""
-    confirmed = {}
-    for line in path.open():
-        found = re.match(r'# Confirmation: (.+?) screening=([\d.]+)x rounds=(\d+) median=([\d.]+)x '
-                         r'min=([\d.]+)x max=([\d.]+)x verdict=(\S+)', line)
-        if found:
-            name, screening, rounds, median, low, high, verdict = found.groups()
-            confirmed[name] = dict(screening=float(screening), rounds=int(rounds), median=float(median),
-                                   min=float(low), max=float(high), verdict=verdict)
-    return confirmed
-
-
-def case_label(name):
-    """Readable label of a bench_varops case name: opcode, operand sizes and pattern."""
-    parts = name.split('/')
-    return ' '.join(part for part in (parts[1], parts[4] if len(parts) > 4 else '') if part)
-
-
-def screens_html(screens, machines, dataset, page_dir=None):
-    """Complete-script check: the worst Tapleaf 0xC2 script per machine against its reference."""
-    if screens is None:
-        return ''
-    rows = [(machine, screens['screens'].get(machine['key'])) for machine in machines]
-    screened = [screen for _, screen in rows if screen]
-    above = sum(screen['above'] for screen in screened)
-    worst = max(screen['ratio'] for screen in screened)
-    verdict = ('no Tapleaf 0xC2 script takes longer than its machine&#39;s reference' if above == 0 else
-               f'{above} Tapleaf 0xC2 scripts take longer than their machine&#39;s reference')
-    missing = [machine['label'] for machine, screen in rows if not screen]
-    parts = [f'<details open><summary>Complete scripts: {verdict} (worst {worst:.2f}×)</summary>'
-             '<p>This is the check that decides whether the prices hold. <code>bench_varops</code> runs each '
-             'Tapleaf 0xC2 workload as a complete script, every opcode with its BASE and all its charges, and '
-             'projects it to a full 40-billion-varop budget. The result is compared with the slowest Tapleaf 0xC0 '
-             f'script on the same machine. Prices of gsr <code>{esc(screens["commit"])}</code>; a case above 1.0× '
-             'is re-measured at a 10% budget over 7 rounds and counts with its slowest round.'
-             + ('' if IMPLEMENTED_AT.startswith(screens['commit'][:10]) else
-                f' Since then, gsr <code>{IMPLEMENTED_AT}</code> merged PREPARE, NORMALIZE and BIT into READ, WRITE '
-                'and ARITH and the three hash prices into HASH, rounded READ&#39;s flat up to 300 and charges '
-                'OP_BYTEREV&#39;s result WRITE, none of which lowers a charge. It also dropped WRITE where no '
-                'value is produced: the results of OP_EQUALVERIFY, OP_NUMEQUALVERIFY and OP_CHECKSIGVERIFY, and '
-                'the operand that OP_CHECKLOCKTIMEVERIFY, OP_CHECKSEQUENCEVERIFY and OP_IFDUP leave on the stack. '
-                'Re-screened on the Apple M4 Pro, the worst of their scripts, OP_CHECKSIGVERIFY&#39;s, takes '
-                '0.69× the reference. OP_TX also pays READ for each scope operand and OP_TWEAKADD one SIGCHECK, which '
-                'only raises their charges, and each funding Taproot script-path input pays one SIGCHECK for its '
-                'commitment check, which only lowers the budget.') + '</p>'
-             '<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Reference</th><th>Worst Tapleaf 0xC2 '
-             'script</th><th>× reference</th><th>Scripts above</th></tr></thead><tbody>']
-    for machine, screen in rows:
-        if not screen:
-            parts.append(f'<tr><td>{esc(machine["label"])}</td><td colspan="4">not screened yet</td></tr>')
-            continue
-        link = Path(os.path.relpath(Path(dataset).resolve() / SCREEN_DIR / screen['file'],
-                                    Path(page_dir).resolve())).as_posix() if page_dir else ''
-        file = f' (<a href="{esc(link)}">CSV</a>)' if link else ''
-        parts.append(f'<tr><td>{esc(machine["label"])}</td><td>{esc(case_label(screen["reference"]))}, '
-                     f'{screen["reference_seconds"]:.2f} s</td><td>{esc(case_label(screen["case"]))}{file}</td>'
-                     f'<td>{screen["ratio"]:.2f}×</td><td>{screen["above"]} of {screen["count"]}</td></tr>')
-    parts.append('</tbody></table></div>')
-    for machine, screen in rows:
-        for name, c in (screen or {}).get('confirmed', {}).items():
-            parts.append(f'<p>{esc(machine["label"])}: {esc(case_label(name))} screened at {c["screening"]:.3f}×. '
-                         f'Re-measured over {c["rounds"]} rounds it took {c["min"]:.2f}× to {c["max"]:.2f}× '
-                         f'(median {c["median"]:.2f}×).</p>')
-    if missing:
-        parts.append(f'<p>Not yet screened at these prices: {esc(", ".join(missing))}.</p>')
-    parts.append('</details>')
-    return ''.join(parts)
-
-
-def worst_script(screens, family):
-    """The worst complete script over all screened machines among the opcodes that use a primitive."""
-    if screens is None or family not in SCREEN_OPCODES:
-        return None
-    opcodes = SCREEN_OPCODES[family]
-    best = None
-    for key, screen in screens['screens'].items():
-        for ratio, opcode, name in screen['cases']:
-            if (opcodes is None or opcode in opcodes) and (best is None or ratio > best[0]):
-                best = (ratio, name, key)
-    return best
-
-
-def diagnostics_html(joint, machines, dataset, page_dir=None):
-    """Complete-script screens, measurements above their price, the fit quality gate and run quality."""
-    diag = joint.get('diagnostics')
-    if not diag:
-        return ''
-    names = {machine['meta']['label']: machine['label'] for machine in machines}
-    labels = {machine['key']: machine['label'] for machine in machines}
-    gate = diag['quality_gate']
-    limits = gate['quality_gate']
-    within = limits['within_factor']
-    screens = load_screens(dataset)
-    parts = ['<div id="diagnostics"><h2>Checks</h2>',
-             '<p>Complete scripts decide whether the prices hold; the checks below them qualify the single '
-             'measurements the prices are fitted on and do not change the prices.</p>',
-             screens_html(screens, machines, dataset, page_dir)]
-
-    coverage = diag['charge_coverage'].get('candidate') or next(iter(diag['charge_coverage'].values()))
-    above = sorted(coverage['above_charge'], key=lambda item: -item['ratio'])
-    limit = 1 / TARGET_FRACTION
-    over = [item for item in above if item['ratio'] > limit]
-    worst = {}
-    for item in above:
-        worst.setdefault(item.get('primitive', item['family']), item)
-    summary = (f'Single measurements: {len(over):,} of {coverage["checked"]:,} would exceed their machine&#39;s '
-               f'reference if a full budget were spent on them alone')
-    parts.append(f'<details><summary>{summary}</summary>'
-                 f'<p>Prices leave headroom: a full budget of work at its price takes {TARGET_FRACTION:g} × the '
-                 f'machine&#39;s reference. A measurement reaches the reference only above 1/{TARGET_FRACTION:g} ≈ '
-                 f'{limit:.2f}× its price. {len(above):,} measurements cost more than their price, {len(over):,} '
-                 f'of them more than {limit:.2f}×. A single measurement is one primitive at one size, timed alone; '
-                 'the last column shows the worst complete script that uses the primitive, on any screened machine.'
-                 '</p>')
-    if above:
-        parts.append('<div class="table-wrap"><table><thead><tr><th>Primitive</th><th>Above the price</th>'
-                     f'<th>Above {limit:.2f}×</th><th>Highest</th><th>Machine</th><th>Measured ÷ price</th>'
-                     '<th>Worst complete script</th></tr></thead><tbody>')
-        for family, item in worst.items():
-            count = sum(other.get('primitive', other['family']) == family for other in above)
-            count_over = sum(other.get('primitive', other['family']) == family for other in over)
-            script = worst_script(screens, family)
-            script = (f'{script[0]:.2f}× ({esc(case_label(script[1]))}, {esc(labels.get(script[2], script[2]))})'
-                      if script else '–')
-            parts.append(f'<tr><td><a href="#{family}">{esc(DISPLAY.get(family, family))}</a></td><td>{count}</td>'
-                         f'<td>{count_over}</td><td><code>{esc(item["fixture"])}</code></td>'
-                         f'<td>{esc(names.get(item["machine"], item["machine"]))}</td>'
-                         f'<td>{item["ratio"]:.2f}×</td><td>{script}</td></tr>')
-        parts.append('</tbody></table></div>')
-        notes = [(family, note) for family, note in ABOVE_REFERENCE_NOTES.items()
-                 if any(item.get('primitive', item['family']) == family for item in over)]
-        if notes:
-            parts.append('<ul>' + ''.join(f'<li><strong>{esc(DISPLAY.get(family, family))}</strong>: {esc(note)}</li>'
-                                          for family, note in notes) + '</ul>')
-        parts.append(f'<details><summary>All {len(above)} measurements</summary>'
-                     '<div class="table-wrap"><table><thead><tr><th>Measurement</th><th>Machine</th>'
-                     '<th>Measured varops</th><th>Price</th><th>Measured ÷ price</th></tr></thead><tbody>')
-        for item in above:
-            parts.append(f'<tr><td><code>{esc(item["fixture"])}</code></td>'
-                         f'<td>{esc(names.get(item["machine"], item["machine"]))}</td>'
-                         f'<td>{item["measured_varops"]:,.0f}</td><td>{item["charged_varops"]:,.0f}</td>'
-                         f'<td>{item["ratio"]:.2f}×</td></tr>')
-        parts.append('</tbody></table></div></details>')
-    parts.append('</details>')
-
-    failures = gate['gate_failures']
-    under = [item for item in failures if item['max_above_fit'] > within]
-    below = [item for item in failures if item not in under and item['max_below_fit'] > within]
-    parts.append(f'<details><summary>Fit quality: {len(under)} of {gate["gate_bins"]:,} size ranges have a measurement '
-                 f'more than {within:g}× above its machine&#39;s fit</summary>'
-                 '<p>Each machine&#39;s fit is a simple formula, so it cannot follow every measurement. Those '
-                 f'{len(under)} ranges are where a measurement lies well above its fit; the price, which covers the '
-                 'fits of all machines, can still be above them, and the measurements above the price are listed in '
-                 'the check above. BIP 440 also sets a closeness target for every path and size decade: a '
-                 f'root-mean-square factor of at most {limits["max_rms_factor"]:.2f}, and at least '
-                 f'{100 * limits["min_within_share"]:g}% of measurements within {within:g}× of the fit. Most of the '
-                 f'{len(failures):,} ranges that miss it miss it on the safe side: in {len(below):,} the measurements lie '
-                 f'well below the fit, so the price over-charges them, and {len(failures) - len(under) - len(below)} miss '
-                 'only the root-mean-square factor.</p>')
-    parts.append('<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Size ranges</th>'
-                 f'<th>More than {within:g}× above the fit</th><th>Missing the closeness target</th></tr></thead><tbody>')
-    for machine in machines:
-        label = machine['meta']['label']
-        failing = [item for item in failures if item['machine'] == label]
-        parts.append(f'<tr><td>{esc(machine["label"])}</td><td>{gate["bins_by_machine"][label]}</td>'
-                     f'<td>{sum(item in under for item in failing)}</td><td>{len(failing)}</td></tr>')
-    parts.append('</tbody></table></div>')
-    if under:
-        parts.append(f'<details><summary>The {len(under)} size ranges</summary><div class="table-wrap"><table><thead>'
-                     '<tr><th>Primitive</th><th>Path</th><th>Sizes</th><th>Machine</th><th>Measurements</th>'
-                     '<th>Most above the fit</th></tr></thead><tbody>')
-        charged = charged_by(joint['model_id'])
-        for item in sorted(under, key=lambda item: -item['max_above_fit']):
-            parts.append(f'<tr><td><a href="#{charged.get(item["family"], item["family"])}">'
-                         f'{esc(family_label(item["family"], joint["model_id"]))}</a></td>'
-                         f'<td><code>{esc(item["group"])}</code></td><td>{size_range(item["decade"])}</td>'
-                         f'<td>{esc(names.get(item["machine"], item["machine"]))}</td><td>{item["fixtures"]}</td>'
-                         f'<td>{item["max_above_fit"]:.2f}×</td></tr>')
-        parts.append('</tbody></table></div></details>')
-    parts.append('</details>')
-
-    noises = [machine['meta']['epoch_noise'] for machine in machines if machine['meta']['epoch_noise'] is not None]
-    epochs = sorted({machine['meta']['epochs'] for machine in machines})
-    passes = f'{epochs[0]}' if len(epochs) == 1 else f'{epochs[0]} to {epochs[-1]}'
-    noise_range = (f'{100 * min(noises):.2f}–{100 * max(noises):.2f}%' if noises else 'not measured')
-    parts.append(f'<details><summary>Repeatability: passes differ by {noise_range} (limit {100 * MAX_EPOCH_NOISE:g}%)'
-                 f'</summary><p>Each measurement is the median of {passes} passes over all primitives. A run is accepted '
-                 'when its passes agree: over all measurements, the median of each one&#39;s median deviation between '
-                 f'passes must stay below {100 * MAX_EPOCH_NOISE:g}%; otherwise the run is repeated. The last column '
-                 'shows how much the slowest reference case varied over its rounds.</p>')
-    parts.append('<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Reference</th>'
-                 '<th>Pass difference</th><th>Slowest reference case over its rounds</th></tr></thead><tbody>')
-    for machine in machines:
-        meta = machine['meta']
-        spread = reference_spread(meta['file'])
-        noise = meta['epoch_noise']
-        noise = 'not measured' if noise is None else f'{100 * noise:.2f}%' + (' (fails)' if noise > MAX_EPOCH_NOISE else '')
-        rounds = (f'{esc(spread["case"])}, {spread["rounds"]} rounds: {spread["low"]:.3f}–{spread["high"]:.3f} s '
-                  f'({100 * spread["spread"]:.1f}%)' if spread else 'not recorded')
-        parts.append(f'<tr><td>{esc(machine["label"])}</td><td>{meta["reference_seconds"]:.3f} s</td><td>{noise}</td>'
-                     f'<td>{rounds}</td></tr>')
-    parts.append('</tbody></table></div>')
-    if (dataset / 'reference-csv').exists():
-        parts.append('<p>The recovered per-round reference samples are in the dataset&#39;s <code>reference-csv/</code>.</p>')
-    parts.append('</details></div><!--/diagnostics-->')
-    return ''.join(parts)
 
 
 def render(joint_path, output, source_root=None, title=TITLE):
@@ -1021,7 +731,6 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
             f"{labels[id(meta)]} (passes differ by {100 * meta['epoch_noise']:.2f}%)" for meta in failed)) + '.')
     if warnings:
         parts.append('<div class="card">' + ''.join(f'<p class="warning">{w}</p>' for w in warnings) + '</div>')
-    parts.append(diagnostics_html(joint, machines, joint_path.parent, Path(output).parent))
     parts.append('<nav class="nav" aria-label="Sections">')
     for section in SECTIONS:
         parts.append(f'<a href="#{section["slug"]}">{esc(section["title"].split(" · ")[0])}</a>')
