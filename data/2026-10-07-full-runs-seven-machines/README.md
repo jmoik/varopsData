@@ -23,7 +23,7 @@ sources.
 
 `joint-calibration.json` and `fit.log` come from `src/fit_calibrations.py` over the seven artifacts in the order
 above, with `--source-root` on the gsr repository. The rounded candidates (flats up to multiples of 50, rates up
-to whole varops) are:
+to whole varops) are implemented at gsr `1be4628bae`:
 
     BASE    300
     READ    350 + 2 W(n)
