@@ -25,7 +25,7 @@ Rates are fitted per byte of `n` and charged per byte of `W(n)` or `H(n)` (see [
 
 ### Composition rules
 
-- **Lifetimes.** WRITE includes eventual release. Initial witness values pay WRITE once after the immediate-success prescan, including empty values. Moves, drops, in-place shrinkage and operands left on the stack unchanged (by OP_CHECKLOCKTIMEVERIFY, OP_CHECKSEQUENCEVERIFY and OP_IFDUP) are not new producers; an opcode that shortens a value pays WRITE for its result, and so does OP_BYTEREV, which reverses its value in place.
+- **Lifetimes.** WRITE includes eventual release. Initial witness values are funded by their weight and pay no varops (see the [empty-item funding blocks](data/2026-10-08-three-runs-seven-machines/README.md#empty-witness-items)). Moves, drops, in-place shrinkage and operands left on the stack unchanged (by OP_CHECKLOCKTIMEVERIFY, OP_CHECKSEQUENCEVERIFY and OP_IFDUP) are not new producers; an opcode that shortens a value pays WRITE for its result, and so does OP_BYTEREV, which reverses its value in place.
 - **Numeric operands and results.** Every numeric operand pays READ, and every numeric result WRITE of its bytes. MUL charges WRITE of its full product span before multiplying; its scratch storage is part of MUL. DIV includes its internal temporary storage.
 - **Small results.** A count, comparison result, constant or boolean costs `WRITE(8)` whatever its encoded length. OP_EQUALVERIFY, OP_NUMEQUALVERIFY and OP_CHECKSIGVERIFY leave no result and pay no WRITE.
 - **No separate allocation charge.** Required allocation and growth belong to the producing operation, including scratch storage; they are never omitted or charged twice.

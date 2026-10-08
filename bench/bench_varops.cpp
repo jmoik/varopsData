@@ -342,13 +342,6 @@ struct EvalOutcome {
     uint64_t varops_consumed{0};
 };
 
-static uint64_t InitialProducerCost(const std::vector<valtype>& stack)
-{
-    uint64_t total{0};
-    for (const auto& value : stack) total += varops::COST_WRITE_FIXED + varops::COST_WRITE_BYTE * varops::WordSpan(value.size());
-    return total;
-}
-
 // Message plus padding and length, in whole 64-byte hash blocks.
 static uint64_t IndependentHashSpan(uint64_t bytes)
 {
@@ -554,11 +547,11 @@ static uint64_t CandidateCleanupCost(std::span<const valtype> stack, size_t clea
     return cost;
 }
 
-//! Charges of a case script outside its repeated sequence: initial stack
-//! production, the cleanup drops, the final OP_1 and the final result check.
+//! Charges of a case script outside its repeated sequence: the cleanup drops,
+//! the final OP_1 and the final result check.
 static uint64_t SuffixCost(const std::vector<valtype>& stack, size_t cleanup_items)
 {
-    return InitialProducerCost(stack) + CandidateCleanupCost(stack, cleanup_items) +
+    return CandidateCleanupCost(stack, cleanup_items) +
            varops::COST_BASE + varops::COST_SCALAR_WRITE +
            varops::COST_READ_FIXED + varops::COST_READ * 8;
 }
@@ -999,9 +992,8 @@ static MaterializedCase Materialize(const CaseSpec& spec, const CryptoFixture& f
         }
         // Spend the budget, unless one evaluation is cheap: then time enough
         // evaluations to spend 1% of it, and the full-budget sample extrapolates.
-        const uint64_t initial_cost{InitialProducerCost(materialized.initial_stack)};
         const uint64_t full{budget_ceiling / once.varops_consumed};
-        const uint64_t charged{std::max<uint64_t>(1, once.varops_consumed - std::min(initial_cost, once.varops_consumed))};
+        const uint64_t charged{once.varops_consumed};
         const uint64_t sampled{std::max<uint64_t>(MAX_UNSCALED_EVALUATIONS,
                                                   (MIN_FULL_VAROPS_SAMPLE_BUDGET + charged - 1) / charged)};
         materialized.evaluations = std::max<uint64_t>(1, std::min(full, sampled));
@@ -3117,9 +3109,7 @@ static bool ConfigureFullVaropsExtrapolation(const MaterializedCase& test_case,
         result.status = "zero-varops";
         return false;
     }
-    const uint64_t initial_cost{InitialProducerCost(test_case.initial_stack) * test_case.evaluations};
-    if (expected.varops_consumed <= initial_cost ||
-        expected.varops_consumed - initial_cost < MIN_FULL_VAROPS_SAMPLE_BUDGET) {
+    if (expected.varops_consumed < MIN_FULL_VAROPS_SAMPLE_BUDGET) {
         result.status = "insufficient-sample";
         return false;
     }
@@ -3128,10 +3118,8 @@ static bool ConfigureFullVaropsExtrapolation(const MaterializedCase& test_case,
     result.script_bytes = test_case.script.size();
     result.script_executions = test_case.evaluations;
     result.measured_varops = expected.varops_consumed;
-    // Initial ownership is funded once, not on every compressed repetition.
     // Keeping interpreter-entry and cleanup-opcode time in the numerator is conservative.
-    result.scale = static_cast<double>(TOTAL_VAROPS_BUDGET - initial_cost) /
-                   (result.measured_varops - initial_cost);
+    result.scale = static_cast<double>(TOTAL_VAROPS_BUDGET) / result.measured_varops;
     return true;
 }
 
@@ -3924,7 +3912,7 @@ static Options ParseArguments(int argc, char* argv[])
         } else if (arg == "--sample-budget-percent") {
             if (++i >= argc) throw std::runtime_error("--sample-budget-percent requires an integer from 2 to 100");
             const std::optional<uint32_t> percent{ToIntegral<uint32_t>(argv[i])};
-            // Extrapolation needs at least MIN_FULL_VAROPS_SAMPLE_BUDGET (1%) beyond the initial stack.
+            // Extrapolation needs at least MIN_FULL_VAROPS_SAMPLE_BUDGET (1%).
             if (!percent || *percent < 2 || *percent > 100) {
                 throw std::runtime_error("invalid --sample-budget-percent value '" + std::string{argv[i]} + "'");
             }
@@ -4161,7 +4149,6 @@ struct RepeatedMeasurement {
     bool valid{false};
     uint64_t repetitions{0};
     uint64_t consumed{0};
-    uint64_t initial{0};
     double wall_sec{0};
     double projected_sec{0};
     //! Full-block time of the work a block can actually hold; see MeasureRepeated.
@@ -4322,7 +4309,7 @@ static std::vector<SearchPoint> SearchNeighbors(const SearchPoint& point)
 }
 
 // Time a stack-neutral sequence repeated against the screening budget and
-// project it to the full budget; initial ownership is funded once.
+// project it to the full budget.
 static RepeatedMeasurement MeasureRepeated(opcodetype opcode, std::string shape, CScript sequence,
                                            std::vector<valtype> stack, const CryptoFixture& fixture,
                                            const Options& options, int samples)
@@ -4354,15 +4341,14 @@ static RepeatedMeasurement MeasureRepeated(opcodetype opcode, std::string shape,
         }
         result.repetitions = test_case.repetitions;
         result.consumed = expected->varops_consumed;
-        result.initial = InitialProducerCost(test_case.initial_stack);
-        if (result.consumed <= result.initial) {
-            result.reason = "no charged work beyond initial ownership";
+        if (result.consumed == 0) {
+            result.reason = "no charged work";
             return result;
         }
         result.wall_sec = CalculateStats(std::move(walls)).median;
-        // Same projection as the corpus: initial ownership is funded once.
-        const double budget{double(TOTAL_VAROPS_BUDGET - result.initial)};
-        const double charged{double(result.consumed - result.initial)};
+        // Same projection as the corpus.
+        const double budget{double(TOTAL_VAROPS_BUDGET)};
+        const double charged{double(result.consumed)};
         result.projected_sec = result.wall_sec * budget / charged;
         // A block holds the repeated body either in one direct script, in the
         // weight its witness leaves, or substituted from macros, which pay BASE
@@ -4410,15 +4396,15 @@ static bool WriteSearchResults(const Options& options, const std::vector<SearchR
                      options.reference_seconds, options.search_budget, options.search_seed,
                      options.search_samples, options.search_climbers, options.search_steps,
                      options.search_top, options.stable_rounds)
-        << "# ratio = wall * (40e9 - initial) / (consumed - initial) / reference_seconds\n"
-        << "phase,opcode,operands,sequence,valid,reason,repetitions,varops_consumed,initial_varops,"
+        << "# ratio = wall * 40e9 / consumed / reference_seconds\n"
+        << "phase,opcode,operands,sequence,valid,reason,repetitions,varops_consumed,"
            "wall_seconds,projected_full_budget_seconds,ratio\n";
     for (const SearchResult& result : log) {
-        out << strprintf("%s,%s,%s,%s,%d,%s,%u,%u,%u,%.9g,%.9g,%.9g\n",
+        out << strprintf("%s,%s,%s,%s,%d,%s,%u,%u,%.9g,%.9g,%.9g\n",
                          result.phase, OpcodeName(result.point.opcode),
                          CsvEscape(SearchOperandsLabel(result.point)),
                          SequenceOpcodeNames(SearchSequence(result.point)), result.valid,
-                         CsvEscape(result.reason), result.repetitions, result.consumed, result.initial,
+                         CsvEscape(result.reason), result.repetitions, result.consumed,
                          result.wall_sec, result.projected_sec, result.ratio);
     }
     out.close();
@@ -4520,7 +4506,7 @@ static bool RunShapeSearch(const Options& options, const CryptoFixture& fixture)
         const bool first_for_opcode{reported.insert(result.point.opcode).second};
         if (index >= 20 && !first_for_opcode) continue;
         std::cout << strprintf("%-6.4f %-10.4f %-10.2f %-10u %s\n", result.ratio, result.projected_sec,
-                               result.wall_sec * 1e12 / double(result.consumed - result.initial),
+                               result.wall_sec * 1e12 / double(result.consumed),
                                result.repetitions, SearchKey(result.point));
     }
     return options.output_file.empty() || WriteSearchResults(options, log);
@@ -4926,19 +4912,19 @@ static bool WriteProgramResults(const Options& options, const std::vector<Progra
         << strprintf("# reference_seconds=%.9g search_budget=%u seed=%u samples=%u seconds=%u top=%u epochs=%d\n",
                      options.reference_seconds, options.search_budget, options.search_seed,
                      options.search_samples, options.search_seconds, options.search_top, options.stable_rounds)
-        << "# projected = wall * (40e9 - initial) / (consumed - initial); reachable = the same work\n"
+        << "# projected = wall * 40e9 / consumed; reachable = the same work\n"
         << "# limited by the weight one direct script's witness leaves, or by macro unrolling charges and\n"
         << "# the unrolled size of the inputs whose witnesses fit; ratio = reachable / reference_seconds\n"
-        << "phase,lead_opcode,program,sequence,valid,reason,repetitions,varops_consumed,initial_varops,"
+        << "phase,lead_opcode,program,sequence,valid,reason,repetitions,varops_consumed,"
            "wall_seconds,projected_full_budget_seconds,reachable_full_block_seconds,ratio,features\n";
     for (const ProgramResult& result : log) {
         const CompiledProgram compiled{CompileProgram(result.program)};
         std::string features;
         for (const std::string& feature : result.features) features += (features.empty() ? "" : " ") + feature;
-        out << strprintf("%s,%s,%s,%s,%d,%s,%u,%u,%u,%.9g,%.9g,%.9g,%.9g,%s\n",
+        out << strprintf("%s,%s,%s,%s,%d,%s,%u,%u,%.9g,%.9g,%.9g,%.9g,%s\n",
                          result.phase, OpcodeName(compiled.lead), CsvEscape(ProgramLabel(result.program)),
                          SequenceOpcodeNames(compiled.sequence), result.valid, CsvEscape(result.reason),
-                         result.repetitions, result.consumed, result.initial, result.wall_sec,
+                         result.repetitions, result.consumed, result.wall_sec,
                          result.projected_sec, result.reachable_sec, result.ratio, CsvEscape(features));
     }
     out.close();
@@ -5192,7 +5178,7 @@ static bool RunProgramSearch(const Options& options, const CryptoFixture& fixtur
         if (index >= 20 && !first_for_opcode) continue;
         std::cout << strprintf("%-6.4f %-10.4f %-10.4f %-10.2f %-10u %s\n", result.ratio, result.reachable_sec,
                                result.projected_sec,
-                               result.wall_sec * 1e12 / double(result.consumed - result.initial),
+                               result.wall_sec * 1e12 / double(result.consumed),
                                result.repetitions, ProgramLabel(result.program));
     }
     return options.output_file.empty() || WriteProgramResults(options, log);

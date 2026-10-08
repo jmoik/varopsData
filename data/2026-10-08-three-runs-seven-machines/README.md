@@ -57,3 +57,22 @@ WRITE's flat follows the M4 Pro's second run (753). MUL's flat follows the i5-12
 traded W(m) rate for flat. DIV's W(m) rate follows the i5-12500's third run (10.3), and its Q rate falls from 61 to
 60, since the envelope over all runs lies at or above every run's curve on DIV's domain with less Q rate. SELECT's
 flat follows the M4 Pro's third run (1,522) and its rate the Ryzen 5 3600's second run (619).
+
+## Empty witness items
+
+BIP 440 no longer charges WRITE for initial stack values (gsr `4f396a61c9`). Their weight funds 10,000 varops
+each, so the cheapest value to create is the empty one. `bench_varops_primitives --funding-block` (varopsData
+`bench_varops_primitives.cpp` of this commit) times blocks of such inputs on the gsr build without the charge, with a
+signature loop spending the rest of the budget, against the M4 Pro's and M1 Pro's references above:
+
+    bench_varops_primitives --funding-block --funding-shape <shape> --pre-v2-seconds <reference> --epochs 7
+
+| Shape | Block | M4 Pro (1.616 s) | M1 Pro (2.255 s) |
+|---|---|---|---|
+| `c2-op1` | 19,873 minimal 0xC2 `OP_1` funding inputs | 0.655x | 0.927x |
+| `c2-success-stack` | one input of 1,997,214 one-byte values, OP_SUCCESS leaf | 0.719x | 0.987x |
+| `c2-success-empty-stack` | one input of 3,994,428 empty values, OP_SUCCESS leaf | 0.704x | 0.978x |
+| `c2-empty-drop` | 119 inputs of 32,768 empty values, dropped by a `OP_2DROP` macro | 0.680x | 0.934x |
+
+Every block stays below the reference. An executed empty value costs about 9 ns on the M4 Pro with its drop, about
+225 varops at the signature rate, against the 10,000 its weight funds.

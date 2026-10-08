@@ -1594,6 +1594,23 @@ std::vector<FundingShape> FundingShapes(const XOnlyPubKey& internal)
         }};
     }};
     const CScript v2_program{CScript{} << OP_2 << Bytes{0x01, 0x02}}; // a true program
+    // n 0xC2 inputs that execute with the most empty initial stack values, dropped
+    // through a macro of 256 OP_2DROPs, then OP_1.
+    constexpr size_t EMPTY_ITEMS{MAX_TAPLEAF_0XC2_STACK_SIZE};
+    CScript drop_body;
+    for (int i{0}; i < 256; ++i) drop_body << OP_2DROP;
+    CScript drop_leaf;
+    drop_leaf << OP_MACRO;
+    AppendMacroCompactSize(drop_leaf, drop_body.size());
+    drop_leaf.insert(drop_leaf.end(), drop_body.begin(), drop_body.end());
+    for (size_t i{0}; i < EMPTY_ITEMS / 2 / 256; ++i) {
+        drop_leaf << OP_CALLMACRO;
+        AppendMacroCompactSize(drop_leaf, 0);
+    }
+    for (size_t i{0}; i < EMPTY_ITEMS / 2 % 256; ++i) drop_leaf << OP_2DROP;
+    drop_leaf << OP_1;
+    const LeafOutput drop_out{LeafOutputAtDepth(internal, TAPROOT_LEAF_0XC2, drop_leaf)};
+    const LeafOutput success_out{LeafOutputAtDepth(internal, TAPROOT_LEAF_0XC2, success)};
     return {
         leaves("c4", 0xc4, CScript{}, 0),
         leaves("c2-op1", TAPROOT_LEAF_0XC2, CScript{} << OP_1, 0),
@@ -1614,6 +1631,21 @@ std::vector<FundingShape> FundingShapes(const XOnlyPubKey& internal)
             for (size_t i{0}; i < n; ++i) script << OP_MACRO << OP_0; // an empty body
             return script << OP_RESERVED;
         }, false),
+        // One 0xC2 input of n empty initial stack values whose leaf succeeds immediately.
+        FundingShape{"c2-success-empty-stack", 100000, [=](CMutableTransaction& mtx, std::vector<CTxOut>& spent, size_t n) {
+            std::vector<Bytes> witness(n);
+            witness.emplace_back(success.begin(), success.end());
+            witness.push_back(success_out.control);
+            AddInput(mtx, spent, success_out.script_pub_key, std::move(witness));
+        }},
+        FundingShape{"c2-empty-drop", 100, [=](CMutableTransaction& mtx, std::vector<CTxOut>& spent, size_t n) {
+            for (size_t i{0}; i < n; ++i) {
+                std::vector<Bytes> witness(EMPTY_ITEMS);
+                witness.emplace_back(drop_leaf.begin(), drop_leaf.end());
+                witness.push_back(drop_out.control);
+                AddInput(mtx, spent, drop_out.script_pub_key, std::move(witness));
+            }
+        }},
     };
 }
 
@@ -2025,7 +2057,7 @@ void Help()
                  "                      shape, and one commitment check against one Schnorr verification, then exit\n"
                  "  --funding-shape S   Time only this funding shape (c4, c2-op1, v2, p2a, c4-path128,\n"
                  "                      c2-success-path128, c2-success-stack, v2-stack, c2-success-nops,\n"
-                 "                      c2-success-macros); repeatable\n"
+                 "                      c2-success-macros, c2-success-empty-stack, c2-empty-drop); repeatable\n"
                  "  --contention        Time a block of 0xC2 loops (OP_NOPs, or DUP/DROP of a 64 KiB or 2 MiB value)\n"
                  "                      sharing one transaction's budget against the same loops in separate\n"
                  "                      transactions, through a script-check queue with 0 to (cores - 1)\n"
