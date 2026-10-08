@@ -583,9 +583,9 @@ op_tx::Result RunOpTx(Frame& frame, const ValtypeStack& alt, const BaseSignature
     const ScriptExecutionData& d{frame.context};
     const op_tx::ScriptContext context{d.m_annex_present ? d.m_annex : std::span<const unsigned char>{}, d.m_tapscript,
                                     d.m_tapleaf_hash, d.m_control_block, d.m_taptree_root, d.m_codeseparator_pos};
-    varops::Meter meter;
-    const op_tx::Result result{op_tx::Eval(frame.stack, alt, checker.GetOpTxView(), context, meter, frame.budget, error)};
-    // A script deducts its deferred charges before it completes.
+    varops::Meter meter{frame.budget};
+    const op_tx::Result result{op_tx::Eval(frame.stack, alt, checker.GetOpTxView(), context, meter, error)};
+    // A script deducts its charges before it completes.
     if (result == op_tx::Result::NORMAL && !meter.Spend(frame.budget)) {
         if (error) *error = SCRIPT_ERR_VAROP_COUNT;
         return op_tx::Result::SCRIPT_ERROR;
