@@ -202,6 +202,12 @@ class CalibrationPipelineTests(unittest.TestCase):
         self.assertEqual(len(result['unmatched']), 1)
         self.assertEqual(result['checked'], 1)
 
+    def test_fixture_identity_ignores_unroll_charge(self):
+        self.assertEqual(calibration.fixture_identity(dict(family='UNROLL', label='UNROLL/nop-1/2048/1028/729844')),
+                         calibration.fixture_identity(dict(family='UNROLL', label='UNROLL/nop-1/2048/1028/625496')))
+        self.assertNotEqual(calibration.fixture_identity(dict(family='READ', label='READ/compare/25')),
+                            calibration.fixture_identity(dict(family='READ', label='READ/compare/26')))
+
     def test_bench_sources_match(self):
         raw = b'bench\n'
         bench = dict(head='b' * 40, source_sha256={'bench/bench_varops.cpp': hashlib.sha256(raw).hexdigest()})
@@ -221,6 +227,13 @@ class CalibrationPipelineTests(unittest.TestCase):
                                              dict(file='b.json', bench=dict(bench, source_sha256={'bench/bench_varops.cpp': '0' * 64}))])
         with self.assertRaises(ValueError):
             calibration.check_bench_sources([dict(file='a.json', bench=bench), dict(file='old.json')])
+        # A reviewed file may differ between runs; its versions are recorded.
+        other = dict(bench, source_sha256={'bench/bench_varops.cpp': '0' * 64})
+        with patch.object(calibration.subprocess, 'check_output', return_value=raw):
+            result = calibration.check_bench_sources([dict(file='a.json', bench=bench), dict(file='b.json', bench=other)],
+                                                     reviewed=['bench/bench_varops.cpp'])
+        self.assertEqual(result['reviewed_differences'],
+                         {'bench/bench_varops.cpp': sorted([hashlib.sha256(raw).hexdigest(), '0' * 64])})
 
     def load(self, data):
         with tempfile.TemporaryDirectory() as directory:

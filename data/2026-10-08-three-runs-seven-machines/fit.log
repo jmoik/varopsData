@@ -1,0 +1,51 @@
+Benchmark files that differ between runs, reviewed as not affecting measurements: bench/bench_varops.cpp
+Primitive  Envelope (varops, unrounded)                   Rounded candidate                      Maximum coefficients (unrounded)
+F          280.279                                          300                                    280.279
+READ       337.786 + 1.02949 × W(n)                         350 + 2 × W(n)                         337.786 + 1.02949 × W(n)
+WRITE      753.204 + 6.81916 × n                            800 + 7 × W(n)                         753.204 + 6.81916 × n
+ARITH      171.955 + 2.65771 × W(n)                         200 + 3 × W(n)                         171.955 + 2.65771 × W(n)
+MOVE       170.186 + 22.8221 × k                            200 + 23 × k                           170.186 + 22.8221 × k
+MULCORE    666.17 + 0.825193 × W(n) + 17.4867 × W(m) + 0.71928 × W(n) × W(m) 700 + 1 × W(n) + 18 × W(m) + 1 × W(n) × W(m) 666.17 + 0.825193 × W(n) + 18.0366 × W(m) + 0.71928 × W(n) × W(m)
+DIVCORE    1147.53 + 59.5598 × Q(n, m) + 10.3022 × W(m) + 0.911585 × Q(n, m) × W(m) 1150 + 60 × Q(n, m) + 11 × W(m) + 1 × Q(n, m) × W(m) 1147.94 + 61.8981 × Q(n, m) + 10.3022 × W(m) + 0.911585 × Q(n, m) × W(m)
+HASH       41.4478 + 39.9633 × H(n)                         50 + 40 × H(n)                         459.393 + 40.0124 × H(n)
+SIG        696280                                           500000                                 696280
+TWEAK      455615                                           500000                                 455615
+SELECT     1522.07 + 619.31 × k                             1550 + 620 × k                         1522.07 + 619.31 × k
+Measured in parts:
+  H256     211.048 + 37.3133 × H(n)                         250 + 38 × H(n)
+  H160     13.1717 + 40.0124 × H(n)                         50 + 41 × H(n)
+  H1       292.098 + 23.62 × H(n)                           300 + 24 × H(n)
+
+Quality gate of the machine fits (RMS factor <= 1.1, >= 95% within 1.25x, per machine, path and size decade): 4423 of 7266 bins fail, 114 with a fixture more than 1.25x above its fit
+Charge coverage, candidate schedule: 728 of 171843 fixtures above the charge
+  WRITE       559 fixtures; worst 1.89x the charge: WRITE/fresh-pages/16385 on AMD Ryzen 5 3600 6-Core Processor
+  SIG          72 fixtures; worst 1.34x the charge: SIG/32 on AMD Ryzen 5 3600 6-Core Processor
+  ARITH        79 fixtures; worst 1.15x the charge: ARITH/byterev/14 on Apple M4 Pro
+  READ          8 fixtures; worst 1.04x the charge: READ/compare/25 on 12th Gen Intel(R) Core(TM) i5-12500
+  SELECT        6 fixtures; worst 1.01x the charge: SELECT/1b_items_deserialized/collated/262144/262145/524293 on AMD Ryzen 5 3600 6-Core Processor
+  DIVCORE       1 fixtures; worst 1.01x the charge: DIVCORE/64/64/127/MOD/top-one on 12th Gen Intel(R) Core(TM) i5-12500
+  H160          2 fixtures; worst 1.00x the charge: H160/62 on Apple M4 Pro
+  MOVE          1 fixtures; worst 1.00x the charge: MOVE/32767/nonempty on 12th Gen Intel(R) Core(TM) i5-12500
+Held-out lifetimes against each machine's fit: 12 of 10290 above the composed fit; worst 2.03x: PRODUCER_CHECK/numeric/tight/32769 on Apple M1 Pro
+Conditions: Apple M1 Pro: epoch noise 0.21%
+Conditions: 12th Gen Intel(R) Core(TM) i5-12500: epoch noise 1.30%
+Conditions: varop-calibration-ryzen99500x-full: epoch noise 0.40%
+Conditions: Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz: epoch noise 0.27%
+Conditions: AMD Ryzen 5 3600 6-Core Processor: epoch noise 0.57%
+Conditions: Apple M4 Pro: epoch noise 1.20%
+Conditions: AMD Ryzen 7 7700 8-Core Processor: epoch noise 0.47%
+Conditions: Apple M1 Pro: epoch noise 0.22%
+Conditions: 12th Gen Intel(R) Core(TM) i5-12500: epoch noise 1.28%
+Conditions: varop-calibration-ryzen99500x-full: epoch noise 0.48%
+Conditions: Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz: epoch noise 0.29%
+Conditions: AMD Ryzen 5 3600 6-Core Processor: epoch noise 0.51%
+Conditions: Apple M4 Pro: epoch noise 1.25%
+Conditions: AMD Ryzen 7 7700 8-Core Processor: epoch noise 0.42%
+Conditions: Apple M1 Pro: epoch noise 0.25%
+Conditions: 12th Gen Intel(R) Core(TM) i5-12500: epoch noise 1.35%
+Conditions: varop-calibration-ryzen99500x-full: epoch noise 0.47%
+Conditions: Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz: epoch noise 0.28%
+Conditions: AMD Ryzen 5 3600 6-Core Processor: epoch noise 0.55%
+Conditions: Apple M4 Pro: epoch noise 1.15%
+Conditions: AMD Ryzen 7 7700 8-Core Processor: epoch noise 0.42%
+Saved data/2026-10-08-three-runs-seven-machines/joint-calibration.json

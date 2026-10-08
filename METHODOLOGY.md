@@ -173,7 +173,7 @@ over the primitive's measurements, with the fitting weights, subject to `theta .
 | RIPEMD160, SHA1 | one block up to `H(520)`: the 520-byte direct-input limit |
 | Others | from zero, unbounded |
 
-Where sizes start at zero and are unbounded, the envelope equals the coefficientwise maximum; it is lower only where the domain is restricted. Constant primitives use the maximum. The envelope covers every machine's fitted curve, not every measurement. Adding a machine adds constraints, so the envelope never falls below any admitted machine's curve. It is not the coefficientwise maximum in general, which over-charges where machines differ in flat and rate.
+Where sizes start at zero and are unbounded, the envelope equals the coefficientwise maximum; it is lower only where the domain is restricted. Constant primitives use the maximum. The envelope covers every machine's fitted curve, not every measurement. Adding a machine adds constraints, so the envelope never falls below any admitted machine's curve. Repeated runs of a machine enter as separate fits, so the envelope covers each run and variation between runs raises a price instead of averaging out. It is not the coefficientwise maximum in general, which over-charges where machines differ in flat and rate.
 
 **Primitives measured in parts.** The current dataset was recorded with an earlier benchmark model, `producer-normalize-v1`, which timed READ, WRITE and ARITH in two parts each: converting an operand (PREPARE) apart from scanning it, producing a value apart from converting a numeric result to bytes (NORMALIZE, a flat), and passes without a carry chain (BIT) apart from ARITH. `fit_calibrations.py` fits every part on every machine and composes them (`COMPOSED`, `priced_model`): READ and WRITE are charged once for both of their parts, so their parts' fits add; an opcode makes either kind of ARITH pass, so ARITH takes the larger of its two. READ's and WRITE's prices add the parts' rounded prices, and the envelope of each machine's composed curve is reported against them. ARITH is priced as its rounded envelope, which covers every machine's curve of both parts, as for HASH below. The current benchmark model, `read-write-arith-v1`, times READ, WRITE and ARITH directly.
 
@@ -230,7 +230,7 @@ A schedule passes only if every candidate interval's upper end is at most 1; a l
 
 ### Current prices
 
-The implementation (gsr `0b644f0761`) prices every primitive from the six-machine full-run envelope of [`2026-10-01-full-runs-one-deduction`](data/2026-10-01-full-runs-one-deduction/); READ, WRITE, ARITH and HASH compose the prices of their measured parts (see [Combining machines](#combining-machines)). Each dataset's README records what changed since the one before. Earlier datasets remain in the Git history.
+The implementation (gsr `43e28c2a15`) prices every primitive from the envelope of three full runs on each of seven machines, [`2026-10-08-three-runs-seven-machines`](data/2026-10-08-three-runs-seven-machines/): 21 fits per primitive (see [Combining machines](#combining-machines)). Each dataset's README records what changed since the one before. Earlier datasets remain in the Git history.
 
 ### Open items
 

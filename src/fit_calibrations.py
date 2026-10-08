@@ -132,10 +132,11 @@ def check_source_snapshots(root, machines):
                      'Unmatched hashes require the original source bytes for review.')
 
 
-def check_bench_sources(machines):
+def check_bench_sources(machines, reviewed=()):
     """Check that every machine ran the same benchmark sources, each matching the
     varopsData commit it recorded; commits that differ only outside the benchmarks
-    (the fitter, the report) are equivalent.
+    (the fitter, the report) are equivalent. Files in reviewed may differ between
+    runs, e.g. the screening tool's copy of the prices; their versions are recorded.
 
     None when no artifact records them: runners in the gsr branch built the benchmarks
     from gsr sources, which source_sha256 covers."""
@@ -153,11 +154,20 @@ def check_bench_sources(machines):
             same = digest == hashlib.sha256(lf.replace(b'\n', b'\r\n')).hexdigest()
             out[name.replace(chr(92), '/')] = hashlib.sha256(lf).hexdigest() if same else digest
         return out
-    if not all(benches) or any(canonical(bench) != canonical(benches[0]) for bench in benches[1:]):
+    if not all(benches):
         raise ValueError('inputs were measured with different benchmark sources')
-    return check_source_snapshots(root, [
+    sources = [canonical(bench) for bench in benches]
+    differing = {name for source in sources[1:] for name in set(source) | set(sources[0])
+                 if source.get(name) != sources[0].get(name)}
+    if differing - set(reviewed):
+        raise ValueError('inputs were measured with different benchmark sources: ' + ', '.join(sorted(differing - set(reviewed))))
+    result = check_source_snapshots(root, [
         dict(file=machine['file'], head=bench['head'], source_sha256=bench['source_sha256'])
         for machine, bench in zip(machines, benches)])
+    if differing:
+        result['reviewed_differences'] = {name: sorted({source[name] for source in sources if name in source})
+                                          for name in sorted(differing)}
+    return result
 
 
 def word(n):
@@ -242,6 +252,14 @@ def fixture(row, producer_manifest=None):
     c, v = features(family, x, group)
     return dict(label=row["probe"], family=family, x=x, y=y, c=c, v=v,
                 group=group, included=included)
+
+
+def fixture_identity(point):
+    """What a fixture measures. An UNROLL label also records the charge of the build that
+    ran it, which changes with the prices; the report recomputes charges from today's."""
+    if point["family"] == "UNROLL":
+        return point["label"].rsplit("/", 1)[0]
+    return point["label"]
 
 
 def compact_size(n):
@@ -1125,6 +1143,9 @@ def main():
     parser.add_argument("--source-root", type=Path, help="Git repository containing the recorded commits for source verification")
     parser.add_argument("--allow-failed-conditions", action="store_true",
                         help="keep runs whose epoch noise exceeds the limit, in an exploratory fit")
+    parser.add_argument("--reviewed-bench-difference", action="append", default=[], metavar="PATH",
+                        help="benchmark file (relative to varopsData) whose versions may differ between runs "
+                             "because the differences do not affect measurements; repeatable")
     parser.add_argument("--allow-source-mismatch", action="store_true",
                         help="retain and label unexplained source differences in an exploratory fit")
     args = parser.parse_args()
@@ -1144,7 +1165,7 @@ def main():
         # Record inputs relative to the joint fit, so a dataset folder can move.
         meta["file"] = Path(os.path.relpath(path, output.parent)).as_posix()
         machines.append(meta)
-        fixture_sets.append({p["label"] for p in points})
+        fixture_sets.append({fixture_identity(p) for p in points})
         for point in points:
             series[point["family"]].append(point)
     failed = failed_conditions(machines)
@@ -1152,8 +1173,11 @@ def main():
         raise ValueError("runs failed their measurement conditions and must be repeated: " +
                          "; ".join(f"{Path(meta['file']).name}: epoch noise {100 * meta['epoch_noise']:.2f}% "
                                    f"exceeds {100 * MAX_EPOCH_NOISE:g}%" for meta in failed))
-    if len({meta["head"] for meta in machines}) != 1:
-        raise ValueError("inputs were collected from different commits")
+    # Repeated runs may come from different commits, as long as each run's
+    # sources match its own commit (--source-root) and the costing model is the same.
+    if len({meta["head"] for meta in machines}) != 1 and args.source_root is None:
+        raise ValueError("inputs were collected from different commits; supply --source-root to check each "
+                         "against its own")
     if len({meta['model_id'] for meta in machines}) != 1:
         raise ValueError('cannot combine different costing models; recollect all machines with the frozen candidate')
     if args.allow_source_mismatch and args.source_root is None:
@@ -1172,10 +1196,13 @@ def main():
     if unmatched and not args.allow_source_mismatch:
         names = ", ".join(sorted({item["path"] for item in unmatched}))
         raise ValueError(f"source differences remain after LF/CRLF normalization: {names}")
-    bench_check = check_bench_sources(machines)
+    bench_check = check_bench_sources(machines, args.reviewed_bench_difference)
     if bench_check and bench_check["unmatched"]:
         names = ", ".join(sorted({item["path"] for item in bench_check["unmatched"]}))
         raise ValueError(f"benchmark sources differ from their recorded varopsData commit: {names}")
+    if bench_check and bench_check.get("reviewed_differences"):
+        print("Benchmark files that differ between runs, reviewed as not affecting measurements: " +
+              ", ".join(bench_check["reviewed_differences"]))
     if any(fixtures != fixture_sets[0] for fixtures in fixture_sets[1:]):
         raise ValueError("inputs have different fixture sets")
     model_id = machines[0]['model_id']

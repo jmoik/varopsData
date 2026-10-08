@@ -20,17 +20,17 @@ The details of every step, each primitive's measurements and the acceptance stat
 
 ## Machines
 
-The current dataset, [`data/2026-10-07-full-runs-seven-machines`](data/2026-10-07-full-runs-seven-machines/), has full runs on seven machines. SHA256, RIPEMD160 and SHA1 are measured separately and share one price, HASH. A non-Apple ARM64 machine and a low-end home-node device are still needed.
+The current dataset, [`data/2026-10-08-three-runs-seven-machines`](data/2026-10-08-three-runs-seven-machines/), has three full runs on each of seven machines; the prices cover all 21 fits. SHA256, RIPEMD160 and SHA1 are measured separately and share one price, HASH. A non-Apple ARM64 machine and a low-end home-node device are still needed.
 
-| Machine | OS | Reference `T_pre` | Slowest existing workload |
+| Machine | OS | Reference `T_pre` (runs 1–3) | Slowest existing workload |
 |---|---|---|---|
-| Apple M1 Pro | macOS | 2.26 s | repeated RIPEMD160 |
-| Intel i5-12500 | Linux | 1.87 s | signature checks |
-| AMD Ryzen 9 9950X | Windows | 1.64 s | signature checks |
-| Intel i7-7700 | Linux | 3.48 s | repeated HASH256 (no SHA-NI) |
-| AMD Ryzen 5 3600 | Linux | 2.78 s | signature checks |
-| Apple M4 Pro | macOS | 1.56 s | repeated RIPEMD160 |
-| AMD Ryzen 7 7700 | Linux | 1.96 s | signature checks |
+| Apple M1 Pro | macOS | 2.26 / 2.26 / 2.26 s | repeated RIPEMD160 |
+| Intel i5-12500 | Linux | 1.87 / 1.89 / 1.79 s | signature checks |
+| AMD Ryzen 9 9950X | Windows | 1.64 / 1.64 / 1.64 s | signature checks |
+| Intel i7-7700 | Linux | 3.48 / 3.48 / 3.48 s | repeated HASH256 (no SHA-NI) |
+| AMD Ryzen 5 3600 | Linux | 2.78 / 2.75 / 2.75 s | signature checks |
+| Apple M4 Pro | macOS | 1.56 / 1.59 / 1.58 s | repeated RIPEMD160 |
+| AMD Ryzen 7 7700 | Linux | 1.96 / 1.96 / 1.96 s | signature checks |
 
 ## Reproduce
 
@@ -47,15 +47,20 @@ Put the artifacts in a new folder under `data/`, then fit, render and test (Pyth
         --output report/joint-calibration.html --source-root <gsr checkout>
     python3 -m unittest discover -s src
 
+Repeated runs go into `run1/`, `run2/`, … of one dataset and are fitted together, each as its own fit; runs from
+different gsr commits need `--source-root`, which checks each against its own commit.
+
 ## Contents
 
 | Path | |
 |---|---|
-| `data/2026-10-01-full-runs-one-deduction/` | Current dataset: full runs on six machines after the one-deduction-per-opcode change; the prices come from its fit. |
+| `data/2026-10-08-three-runs-seven-machines/` | Current dataset: three full runs on each of seven machines (`run1/` to `run3/`); the prices come from its fit. |
+| `data/2026-10-05-merged-primitives/` | Runs with the merged READ, WRITE and ARITH primitives, and the macro unrolling checks. |
+| `data/2026-10-01-full-runs-one-deduction/` | Full runs on six machines after the one-deduction-per-opcode change. |
 | `data/2026-10-01-full-runs/` | Full runs on five machines (no M4 Pro), before that change. |
 | `report/joint-calibration.html` | The report, rendered from the current dataset. |
 | `bench/` | The benchmarks, `bench_varops` (complete scripts) and `bench_varops_primitives` (cost primitives), built into a gsr checkout. |
 | `src/` | The calibration runner (`run_calibration.py`), fitting (`fit_calibrations.py`), the report (`render_joint_calibration.py`, `restyle_report.py`) and tests. |
 | `METHODOLOGY.md` | The full method. |
 
-Earlier datasets, such as the 3-epoch runs of 2026-09-30, remain in the Git history (last in `0f5c9fa`). Each folder in `data/` holds one artifact per machine with every raw sample, the joint fit, the fit log, a source audit and a README with the run details.
+Earlier datasets, such as the 3-epoch runs of 2026-09-30, remain in the Git history (last in `0f5c9fa`). Each folder in `data/` holds one artifact per machine and run with every raw sample, the joint fit, the fit log, a source audit and a README with the run details.

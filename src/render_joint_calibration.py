@@ -46,15 +46,15 @@ SECTIONS = [
          groups=[("Unrolling", ("UNROLL",))]),
 ]
 # Prices implemented in src/script/varops.h, compared against the joint candidate.
-IMPLEMENTED_AT = '1be4628bae'
-CURRENT_COSTS = {'F': '300', 'READ': '350 + 2 × W(n)', 'WRITE': '750 + 7 × W(n)', 'ARITH': '200 + 3 × W(n)',
+IMPLEMENTED_AT = '43e28c2a15'
+CURRENT_COSTS = {'F': '300', 'READ': '350 + 2 × W(n)', 'WRITE': '800 + 7 × W(n)', 'ARITH': '200 + 3 × W(n)',
                  'MOVE': '200 + 23 × k',
-                 'MULCORE': '650 + 1 × W(n) + 18 × W(m) + 1 × W(n) × W(m)',
-                 'DIVCORE': '1150 + 61 × Q(n, m) + 10 × W(m) + 1 × Q(n, m) × W(m)',
+                 'MULCORE': '700 + 1 × W(n) + 18 × W(m) + 1 × W(n) × W(m)',
+                 'DIVCORE': '1150 + 60 × Q(n, m) + 11 × W(m) + 1 × Q(n, m) × W(m)',
                  'HASH': '50 + 40 × H(n)', 'SIG': '500000',
-                 'SELECT': '1350 + 615 × k'}
-BASE, WRITE, READ, HASH, SIGCHECK = 300, (750, 7), (350, 2), (50, 40), 500_000  # rates per byte of W(n), H(n)
-ARITH, MOVE, MUL, SELECT = (200, 3), (200, 23), (650, 1, 18, 1), (1350, 615)  # MUL per byte of W(n), W(m), W(n) × W(m)
+                 'SELECT': '1550 + 620 × k'}
+BASE, WRITE, READ, HASH, SIGCHECK = 300, (800, 7), (350, 2), (50, 40), 500_000  # rates per byte of W(n), H(n)
+ARITH, MOVE, MUL, SELECT = (200, 3), (200, 23), (700, 1, 18, 1), (1550, 620)  # MUL per byte of W(n), W(m), W(n) × W(m)
 
 
 def unroll_charge(units, length, base=BASE, write=WRITE, read=READ, padded=True):
@@ -594,19 +594,27 @@ def render(joint_path, output, source_root=None, title=TITLE):
         points, _ = load_calibration(source)
         identity = (meta['cpu'] + ' ' + source.name).lower()
         key = next((key for key, token in [('m1', 'm1'), ('m4', 'm4'), ('r5', 'ryzen 5 3600'), ('r7', 'ryzen 7 7700'), ('ryzen', 'ryzen'), ('i7', 'i7-7700'), ('intel', 'intel')] if token in identity), None)
-        if key is None or any(m['key'] == key for m in machines):
-            raise ValueError(f'Unknown or duplicate machine identity: {identity}')
-        label = MACHINE_NAMES[key]
+        if key is None:
+            raise ValueError(f'Unknown machine identity: {identity}')
+        # Repeated runs of a machine are numbered in input order.
+        run = 1 + sum(m['key'] == key for m in machines)
+        machine_id = f'{key}-{run}'
         for point in points:
             point["machine_key"] = key
+            point["machine_id"] = machine_id
             if point["family"] == "SELECT":
                 # Charts show what SELECT prices: the time less the result's WRITE
                 # and a scope operand's READ at this machine's fits.
                 point["y"] = selection_time(point, model)
                 del point["result_bytes"]
-        machines.append(dict(meta=meta, points=points, model=model, key=key, label=label))
-    models = {machine["key"]: machine["model"] for machine in machines}
-    priced = {machine["key"]: priced_model(machine["model"], model_id) for machine in machines}
+        machines.append(dict(meta=meta, points=points, model=model, key=key, run=run, id=machine_id))
+    runs = max(machine['run'] for machine in machines)
+    if any(sum(m['key'] == machine['key'] for m in machines) != runs for machine in machines):
+        raise ValueError('every machine needs the same number of runs')
+    for machine in machines:
+        machine['label'] = MACHINE_NAMES[machine['key']] + (f' · run {machine["run"]}' if runs > 1 else '')
+    models = {machine["id"]: machine["model"] for machine in machines}
+    priced = {machine["id"]: priced_model(machine["model"], model_id) for machine in machines}
     series = defaultdict(list)
     priced_series = defaultdict(list)
     for machine in machines:
@@ -616,7 +624,7 @@ def render(joint_path, output, source_root=None, title=TITLE):
                 priced_series[charged[point["family"]]].append(point)
     # env_model holds the measured families' envelopes, priced_env the priced primitives'.
     env_model = envelope_model(machine_models, series)
-    priced_env = envelope_model([priced[machine["key"]] for machine in machines], priced_series, machine_models,
+    priced_env = envelope_model([priced[machine["id"]] for machine in machines], priced_series, machine_models,
                                 {family: members for family, (how, members) in composed.items() if how == 'max'})
     for records, envelopes in ((joint['primitives'], priced_env), (joint.get('measured_parts', {}), env_model)):
         for family, record in records.items():
@@ -652,7 +660,9 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
     heads = sorted({machine['meta']['head'][:10] for machine in machines if machine['meta'].get('head')})
     same_schedule = all(cost_comparison(joint, family)[2] for family in CURRENT_COSTS)
     dated = re.match(r'\d{4}-\d{2}-\d{2}', joint_path.parent.name)
-    chips = [f'{len(machines)} machines', f'{sum(len(m["points"]) for m in machines):,} measurements']
+    keys = list(dict.fromkeys(machine['key'] for machine in machines))
+    chips = [f'{len(keys)} machines' + (f' × {runs} runs' if runs > 1 else ''),
+             f'{sum(len(m["points"]) for m in machines):,} measurements']
     if dated:
         chips.append(f'measured {dated.group(0)}')
     status = (f' These are the prices the <a href="{GSR_URL}">gsr branch</a> implements.' if same_schedule else '')
@@ -688,12 +698,15 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
                  'only if no block of them takes longer than the reference.</li>'
                  f'</ol><p>The full method is in <a href="{METHODOLOGY_URL}">METHODOLOGY.md</a>.</p></div>')
 
-    rows = ''.join(f'<tr><td><i class="plot-mark {machine["key"]}" aria-hidden="true"></i>{esc(machine["label"])}</td><td>{esc(describe(machine["meta"]["file"]))}</td>'
-                   f'<td>{machine["meta"]["reference_seconds"]:.2f} s</td>'
+    # One row per machine; a machine's runs share its system and list their references in run order.
+    first_runs = [machine for machine in machines if machine['run'] == 1]
+    rows = ''.join(f'<tr><td><i class="plot-mark {machine["key"]}" aria-hidden="true"></i>{esc(MACHINE_NAMES[machine["key"]])}</td><td>{esc(describe(machine["meta"]["file"]))}</td>'
+                   '<td>' + ' / '.join(f'{m["meta"]["reference_seconds"]:.2f}' for m in machines if m['key'] == machine['key']) + ' s</td>'
                    f'<td>{esc(reference_workload(machine["meta"]["file"]))}</td>'
-                   f'<td>{esc(MACHINE_NOTES.get(machine["key"], ""))}</td></tr>' for machine in machines)
+                   f'<td>{esc(MACHINE_NOTES.get(machine["key"], ""))}</td></tr>' for machine in first_runs)
+    reference_header = 'Reference' + (f' (runs 1–{runs})' if runs > 1 else '')
     parts.append('<div class="card" id="machines"><div class="card-title">Machines</div><table><thead><tr>'
-                 '<th>Machine</th><th>System</th><th>Reference</th><th>Slowest block today</th><th>Note</th></tr></thead>'
+                 f'<th>Machine</th><th>System</th><th>{reference_header}</th><th>Slowest block today</th><th>Note</th></tr></thead>'
                  f'<tbody>{rows}</tbody></table><div class="plot-legend">'
                  '<span><i class="plot-line basis" aria-hidden="true"></i>Envelope of the fits</span>'
                  '<span><i class="plot-line candidate" aria-hidden="true"></i>Price</span>'
@@ -744,11 +757,12 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
 
     def sha_note():
         """Why one machine sets SHA256's byte rate, when one machine without SHA extensions does."""
-        rates = {machine['key']: models[machine['key']]['H256'][1] for machine in machines}
-        others = [rate for key, rate in rates.items() if key != 'i7']
-        if 'i7' not in rates or not others or rates['i7'] < max(others):
+        i7 = [models[machine['id']]['H256'][1] for machine in machines if machine['key'] == 'i7']
+        others = [models[machine['id']]['H256'][1] for machine in machines if machine['key'] != 'i7']
+        if not i7 or not others or min(i7) < max(others):
             return None
-        return (f'The Intel Core i7-7700 has no SHA extensions, so SHA256 runs in software there: {rates["i7"]:.0f} '
+        own = f'{min(i7):.0f}' if round(min(i7)) == round(max(i7)) else f'{min(i7):.0f}–{max(i7):.0f}'
+        return (f'The Intel Core i7-7700 has no SHA extensions, so SHA256 runs in software there: {own} '
                 f'varops per hashed byte, against {min(others):.0f}–{max(others):.0f} on the other machines. It alone '
                 'sets SHA256&#39;s byte rate.')
 
@@ -764,11 +778,13 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
                '<a href="#CSFS">OP_CHECKSIGFROMSTACK</a>, whose charge grows with the message.</p>',
                '<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Measured (varops)</th>'
                '<th>Charge (varops)</th><th>Measured ÷ charge</th></tr></thead><tbody>']
-        for machine in machines:
-            own = [p for p in pts if p['machine_key'] == machine['key'] and p['x'] == 32]
+        # A machine's slowest run.
+        for key in keys:
+            own = [p for p in pts if p['machine_key'] == key and p['x'] == 32]
             if own:
-                y = own[0]['y']
-                out.append(f'<tr><td>{esc(machine["label"])}</td><td>{y:,.0f}</td><td>{charge:,}</td><td>{y / charge:.2f}×</td></tr>')
+                worst = max(own, key=lambda p: p['y'])
+                y = worst['y']
+                out.append(f'<tr><td>{esc(run_label(key, worst))}</td><td>{y:,.0f}</td><td>{charge:,}</td><td>{y / charge:.2f}×</td></tr>')
         out.append('</tbody></table></div>')
         return out
 
@@ -819,12 +835,19 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
         out.append(f'<div class="chart">{chart(family, pts, family_models(family), None, prefix, prices, price_label, price_note)}</div>')
         return out
 
+    def run_label(key, point):
+        """A machine's name, with the run a point comes from when there are several."""
+        return MACHINE_NAMES[key] + (f' (run {point["machine_id"].rsplit("-", 1)[1]})' if runs > 1 else '')
+
     def fit_table(family, curves, envelope, envelope_label='Envelope of all machines'):
-        """Each machine's fitted curve of a family and their envelope."""
-        out = ['<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Fitted cost (varops)</th></tr></thead><tbody>']
-        for machine in machines:
-            out.append(f'<tr><td>{esc(machine["label"])}</td><td><code>{esc(fitted(family, curves[machine["key"]][family]))}</code></td></tr>')
-        out.append(f'<tr><td>{esc(envelope_label)}</td><td><code>{esc(fitted(family, envelope[family]))}</code></td></tr></tbody></table></div>')
+        """Each machine's fitted curve of a family, one column per run, and their envelope."""
+        heads = ''.join(f'<th>Run {run}</th>' for run in range(1, runs + 1)) if runs > 1 else '<th>Fitted cost (varops)</th>'
+        out = [f'<div class="table-wrap"><table><thead><tr><th>Machine</th>{heads}</tr></thead><tbody>']
+        for key in keys:
+            cells = ''.join(f'<td><code>{esc(fitted(family, curves[machine["id"]][family]))}</code></td>'
+                            for machine in machines if machine['key'] == key)
+            out.append(f'<tr><td>{esc(MACHINE_NAMES[key])}</td>{cells}</tr>')
+        out.append(f'<tr><td>{esc(envelope_label)}</td><td colspan="{runs}"><code>{esc(fitted(family, envelope[family]))}</code></td></tr></tbody></table></div>')
         return out
 
     def composed_article(family, tag):
@@ -897,14 +920,14 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
         out.append(f'<div class="chart">{check_chart(key, points)}</div>')
         column = 'Message' if key == 'CSFS' else 'Value' if key == 'BYTEREV' else 'Measurement'
         out.append(f'<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Highest measured ÷ charge</th><th>{column}</th></tr></thead><tbody>')
-        for machine in machines:
-            own = [p for p in points if p['machine_key'] == machine['key']]
+        for machine_key in keys:
+            own = [p for p in points if p['machine_key'] == machine_key]
             if not own:
                 continue
             worst = max(own, key=lambda p: p['ratio'])
             size = re.search(r'/(\d+)$', worst['label']) if key in {'CSFS', 'BYTEREV'} else None
             shown = f'{int(size.group(1)):,} bytes' if size else f'<code>{esc(worst["label"])}</code>'
-            out.append(f'<tr><td>{esc(machine["label"])}</td><td>{worst["ratio"]:.2f}×</td><td>{shown}</td></tr>')
+            out.append(f'<tr><td>{esc(run_label(machine_key, worst))}</td><td>{worst["ratio"]:.2f}×</td><td>{shown}</td></tr>')
         out.append('</tbody></table></div></article>')
         return out
 
