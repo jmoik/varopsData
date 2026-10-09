@@ -98,6 +98,9 @@ def opcode_table():
     one = lambda value: f'{value:02x}'
     unary_n = 'BASE + READ(n) + ARITH(n) + WRITE(r)'
     binary_n = 'BASE + READ(a) + READ(b) + ARITH(max(a, b)) + WRITE(r)'
+    # Results computed in the operand's storage, never longer than it, pay no WRITE.
+    unary_in_place = 'BASE + READ(n) + ARITH(n)'
+    binary_in_place = 'BASE + READ(a) + READ(b) + ARITH(max(a, b))'
     compare = 'BASE + READ(a) + READ(b) + WRITE(r)'
     rows = [
         ('Pushes', 'OP_0', 'BASE + WRITE(0)', 'an empty value', BASE + write(0), ([], ['OP_0'])),
@@ -133,35 +136,43 @@ def opcode_table():
         ('Stack', 'OP_DEPTH', 'BASE + WRITE(r)', '3 entries, r = 1', BASE + write(1), ([v32] * 3, ['OP_DEPTH'])),
         ('Stack', 'OP_SIZE', 'BASE + WRITE(r)', 'a 32-byte value, r = 1', BASE + write(1), ([v32], ['OP_SIZE'])),
         ('Splice', 'OP_CAT', 'BASE + WRITE(a + b)', 'two 32-byte values', BASE + write(64), ([v32, v32], ['OP_CAT'])),
-        ('Splice', 'OP_SUBSTR', 'BASE + READ(begin) + READ(len) + WRITE(out)', '16 bytes of a 32-byte value',
-         BASE + 2 * read(1) + write(16), ([v32, one(4), one(16)], ['OP_SUBSTR'])),
-        ('Splice', 'OP_LEFT, OP_RIGHT', 'BASE + READ(offset) + WRITE(out)', '16 bytes of a 32-byte value',
-         BASE + read(1) + write(16), ([v32, one(16)], ['OP_LEFT'])),
-        ('Bitwise', 'OP_INVERT', unary_n, 'n = r = 32', BASE + read(32) + arith(32) + write(32), ([v32], ['OP_INVERT'])),
-        ('Bitwise', 'OP_AND, OP_OR, OP_XOR', binary_n, 'two 32-byte values, r = 32', BASE + 2 * read(32) + arith(32) + write(32),
+        ('Splice', 'OP_SUBSTR', 'BASE + READ(begin) + READ(len) + ARITH(out)', '16 bytes of a 32-byte value',
+         BASE + 2 * read(1) + arith(16), ([v32, one(4), one(16)], ['OP_SUBSTR'])),
+        ('Splice', 'OP_LEFT', 'BASE + READ(offset)', '16 bytes of a 32-byte value',
+         BASE + read(1), ([v32, one(16)], ['OP_LEFT'])),
+        ('Splice', 'OP_RIGHT', 'BASE + READ(offset) + ARITH(out)', '16 bytes of a 32-byte value',
+         BASE + read(1) + arith(16), ([v32, one(16)], ['OP_RIGHT'])),
+        ('Bitwise', 'OP_INVERT', unary_in_place, 'n = 32', BASE + read(32) + arith(32), ([v32], ['OP_INVERT'])),
+        ('Bitwise', 'OP_AND, OP_OR, OP_XOR', binary_in_place, 'two 32-byte values', BASE + 2 * read(32) + arith(32),
          ([hx(0xff, 32), hx(0x0f, 32)], ['OP_AND'])),
         ('Bitwise', 'OP_EQUAL', 'BASE + READ(n) if both sizes are n + WRITE(r)', 'two equal 32-byte values, r = 1',
          BASE + read(32) + write(1), ([v32, v32], ['OP_EQUAL'])),
         ('Bitwise', 'OP_EQUALVERIFY', 'BASE + READ(n) if both sizes are n', 'two equal 32-byte values', BASE + read(32),
          ([v32, v32], ['OP_EQUALVERIFY'])),
-        ('Bitwise', 'OP_UPSHIFT, OP_DOWNSHIFT', 'BASE + READ(n) + READ(bits) + ARITH(n) + WRITE(r)', 'an 8-byte number by 8 bits, r = 9',
+        ('Bitwise', 'OP_UPSHIFT', 'BASE + READ(n) + READ(bits) + ARITH(n) + WRITE(r)', 'an 8-byte number by 8 bits, r = 9',
          BASE + read(8) + read(1) + arith(8) + write(9), ([n8, one(8)], ['OP_UPSHIFT'])),
-        ('Arithmetic', 'OP_1ADD, OP_1SUB, OP_2MUL, OP_2DIV', unary_n, 'an 8-byte number, r = 8',
+        ('Bitwise', 'OP_DOWNSHIFT', 'BASE + READ(n) + READ(bits) + ARITH(n)', 'an 8-byte number by 8 bits',
+         BASE + read(8) + read(1) + arith(8), ([n8, one(8)], ['OP_DOWNSHIFT'])),
+        ('Arithmetic', 'OP_1ADD, OP_2MUL', unary_n, 'an 8-byte number, r = 8',
          BASE + read(8) + arith(8) + write(8), ([n8], ['OP_1ADD'])),
+        ('Arithmetic', 'OP_1SUB, OP_2DIV', unary_in_place, 'an 8-byte number',
+         BASE + read(8) + arith(8), ([n8], ['OP_1SUB'])),
         ('Arithmetic', 'OP_NOT, OP_0NOTEQUAL', 'BASE + READ(n) + WRITE(r)', 'OP_0NOTEQUAL on an 8-byte number, r = 1',
          BASE + read(8) + write(1), ([n8], ['OP_0NOTEQUAL'])),
-        ('Arithmetic', 'OP_ADD, OP_SUB', binary_n, 'two 8-byte numbers, r = 8', BASE + 2 * read(8) + arith(8) + write(8),
+        ('Arithmetic', 'OP_ADD', binary_n, 'two 8-byte numbers, r = 8', BASE + 2 * read(8) + arith(8) + write(8),
          ([n8, n8], ['OP_ADD'])),
+        ('Arithmetic', 'OP_SUB', binary_in_place, 'two 8-byte numbers', BASE + 2 * read(8) + arith(8),
+         ([n8, n8], ['OP_SUB'])),
         ('Arithmetic', 'OP_MUL', 'BASE + READ(a) + READ(b) + MUL(n, m) + WRITE(W(a) + W(b))', 'two 8-byte numbers',
          BASE + 2 * read(8) + mul(8, 8) + write(16), ([n8, n8], ['OP_MUL'])),
-        ('Arithmetic', 'OP_DIV, OP_MOD', 'BASE + READ(a) + READ(b) + DIV(n, m) + WRITE(r)', 'OP_DIV of 16 by 8 bytes, r = 9',
-         BASE + read(16) + read(8) + div(16, 8) + write(9), ([n16, n8], ['OP_DIV'])),
+        ('Arithmetic', 'OP_DIV, OP_MOD', 'BASE + READ(a) + READ(b) + DIV(n, m)', 'OP_DIV of 16 by 8 bytes',
+         BASE + read(16) + read(8) + div(16, 8), ([n16, n8], ['OP_DIV'])),
         ('Arithmetic', 'OP_BOOLAND, OP_BOOLOR, OP_NUMEQUAL, OP_NUMNOTEQUAL, OP_LESSTHAN, OP_GREATERTHAN, '
          'OP_LESSTHANOREQUAL, OP_GREATERTHANOREQUAL', compare, 'OP_NUMEQUAL of two 8-byte numbers, r = 1',
          BASE + 2 * read(8) + write(1), ([n8, n8], ['OP_NUMEQUAL'])),
         ('Arithmetic', 'OP_NUMEQUALVERIFY', 'BASE + READ(a) + READ(b)', 'two 8-byte numbers', BASE + 2 * read(8),
          ([n8, n8], ['OP_NUMEQUALVERIFY'])),
-        ('Arithmetic', 'OP_MIN, OP_MAX', compare, 'two 8-byte numbers, r = 8', BASE + 2 * read(8) + write(8),
+        ('Arithmetic', 'OP_MIN, OP_MAX', 'BASE + READ(a) + READ(b)', 'two 8-byte numbers', BASE + 2 * read(8),
          ([n8, n8], ['OP_MIN'])),
         ('Arithmetic', 'OP_WITHIN', 'BASE + READ(min) + READ(max) + 2 READ(x) + WRITE(r)', 'three equal 8-byte numbers, r = 0',
          BASE + 4 * read(8) + write(0), ([n8, n8, n8], ['OP_WITHIN'])),
@@ -186,7 +197,7 @@ def opcode_table():
          ([csfs_sig, v32, generator], ['OP_CHECKSIGFROMSTACK'])),
         ('Extended Primitives', 'OP_TWEAKADD', 'BASE + SIG + WRITE(32)', '', BASE + SIGCHECK + write(32),
          ([hx(0x00, 31) + '01', generator], ['OP_TWEAKADD'])),
-        ('Extended Primitives', 'OP_BYTEREV', 'BASE + ARITH(n) + WRITE(n)', 'n = 32', BASE + arith(32) + write(32),
+        ('Extended Primitives', 'OP_BYTEREV', 'BASE + ARITH(n)', 'n = 32', BASE + arith(32),
          ([v32], ['OP_BYTEREV'])),
         ('OP_TX', 'OP_TX', 'BASE + READ per scope operand + OP_TX_SELECT(k) + WRITE of each result',
          'the code separator position, one 4-byte number', BASE + SELECT[0] + SELECT[1] + write(4), None),
@@ -312,7 +323,8 @@ COMPOSED_TEXT = {
     'WRITE': 'This dataset measured WRITE in two parts: producing a value, and converting a numeric result back to '
              'bytes. WRITE is charged once per value for both, so its price adds the two parts&#39; rounded prices, '
              '{shares}, and each machine&#39;s curve adds its two fits. A value that is not a number pays for the '
-             'conversion as well.',
+             'conversion as well. A result computed in its operand&#39;s storage, never longer than it, is not a new '
+             'value and pays no WRITE; dropping its trailing zero bytes is part of the opcode&#39;s READ, ARITH or DIV.',
     'ARITH': 'This dataset measured ARITH in two parts: passes with a carry chain and passes without one. An opcode '
              'makes one kind of pass, so the price is the rounded envelope of every machine&#39;s fit of both parts, '
              'whose own prices would be {shares}.',

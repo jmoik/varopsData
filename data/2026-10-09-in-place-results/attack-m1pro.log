@@ -1,0 +1,41 @@
+right-shrink-1         reps  3000 varops 35,995,263,000 net    203.2 ms  ratio    0.10  ok=True err=None
+left-shrink-1          reps  3000 varops      8,136,000 net    -28.4 ms  ratio  -61.88  ok=True err=None
+left-halve-chain       reps   300 varops  4,202,059,800 net     21.4 ms  ratio    0.09  ok=True err=None
+right-halve-chain      reps   300 varops  5,853,747,000 net     35.7 ms  ratio    0.11  ok=True err=None
+left-to-1              reps   300 varops  4,200,966,600 net     13.2 ms  ratio    0.06  ok=True err=None
+sub-to-small           reps   300 varops 15,601,365,000 net    150.1 ms  ratio    0.17  ok=True err=None
+invert                 reps  3000 varops 60,002,550,000 net    185.7 ms  ratio    0.05  ok=True err=None
+bytrev                 reps  3000 varops 36,001,500,000 net    345.9 ms  ratio    0.17  ok=True err=None
+xor-copy               reps  1500 varops 78,009,731,208 net    477.3 ms  ratio    0.11  ok=True err=None
+min-dup                reps  1500 varops 33,003,150,000 net    313.2 ms  ratio    0.17  ok=True err=None
+un-byterev-1           reps 600000 varops  1,188,000,000 net     24.1 ms  ratio    0.36  ok=True err=None
+un-byterev-8           reps 600000 varops  1,188,000,000 net     25.3 ms  ratio    0.38  ok=True err=None
+un-invert-8            reps 600000 varops  1,407,600,000 net     26.6 ms  ratio    0.34  ok=True err=None
+un-2div-8              reps 600000 varops  1,407,600,000 net     28.7 ms  ratio    0.36  ok=True err=None
+un-1sub-8              reps 600000 varops  1,407,600,000 net     29.6 ms  ratio    0.37  ok=True err=None
+un-left-8              reps 600000 varops  1,966,800,000 net     44.3 ms  ratio    0.40  ok=True err=None
+un-rshift-1            reps 600000 varops  2,320,800,000 net     50.1 ms  ratio    0.38  ok=True err=None
+bin-min-1              reps 600000 varops  2,006,400,000 net     47.4 ms  ratio    0.42  ok=False err=Stack size must be exactly one after execution
+bin-sub-1              reps 600000 varops  2,140,800,000 net     49.6 ms  ratio    0.41  ok=False err=Stack size must be exactly one after execution
+bin-and-1              reps 600000 varops  2,140,800,000 net     47.8 ms  ratio    0.40  ok=False err=Stack size must be exactly one after execution
+bin-div-1              reps 600000 varops  2,749,200,000 net     52.0 ms  ratio    0.34  ok=False err=Stack size must be exactly one after execution
+trim-sub-1000000       reps   200 varops  4,200,740,000 net     17.7 ms  ratio    0.07  ok=True err=None
+trim-mod-1000000       reps   200 varops  5,800,930,000 net     69.5 ms  ratio    0.21  ok=True err=None
+big-mod-65536x32768    reps   200 varops 215,391,487,600 net   4181.2 ms  ratio    0.34  ok=False err=Stack size must be exactly one after execution
+  v2 measured worst (sample):OP_BYTEREV 15B: 0.030 s
+  v2 projected worst:     OP_BYTEREV 15B: 1.483 s (0.69x schnorr, 9.74x pre-v2, 50.00x v2 measured)
+
+  top 5 new-v2 cases (measured or projected):
+  1. 1.483 s (projected, stable): gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/15B/alternating/No error
+  2. 1.358 s (projected, stable): gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/8B/alternating/No error
+  3. 1.354 s (projected, stable): gsr-tapscript-v2/OP_MOD/OP_2DUP+OP_MOD+OP_DROP/divmod-scale-tail/64KBx16KB/asymmetric-quarter-add-back/No error
+  4. 1.353 s (projected, stable): gsr-tapscript-v2/OP_DIV/OP_2DUP+OP_DIV+OP_DROP/divmod-scale-tail/64KBx16KB/asymmetric-quarter-add-back/No error
+  5. 1.292 s (projected, stable): gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/7B/alternating/No error
+substr-front-1         reps  3000 varops 35,997,159,000 net    204.7 ms  ratio    0.10  ok=True err=None
+substr-front-small-dup reps   300 varops  4,201,490,400 net     16.5 ms  ratio    0.07  ok=True err=None
+substr-end-small-dup   reps   300 varops  4,201,490,400 net     15.7 ms  ratio    0.07  ok=True err=None
+substr-mid-dup         reps   300 varops  5,101,483,200 net     22.1 ms  ratio    0.08  ok=True err=None
+substr-halve-chain     reps   300 varops  5,855,116,800 net     31.2 ms  ratio    0.09  ok=True err=None
+substr-small-1         reps 300000 varops  1,507,200,000 net     32.5 ms  ratio    0.38  ok=True err=None
+right-shrink-1         reps  3000 varops 35,995,263,000 net    203.7 ms  ratio    0.10  ok=True err=None
+left-halve-chain       reps   300 varops  4,202,059,800 net     22.3 ms  ratio    0.09  ok=True err=None

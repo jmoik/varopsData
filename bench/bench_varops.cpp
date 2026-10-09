@@ -1182,11 +1182,12 @@ static uint64_t OneToOneSequenceCost(opcodetype opcode, size_t size, bool three_
         const bool low{pattern == "padded-low" || pattern == "one-low"};
         const size_t output_size{low ? (opcode == OP_1SUB ? 0U : 1U) :
                                       (opcode == OP_1SUB && pattern == "late-nonzero" && size != 0 ? size - 1 : size)};
-        const uint64_t output_words{varops::WordSpan(output_size)};
+        // Only 1ADD can grow, so only its result is a new value that pays WRITE.
+        const uint64_t write{opcode == OP_1ADD ?
+            varops::COST_WRITE_FIXED + varops::COST_WRITE_BYTE * varops::WordSpan(output_size) : 0};
         const uint64_t target{varops::COST_BASE + varops::COST_READ_FIXED +
             varops::COST_READ * words + varops::COST_ARITH_FIXED +
-            varops::COST_ARITH_BYTE * words + varops::COST_WRITE_FIXED +
-            varops::COST_WRITE_BYTE * output_words};
+            varops::COST_ARITH_BYTE * words + write};
         return copy_opcode + transforms * (target + CandidateDropCost(output_size));
     }
     case OP_INVERT:
@@ -1198,11 +1199,12 @@ static uint64_t OneToOneSequenceCost(opcodetype opcode, size_t size, bool three_
             low && opcode == OP_2DIV ? 0U :
             low && opcode == OP_2MUL ? 1U :
             opcode == OP_2DIV && pattern == "late-nonzero" && size != 0 ? size - 1 : size};
-        const uint64_t output_words{varops::WordSpan(output_size)};
+        // Only 2MUL can grow, so only its result is a new value that pays WRITE.
+        const uint64_t write{opcode == OP_2MUL ?
+            varops::COST_WRITE_FIXED + varops::COST_WRITE_BYTE * varops::WordSpan(output_size) : 0};
         const uint64_t target{varops::COST_BASE + varops::COST_READ_FIXED +
             varops::COST_READ * words + varops::COST_ARITH_FIXED +
-            varops::COST_ARITH_BYTE * words + varops::COST_WRITE_FIXED +
-            varops::COST_WRITE_BYTE * output_words};
+            varops::COST_ARITH_BYTE * words + write};
         return copy_opcode + transforms * (target + CandidateDropCost(output_size));
     }
     case OP_RIPEMD160:
@@ -1920,15 +1922,13 @@ static uint64_t DivModSequenceCost(size_t dividend, size_t divisor)
     const uint64_t dividend_words{varops::WordSpan(dividend)};
     const uint64_t divisor_words{varops::WordSpan(divisor)};
     const uint64_t excess{IndependentDivExcess(dividend_words, divisor_words)};
-    // OP_2DUP, target, OP_DROP. The result is charged at the dividend's padded
-    // width, which a quotient or remainder does not reach once trimmed, so the
-    // estimate over-states the charge; it only sizes cases.
+    // OP_2DUP, target, OP_DROP. The quotient or remainder is computed in the
+    // dividend's storage and pays no WRITE.
     return 3 * varops::COST_BASE + 2 * varops::COST_WRITE_FIXED +
            varops::COST_WRITE_BYTE * (dividend_words + divisor_words) +
            2 * varops::COST_READ_FIXED + varops::COST_READ * (dividend_words + divisor_words) +
            varops::COST_DIV_FIXED + varops::COST_DIV_DIVISOR_BYTE * divisor_words +
-           varops::COST_DIV_ROW_BYTE * excess + varops::COST_DIV_CELL * excess * divisor_words +
-           varops::COST_WRITE_FIXED + varops::COST_WRITE_BYTE * dividend_words;
+           varops::COST_DIV_ROW_BYTE * excess + varops::COST_DIV_CELL * excess * divisor_words;
 }
 
 static void AddDivModCases(std::vector<CaseSpec>& specs, opcodetype opcode)
@@ -2748,7 +2748,8 @@ static std::map<std::string, opcodetype> SupportedOpcodeMap()
  * n1, n2, n3 of the operands from the deepest, or named after an operand or the
  * result; n >= m are the operands' lengths for MUL, without trailing zero bytes for
  * DIV. Every primitive applies its byte rate to
- * W(n), or H(n) for a hash. Initial witness values pay WRITE once per script.
+ * W(n), or H(n) for a hash. Initial witness values cost no varops, and a result
+ * computed in its operand's storage without growing it pays no WRITE.
  */
 static std::pair<std::string, std::string> CandidateFormula(opcodetype opcode)
 {
@@ -2773,57 +2774,58 @@ static std::pair<std::string, std::string> CandidateFormula(opcodetype opcode)
     case OP_3DUP: return {"BASE + WRITE(n1) + WRITE(n2) + WRITE(n3)", "BASE,WRITE"};
     case OP_IFDUP:
         return {"BASE + READ(n), plus WRITE(n) if nonzero", "BASE,READ,WRITE"};
-    case OP_DEPTH: case OP_SIZE: return {"BASE + WRITE(8)", "BASE,WRITE"};
+    case OP_DEPTH: case OP_SIZE: return {"BASE + WRITE(out)", "BASE,WRITE"};
     case OP_PICK:
         return {"BASE + READ(index) + WRITE(picked)", "BASE,READ,WRITE"};
     case OP_ROLL:
         return {"BASE + READ(index) + MOVE(k), k = index value + 1", "BASE,READ,MOVE"};
-    case OP_1ADD: case OP_1SUB:
+    case OP_1ADD: case OP_2MUL:
         return {"BASE + READ(n) + ARITH(n) + WRITE(out)", "BASE,READ,ARITH,WRITE"};
+    case OP_1SUB: case OP_INVERT: case OP_2DIV:
+        return {"BASE + READ(n) + ARITH(n)", "BASE,READ,ARITH"};
     case OP_NOT: case OP_0NOTEQUAL:
-        return {"BASE + READ(n) + WRITE(8)", "BASE,READ,WRITE"};
-    case OP_INVERT: case OP_2MUL: case OP_2DIV:
-        return {"BASE + READ(n) + ARITH(n) + WRITE(out)", "BASE,READ,ARITH,WRITE"};
+        return {"BASE + READ(n) + WRITE(out)", "BASE,READ,WRITE"};
     case OP_EQUAL:
-        return {"BASE + WRITE(8), plus READ(n1) if n1 = n2", "BASE,READ,WRITE"};
+        return {"BASE + WRITE(out), plus READ(n1) if n1 = n2", "BASE,READ,WRITE"};
     case OP_EQUALVERIFY:
         return {"BASE, plus READ(n1) if n1 = n2", "BASE,READ"};
-    case OP_ADD: case OP_SUB:
+    case OP_ADD:
         return {"BASE + READ(n1) + READ(n2) + ARITH(max(n1, n2)) + WRITE(out)", "BASE,READ,ARITH,WRITE"};
+    case OP_SUB: case OP_AND: case OP_OR: case OP_XOR:
+        return {"BASE + READ(n1) + READ(n2) + ARITH(max(n1, n2))", "BASE,READ,ARITH"};
     case OP_BOOLAND: case OP_BOOLOR:
-        return {"BASE + READ(n1) + READ(n2) + WRITE(8)", "BASE,READ,WRITE"};
+        return {"BASE + READ(n1) + READ(n2) + WRITE(out)", "BASE,READ,WRITE"};
     case OP_NUMEQUAL: case OP_NUMNOTEQUAL: case OP_LESSTHAN:
     case OP_GREATERTHAN: case OP_LESSTHANOREQUAL: case OP_GREATERTHANOREQUAL:
-        return {"BASE + READ(n1) + READ(n2) + WRITE(8)", "BASE,READ,WRITE"};
+        return {"BASE + READ(n1) + READ(n2) + WRITE(out)", "BASE,READ,WRITE"};
     case OP_NUMEQUALVERIFY: return {"BASE + READ(n1) + READ(n2)", "BASE,READ"};
     case OP_MIN: case OP_MAX:
-        return {"BASE + READ(n1) + READ(n2) + WRITE(out)", "BASE,READ,WRITE"};
+        return {"BASE + READ(n1) + READ(n2)", "BASE,READ"};
     case OP_WITHIN:
-        return {"BASE + 2 READ(n1) + READ(n2) + READ(n3) + WRITE(8)", "BASE,READ,WRITE"};
-    case OP_AND: case OP_OR: case OP_XOR:
-        return {"BASE + READ(n1) + READ(n2) + ARITH(max(n1, n2)) + WRITE(out)", "BASE,READ,ARITH,WRITE"};
+        return {"BASE + 2 READ(n1) + READ(n2) + READ(n3) + WRITE(out)", "BASE,READ,WRITE"};
     case OP_RIPEMD160: case OP_SHA1: return {"BASE + HASH(n) + WRITE(20)", "BASE,HASH,WRITE"};
     case OP_SHA256: return {"BASE + HASH(n) + WRITE(32)", "BASE,HASH,WRITE"};
     case OP_HASH160: return {"BASE + HASH(n) + HASH(32) + WRITE(20)", "BASE,HASH,WRITE"};
     case OP_HASH256: return {"BASE + HASH(n) + HASH(32) + WRITE(32)", "BASE,HASH,WRITE"};
     case OP_TX:
         return {"BASE + READ(n) per scope operand + OP_TX_SELECT(k) + WRITE(collated bytes), or WRITE(n) "
-                "per noncollated value (WRITE(8) for a number); k = selected values + scanned records; a "
+                "per noncollated value; k = selected values + scanned records; a "
                 "reserved selector version pays nothing", "BASE,READ,OP_TX_SELECT,WRITE"};
     case OP_CAT: return {"BASE + WRITE(n1 + n2)", "BASE,WRITE"};
     case OP_SUBSTR:
-        return {"BASE + READ(begin) + READ(size) + WRITE(out)", "BASE,READ,WRITE"};
-    case OP_LEFT: case OP_RIGHT:
-        return {"BASE + READ(size) + WRITE(out)", "BASE,READ,WRITE"};
+        return {"BASE + READ(begin) + READ(size) + ARITH(out)", "BASE,READ,ARITH"};
+    case OP_LEFT: return {"BASE + READ(size)", "BASE,READ"};
+    case OP_RIGHT: return {"BASE + READ(size) + ARITH(out)", "BASE,READ,ARITH"};
     case OP_MUL:
         return {"BASE + READ(n1) + READ(n2) + MUL(n, m) + WRITE(W(n1) + W(n2))", "BASE,READ,MUL,WRITE"};
     case OP_DIV: case OP_MOD:
-        return {"BASE + READ(n1) + READ(n2) + DIV(n, m) + WRITE(out); "
-                "n and m are lengths without trailing zero bytes", "BASE,READ,DIV,WRITE"};
-    case OP_LSHIFT: case OP_RSHIFT:
+        return {"BASE + READ(n1) + READ(n2) + DIV(n, m); "
+                "n and m are lengths without trailing zero bytes", "BASE,READ,DIV"};
+    case OP_LSHIFT:
         return {"BASE + READ(n1) + READ(bits) + ARITH(n1) + WRITE(out)", "BASE,READ,ARITH,WRITE"};
+    case OP_RSHIFT: return {"BASE + READ(n1) + READ(bits) + ARITH(n1)", "BASE,READ,ARITH"};
     case OP_CHECKSIG:
-        return {"BASE + WRITE(8), plus SIGCHECK + HASH(96) for a nonempty signature", "BASE,SIGCHECK,HASH,WRITE"};
+        return {"BASE + WRITE(out), plus SIGCHECK + HASH(96) for a nonempty signature", "BASE,SIGCHECK,HASH,WRITE"};
     case OP_CHECKSIGVERIFY:
         return {"BASE, plus SIGCHECK + HASH(96) for a nonempty signature", "BASE,SIGCHECK,HASH"};
     case OP_CHECKSIGADD:
@@ -2832,10 +2834,10 @@ static std::pair<std::string, std::string> CandidateFormula(opcodetype opcode)
     case OP_CHECKLOCKTIMEVERIFY: case OP_CHECKSEQUENCEVERIFY:
         return {"BASE + READ(n)", "BASE,READ"};
     case OP_CHECKSIGFROMSTACK:
-        return {"BASE + WRITE(8), plus SIGCHECK + HASH(64 + msg) for a nonempty signature",
+        return {"BASE + WRITE(out), plus SIGCHECK + HASH(64 + msg) for a nonempty signature",
                 "BASE,SIGCHECK,HASH,WRITE"};
     case OP_TWEAKADD: return {"BASE + SIGCHECK + WRITE(32)", "BASE,SIGCHECK,WRITE"};
-    case OP_BYTEREV: return {"BASE + ARITH(n) + WRITE(n)", "BASE,ARITH,WRITE"};
+    case OP_BYTEREV: return {"BASE + ARITH(n)", "BASE,ARITH"};
     default: throw std::runtime_error("no candidate formula for " + OpcodeName(opcode));
     }
 }
