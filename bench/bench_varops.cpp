@@ -547,13 +547,11 @@ static uint64_t CandidateCleanupCost(std::span<const valtype> stack, size_t clea
     return cost;
 }
 
-//! Charges of a case script outside its repeated sequence: the cleanup drops,
-//! the final OP_1 and the final result check.
+//! Charges of a case script outside its repeated sequence: the cleanup drops
+//! and the final OP_1.
 static uint64_t SuffixCost(const std::vector<valtype>& stack, size_t cleanup_items)
 {
-    return CandidateCleanupCost(stack, cleanup_items) +
-           varops::COST_BASE + varops::COST_SCALAR_WRITE +
-           varops::COST_READ_FIXED + varops::COST_READ * 8;
+    return CandidateCleanupCost(stack, cleanup_items) + varops::COST_BASE + varops::COST_SCALAR_WRITE;
 }
 
 //! Lock times pass, as in BenchSignatureChecker; sizing evaluates no signatures.
@@ -576,7 +574,7 @@ static uint64_t SequenceVarops(const CScript& sequence, const std::vector<valtyp
     varops::Budget budget{TOTAL_VAROPS_BUDGET};
     ScriptError error{SCRIPT_ERR_UNKNOWN_ERROR};
     if (!EvalTapleaf0xC2(v2_stack, script, BENCH_SCRIPT_VERIFY_FLAGS, SizingChecker{}, execdata, budget, &error) ||
-        !CheckTapleaf0xC2ScriptResult(v2_stack, budget, &error)) {
+        !CheckTapleaf0xC2ScriptResult(v2_stack, &error)) {
         throw std::runtime_error(strprintf("crossover sizing failed: %s", ScriptErrorString(error)));
     }
     return TOTAL_VAROPS_BUDGET - budget.Remaining() - SuffixCost(stack, stack.size());
@@ -792,7 +790,7 @@ static EvalOutcome ExecutePrepared(const MaterializedCase& test_case, const Benc
         ScriptExecutionData execdata{execution.execdata};
         success = EvalTapleaf0xC2(stack, test_case.script, BENCH_SCRIPT_VERIFY_FLAGS,
                                   checker, execdata, *execution.budget, &error);
-        if (success) success = CheckTapleaf0xC2ScriptResult(stack, *execution.budget, &error);
+        if (success) success = CheckTapleaf0xC2ScriptResult(stack, &error);
         execution.v2_stacks.pop_front();
     }
     outcome.success = success;
@@ -907,7 +905,7 @@ static uint64_t CalibrateRepeatVarops(const CaseSpec& spec, const std::vector<va
     }
     const uint64_t suffix_cost{SuffixCost(stack, cleanup_items)};
     if (outcome.varops_consumed < suffix_cost) {
-        throw std::runtime_error("calibration consumed less than the cleanup and final-result cost");
+        throw std::runtime_error("calibration consumed less than the cleanup cost");
     }
     return outcome.varops_consumed - suffix_cost;
 }
@@ -2332,10 +2330,8 @@ static void AddFunctionCases(std::vector<CaseSpec>& specs, opcodetype opcode)
         const CScript body{RepeatedSequenceBody(hash_sequence, hash_body_size)};
         const uint64_t hash_sequence_cost{OneToOneSequenceCost(target, item_size, true, "late-nonzero")};
         const uint64_t body_cost{body.size() / hash_sequence.size() * hash_sequence_cost};
-        // Cleanup and final truth checks are outside the calls.
-        const uint64_t fixed_cost{
-            (3 + stack_items + 1) * varops::COST_BASE +
-            varops::COST_READ_FIXED + varops::COST_READ * 8};
+        // Cleanup is outside the calls.
+        const uint64_t fixed_cost{(3 + stack_items + 1) * varops::COST_BASE};
         const uint64_t call_cost{MacroCallUnrollCost(body) + body_cost};
         const size_t calls{std::min(UnrolledCalls(body), static_cast<size_t>((TOTAL_VAROPS_BUDGET - fixed_cost) / call_cost))};
         add_with_stack(body, calls,
@@ -4050,7 +4046,7 @@ static CostCoverage VerifyCorpusCosts(
 
         // For successful cases, the observed exact cost must be sufficient and
         // one fewer varop must fail. This includes setup, restoration, cleanup
-        // suffix instructions, and the separate final success check.
+        // suffix instructions, and the separate final success check, which is free.
         if (observed.success && observed.varops_consumed > 0) {
             const EvalOutcome exact{Evaluate(test_case, checker, observed.varops_consumed)};
             if (!exact.success || exact.error != SCRIPT_ERR_OK ||

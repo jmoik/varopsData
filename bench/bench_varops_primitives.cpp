@@ -613,7 +613,7 @@ void ScriptSample(Runner& runner, const std::string& label, const CScript& scrip
                 ScriptError error{SCRIPT_ERR_UNKNOWN_ERROR};
                 bool immediate = false;
                 bool ok = EvalTapleaf0xC2(frames[i]->stack, script, FLAGS, checker, frames[i]->context, frames[i]->budget, &error, &immediate);
-                if (ok && !immediate) ok = CheckTapleaf0xC2ScriptResult(frames[i]->stack, frames[i]->budget, &error);
+                if (ok && !immediate) ok = CheckTapleaf0xC2ScriptResult(frames[i]->stack, &error);
                 if (!ok || immediate || error != SCRIPT_ERR_OK) throw std::runtime_error(strprintf("interpreter fixture failed: %s (error %d)", label, static_cast<int>(error)));
                 Observe(ok);
             }
@@ -1440,15 +1440,14 @@ void MeasureUnroll(Runner& r)
             varops::Budget budget{DIAGNOSTIC_BUDGET};
             ScriptError error{SCRIPT_ERR_UNKNOWN_ERROR};
             Require(EvalTapleaf0xC2(stack, script, FLAGS, checker, execdata, budget, &error) &&
-                        CheckTapleaf0xC2ScriptResult(stack, budget, &error),
+                        CheckTapleaf0xC2ScriptResult(stack, &error),
                     "macro fixture failed: " + shape);
             charged = DIAGNOSTIC_BUDGET - budget.Remaining();
         }
-        // The unrolling charge for units and bytes, then OP_0, OP_IF, OP_ENDIF,
-        // OP_1 and the final check of its result.
+        // The unrolling charge for units and bytes, then OP_0, OP_IF, OP_ENDIF
+        // and OP_1.
         const uint64_t expected{units * varops::BaseCost() + varops::WriteCost(bytes + INACTIVE_WRAPPER_BYTES) +
-                                4 * varops::BaseCost() + varops::WriteCost(0) + varops::WriteCost(8) +
-                                varops::ReadCost(1)};
+                                4 * varops::BaseCost() + varops::WriteCost(0) + varops::WriteCost(8)};
         Require(charged == expected, "macro fixture charge mismatch: " + shape);
         const std::string label{"UNROLL/" + shape + "/" + util::ToString(units) + "/" +
                                 util::ToString(bytes + INACTIVE_WRAPPER_BYTES) + "/" + util::ToString(charged)};
