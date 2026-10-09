@@ -5,7 +5,7 @@ Keeps every chart, measurement and table from the generated HTML and replaces th
 presentation: light/dark theme, sidebar navigation, a summary price schedule,
 colour-blind-checked machine colours and hover tooltips.
 
-    python3 src/restyle_report.py report/joint-calibration.html
+    python3 src/restyle_report.py report/calibration.html
 
 With one argument the file is restyled in place and the untouched original is kept
 next to it as *.orig.html (re-running restyles from that original).
@@ -49,8 +49,24 @@ H_NOTE = 'H(n) is the bytes a hash processes: n plus padding, in whole 64-byte b
 DIV_NOTE = ('Q(n, m) = MAX(0, W(n) − W(m)) is the bytes by which the dividend exceeds the divisor. A division makes one row per word of Q(n, m), plus '
             'a fixed few: each row estimates and corrects a quotient word, then subtracts that multiple of the divisor. '
             'The flat and the W(m) term pay for the fixed rows.')
+# The cost classes of BIP 440 version 0.2.3, the last draft before the measured primitives, that each
+# primitive replaces. That version charged per byte, and nothing per opcode.
+LEGACY_VERSION = '0.2.3'
+LEGACY = {
+    'F': '— (no fixed charge per opcode)',
+    'WRITE': 'COPYING 3 per byte, ZEROING 2 per byte',
+    'READ': 'COMPARING, COMPARINGZERO and LENGTHCONV, 2 per byte each',
+    'MOVE': 'ROLL 48 per entry moved, OP_ROLL only',
+    'ARITH': 'ARITH 6 per byte, OTHER 4 per byte written',
+    'MULCORE': '(n + m) × 3 + W(n) / 8 × W(m) × 27',
+    'DIVCORE': 'W(n) × 18 + W(m) × 4 + W(n)² × 2 / 3',
+    'HASH': 'HASH 50 per byte',
+    'SIG': 'SIGCHECK 500,000',
+    'SELECT': '— (OP_TX came later)',
+}
 SYMBOLS = ('<span class="coef">Blue</span> numbers are coefficients from the fit, rounded up; the rest is notation. n is a size in bytes. ' + W_NOTE + ' ' + H_NOTE + ' k counts stack entries or charged units. MUL and DIV take the byte lengths n and m of the longer and '
-           'shorter operand, or of the dividend and divisor. ' + DIV_NOTE)
+           'shorter operand, or of the dividend and divisor. ' + DIV_NOTE + f' The varops {LEGACY_VERSION} column lists the '
+           f'cost classes of BIP 440 version {LEGACY_VERSION}, the last draft before these primitives, that each one replaces.')
 
 CSS = r'''
 :root{
@@ -178,6 +194,8 @@ td .plot-mark,td .plot-line{margin-right:10px}
 .schedule td.cat{color:var(--muted);font-size:13px}
 .schedule td.pcol code{font-size:13.5px;font-weight:600}
 .schedule td.basis code{color:var(--text-2)}
+.schedule td.legacy{color:var(--text-2);font-size:13px;min-width:15em}
+@media (min-width:900px){.schedule td code{white-space:normal}}
 #opcodes td:first-child code{white-space:nowrap;font-weight:600}
 #opcodes tr.group>th{background:var(--surface-2);font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);text-align:left;padding-top:7px;padding-bottom:7px}
 #opcodes td.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
@@ -505,10 +523,11 @@ def restyle(src):
         prims = [prim for prim in prims if prim[0] not in composed]
         if not prims:
             continue
-        rows.append(f'<tr class="group"><td colspan="3">{cname}</td></tr>')
+        rows.append(f'<tr class="group"><td colspan="4">{cname}</td></tr>')
         for pid, name, price, basis in prims:
             rows.append(f'<tr><td><a href="#{pid}">{name}</a></td><td class="pcol"><code>{price if pid in FIXED_PRICES else mark_coefficients(price)}</code></td>'
-                        f'<td class="basis">{f"<code>{mark_coefficients(basis)}</code>" if basis else "—"}</td></tr>')
+                        f'<td class="basis">{f"<code>{mark_coefficients(basis)}</code>" if basis else "—"}</td>'
+                        f'<td class="legacy">{html.escape(LEGACY.get(pid, "—"))}</td></tr>')
 
     sidebar = ['<aside class="sidebar" aria-label="Primitives"><h4>Overview</h4><a href="#prices"><span>Prices</span></a>']
     for anchor, label in (('opcodes', 'How opcodes are charged'), ('method', 'How prices are derived'),
@@ -540,7 +559,7 @@ def restyle(src):
         '</div>',
         '<div class="card" id="prices"><div class="card-title">Prices</div>',
         '<div class="table-wrap"><table class="schedule"><thead><tr><th>Primitive</th><th>Price (varops)</th>',
-        '<th>Envelope before rounding</th></tr></thead><tbody>', ''.join(rows), '</tbody></table></div>',
+        f'<th>Envelope before rounding</th><th>varops {LEGACY_VERSION}</th></tr></thead><tbody>', ''.join(rows), '</tbody></table></div>',
         f'<p class="footnote">{SYMBOLS}</p></div>',
         header,
         (f'<div class="card prose" id="diagnostics"><div class="card-title">{diagnostics.group(1)}</div>'

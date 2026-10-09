@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 import tempfile
 
-from restyle_report import restyle
+from restyle_report import LEGACY_VERSION, restyle
 from fit_calibrations import COMPOSED, TARGET_FRACTION, candidate_charge, charged_by, check_source_snapshots, envelope_model, features, byte_spans, formulas, hash_span, failed_conditions, independent_models, load_calibration, predict, priced_model, selection_time
 
 
@@ -298,8 +298,8 @@ MODELS = {
 # The cost classes of the original BIP 440 draft that a primitive replaces.
 REPLACES = {
     'READ': 'COMPARING, COMPARINGZERO and LENGTHCONV, each 2 varops per byte.',
-    'WRITE': 'COPYING (3 varops per byte), ZEROING (2 per byte) and OTHER (4 per byte written).',
-    'ARITH': 'ARITH, 6 varops per byte examined.',
+    'WRITE': 'COPYING (3 varops per byte) and ZEROING (2 per byte).',
+    'ARITH': 'ARITH (6 varops per byte examined) and OTHER (4 per byte written).',
     'MOVE': 'ROLL, 48 varops per stack entry moved.',
     'HASH': 'HASH, 50 varops per byte hashed.',
     'SIG': 'SIGCHECK, at the same 500,000 varops.',
@@ -308,7 +308,7 @@ REPLACES = {
 
 def replaces_html(family):
     text = REPLACES.get(family)
-    return [f'<p class="muted"><strong>Replaces</strong> the original draft’s cost classes: {text}</p>'] if text else []
+    return [f'<p class="muted"><strong>Replaces</strong> the cost classes of BIP 440 version {LEGACY_VERSION}: {text}</p>'] if text else []
 
 # Additional explanation shown under a primitive's description.
 NOTES = {

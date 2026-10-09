@@ -1,6 +1,6 @@
 # varopsData
 
-How the costs of Tapleaf 0xC2 operations are measured and priced. [BIP 440](https://github.com/jmoik/bips/blob/gsr-full/bip-0440.mediawiki) gives every script a varops budget and prices each operation from a few cost primitives; this repository holds the measurements on several machines, the fitting code and the [report](report/joint-calibration.html) (download to view). The benchmarks are on the `gsr` branch of [jmoik/bitcoin](https://github.com/jmoik/bitcoin/tree/gsr).
+How the costs of Tapleaf 0xC2 operations are measured and priced. [BIP 440](https://github.com/jmoik/bips/blob/gsr-full/bip-0440.mediawiki) gives every script a varops budget and prices each operation from a few cost primitives; this repository holds the measurements on several machines, the fitting code and the [report](report/calibration.html) (download to view). The benchmarks are on the `gsr` branch of [jmoik/bitcoin](https://github.com/jmoik/bitcoin/tree/gsr).
 
 **The requirement:** on every machine, a full block of the slowest Tapleaf 0xC2 scripts must take less time than the slowest block of existing scripts on that machine.
 
@@ -44,7 +44,7 @@ Put the artifacts in a new folder under `data/`, then fit, render and test (Pyth
 
     python3 src/fit_calibrations.py data/<dataset>/varop-calibration-*.json --source-root <gsr checkout>
     python3 src/render_joint_calibration.py data/<dataset>/joint-calibration.json \
-        --output report/joint-calibration.html --source-root <gsr checkout>
+        --output report/calibration.html --source-root <gsr checkout>
     python3 -m unittest discover -s src
 
 Repeated runs go into `run1/`, `run2/`, … of one dataset and are fitted together, each as its own fit; runs from
@@ -58,7 +58,7 @@ different gsr commits need `--source-root`, which checks each against its own co
 | `data/2026-10-05-merged-primitives/` | Runs with the merged READ, WRITE and ARITH primitives, and the macro unrolling checks. |
 | `data/2026-10-01-full-runs-one-deduction/` | Full runs on six machines after the one-deduction-per-opcode change. |
 | `data/2026-10-01-full-runs/` | Full runs on five machines (no M4 Pro), before that change. |
-| `report/joint-calibration.html` | The report, rendered from the current dataset. |
+| `report/calibration.html` | The report, rendered from the current dataset. |
 | `bench/` | The benchmarks, `bench_varops` (complete scripts) and `bench_varops_primitives` (cost primitives), built into a gsr checkout. |
 | `src/` | The calibration runner (`run_calibration.py`), fitting (`fit_calibrations.py`), the report (`render_joint_calibration.py`, `restyle_report.py`) and tests. |
 | `METHODOLOGY.md` | The full method. |
