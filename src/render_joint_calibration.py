@@ -253,6 +253,15 @@ CHECKS = {
 }
 # Fixtures of priced primitives that may not be in every calibration yet.
 FIXTURES = {
+    'F': 'Tapleaf 0xC2 scripts of 256 to 16,384 instructions that pay only BASE (NOPs, upgradable NOPs, OP_CODESEPARATOR, OP_ELSE, and OP_IF/OP_ENDIF in an inactive branch), then OP_1; the time per executed instruction, parsing and prescanning included.',
+    'READ': 'operands of 0 to 4,000,000 bytes converted into 64-bit words, alone or followed by a zero test, a comparison or trimming that scans the whole value; and OP_EQUAL’s byte comparison.',
+    'WRITE': 'complete create, insert and release cycles of 0- to 4,000,000-byte values: copied, built in a buffer, zeroed, grown, cut from a large source, placed on freshly mapped pages, converted from a number, and counts and booleans.',
+    'ARITH': 'addition and subtraction with full carry and borrow chains on 1 to 500,000 words, and passes without a carry: invert, XOR, shifts by 1, 7 and 63 bits, OP_UPSHIFT and OP_BYTEREV.',
+    'MOVE': 'stack rotations at depths 1 to 32,767, over empty and nonempty entries.',
+    'MULCORE': 'complete multiplications with shorter operands of 1 to 16,384 words and longer ones up to 4 MB, on all-ones and random operands. The product buffer is prepared outside the timer, because WRITE pays for it.',
+    'DIVCORE': 'complete DIV and MOD with divisors of 1 to 1,024 words and dividends up to 4 MB, on normalized and top-one operands.',
+    'HASH': 'complete SHA256 of 0 to 4,000,000 bytes, and RIPEMD160 and SHA1 up to their 520-byte limit, including 32-byte second passes.',
+    'SIG': 'uncached Schnorr verification of valid signatures over messages of 0 to 4,000,000 bytes, as OP_CHECKSIGFROMSTACK runs it. Not fitted: the price stays 500,000.',
     'SELECT': 'empty witness items, weight and amount scans, outputs, all fields of every input, and one-byte witness items of another input, each with <code>k</code> charged units. Only collated output is fitted, net of the result’s WRITE and a scope operand’s READ, which OP_TX charges separately; noncollated output also pays WRITE per value. One-byte items shuffled against their allocation order are measured but not fitted.',
     'TWEAK': 'one x-only key tweak of a valid key by a hash-sized tweak.',
 }
@@ -272,6 +281,21 @@ MODELS = {
     'TWEAK': 'One BIP 449 x-only public key tweak (OP_TWEAKADD), P + t·G: the same elliptic-curve work as a signature check without the challenge hash, at about 80% of its time, so it is charged one SIGCHECK too.',
     'SELECT': 'One OP_TX selection with <code>k</code> charged units: each value selected and each record scanned, including planning and framing; the result’s WRITE is charged separately.',
 }
+
+# The cost classes of the original BIP 440 draft that a primitive replaces.
+REPLACES = {
+    'READ': 'COMPARING, COMPARINGZERO and LENGTHCONV, each 2 varops per byte.',
+    'WRITE': 'COPYING (3 varops per byte), ZEROING (2 per byte) and OTHER (4 per byte written).',
+    'ARITH': 'ARITH, 6 varops per byte examined.',
+    'MOVE': 'ROLL, 48 varops per stack entry moved.',
+    'HASH': 'HASH, 50 varops per byte hashed.',
+    'SIG': 'SIGCHECK, at the same 500,000 varops.',
+}
+
+
+def replaces_html(family):
+    text = REPLACES.get(family)
+    return [f'<p class="muted"><strong>Replaces</strong> the original draft’s cost classes: {text}</p>'] if text else []
 
 # Additional explanation shown under a primitive's description.
 NOTES = {
@@ -435,14 +459,16 @@ MACHINE_NOTES = {'i7': 'Added for SHA256 without hardware acceleration (no SHA e
                  'intel': 'Recent Intel desktop', 'r5': 'Older AMD desktop (Zen 2)', 'r7': 'Recent AMD desktop (Zen 4)',
                  'ryzen': 'Added to represent Windows (clang-cl build)', 'm1': 'Older Apple ARM',
                  'm4': 'Recent Apple ARM'}
-MACHINE_NAMES = {'m1': 'Apple M1 Pro', 'm4': 'Apple M4 Pro', 'ryzen': 'AMD Ryzen 9 9950X',
-                 'intel': 'Intel Core i5-12500', 'i7': 'Intel Core i7-7700', 'r5': 'AMD Ryzen 5 3600',
-                 'r7': 'AMD Ryzen 7 7700'}
+# Grouped by vendor, older machines first; tables and legends follow this order.
+MACHINE_NAMES = {'m1': 'Apple M1 Pro', 'm4': 'Apple M4 Pro', 'i7': 'Intel Core i7-7700',
+                 'intel': 'Intel Core i5-12500', 'r5': 'AMD Ryzen 5 3600', 'r7': 'AMD Ryzen 7 7700',
+                 'ryzen': 'AMD Ryzen 9 9950X'}
+MACHINE_ORDER = list(MACHINE_NAMES)
 LEGEND_MACHINES = [(key, name, name) for key, name in MACHINE_NAMES.items()]
 LEGEND_DESC = [(key, MACHINE_NAMES[key], marker) for key, marker in
-               [('m1', 'Blue circles'), ('m4', 'orange squares'), ('ryzen', 'purple diamonds'),
-                ('intel', 'red triangles'), ('i7', 'plum inverted triangles'), ('r5', 'indigo left-pointing triangles'),
-                ('r7', 'brown right-pointing triangles')]]
+               [('m1', 'Blue circles'), ('m4', 'orange squares'), ('i7', 'plum inverted triangles'),
+                ('intel', 'red triangles'), ('r5', 'indigo left-pointing triangles'),
+                ('r7', 'brown right-pointing triangles'), ('ryzen', 'purple diamonds')]]
 
 
 def describe(path):
@@ -765,7 +791,7 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
     heads = sorted({machine['meta']['head'][:10] for machine in machines if machine['meta'].get('head')})
     same_schedule = all(cost_comparison(joint, family)[2] for family in CURRENT_COSTS)
     dated = re.match(r'\d{4}-\d{2}-\d{2}', joint_path.parent.name)
-    keys = list(dict.fromkeys(machine['key'] for machine in machines))
+    keys = sorted(dict.fromkeys(machine['key'] for machine in machines), key=MACHINE_ORDER.index)
     chips = [f'{len(keys)} machines' + (f' × {runs} runs' if runs > 1 else ''),
              f'{sum(len(m["points"]) for m in machines):,} measurements']
     if dated:
@@ -804,7 +830,7 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
                  f'</ol><p>The full method is in <a href="{METHODOLOGY_URL}">METHODOLOGY.md</a>.</p></div>')
 
     # One row per machine; a machine's runs share its system and list their references in run order.
-    first_runs = [machine for machine in machines if machine['run'] == 1]
+    first_runs = sorted((machine for machine in machines if machine['run'] == 1), key=lambda m: MACHINE_ORDER.index(m['key']))
     rows = ''.join(f'<tr><td><i class="plot-mark {machine["key"]}" aria-hidden="true"></i>{esc(MACHINE_NAMES[machine["key"]])}</td><td>{esc(describe(machine["meta"]["file"]))}</td>'
                    '<td>' + ' / '.join(f'{m["meta"]["reference_seconds"]:.2f}' for m in machines if m['key'] == machine['key']) + ' s</td>'
                    f'<td>{esc(reference_workload(machine["meta"]["file"]))}</td>'
@@ -909,6 +935,7 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
                    + ('' if implemented == candidate else
                       f' The implementation still charges <code>{esc(group_digits(implemented))}</code>.') + '</p>')
         out.append(f'<p class="model"><strong>Pays for:</strong> {MODELS[family]}</p>')
+        out.extend(replaces_html(family))
         note = NOTES.get(family)
         if note:
             out.append(f'<p>{note}</p>')
@@ -970,6 +997,9 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
                + ('' if implemented == candidate else
                   f' The implementation still charges <code>{esc(group_digits(implemented))}</code>.') + '</p>',
                f'<p class="model"><strong>Pays for:</strong> {MODELS[family]}</p>']
+        out.extend(replaces_html(family))
+        if family in FIXTURES:
+            out.append(f'<p class="muted"><strong>Measured with:</strong> {FIXTURES[family]}</p>')
         out.append(f'<p>{COMPOSED_TEXT[family].format(shares=share_text)}</p>')
         # Coefficients and sizes are nonnegative, so covering every coefficient covers every size.
         envelope = priced_env[family]
