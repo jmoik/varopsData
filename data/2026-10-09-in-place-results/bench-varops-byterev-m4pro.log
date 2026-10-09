@@ -1,0 +1,62 @@
+Outcome verification passed: 14 candidate cases.
+Exact-budget/budget-minus-one verification passed: 14 successful cases across 1 opcode families.
+Stable measurement: 14 cases x 3 rounds
+round 1 case 1/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/4000000B/alternating/No error: 0.391 s
+round 1 case 2/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/8B/alternating/No error: 1.407 s
+round 1 case 3/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/9B/alternating/No error: 1.375 s
+round 1 case 4/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/0B/alternating/No error: 1.355 s
+round 1 case 5/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/1B/alternating/No error: 1.254 s
+round 1 case 6/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/33B/alternating/No error: 1.151 s
+round 1 case 7/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/4KB/alternating/No error: 0.424 s
+round 1 case 8/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/520B/alternating/No error: 0.673 s
+round 1 case 9/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/17B/alternating/No error: 1.197 s
+round 1 case 10/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/15B/alternating/No error: 1.441 s
+round 1 case 11/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/16B/alternating/No error: 1.261 s
+round 1 case 12/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/64KB/alternating/No error: 0.348 s
+round 1 case 13/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/7B/alternating/No error: 1.418 s
+round 1 case 14/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/1MB/alternating/No error: 0.394 s
+Stable measurement: round 1/3 complete
+round 2 case 1/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/64KB/alternating/No error: 0.349 s
+round 2 case 2/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/520B/alternating/No error: 0.667 s
+round 2 case 3/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/4KB/alternating/No error: 0.424 s
+round 2 case 4/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/8B/alternating/No error: 1.423 s
+round 2 case 5/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/9B/alternating/No error: 1.367 s
+round 2 case 6/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/1MB/alternating/No error: 0.390 s
+round 2 case 7/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/4000000B/alternating/No error: 0.391 s
+round 2 case 8/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/33B/alternating/No error: 1.160 s
+round 2 case 9/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/1B/alternating/No error: 1.280 s
+round 2 case 10/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/0B/alternating/No error: 1.360 s
+round 2 case 11/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/15B/alternating/No error: 1.469 s
+round 2 case 12/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/7B/alternating/No error: 1.407 s
+round 2 case 13/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/16B/alternating/No error: 1.237 s
+round 2 case 14/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/17B/alternating/No error: 1.334 s
+Stable measurement: round 2/3 complete
+round 3 case 1/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/8B/alternating/No error: 1.431 s
+round 3 case 2/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/64KB/alternating/No error: 0.347 s
+round 3 case 3/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/16B/alternating/No error: 1.245 s
+round 3 case 4/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/0B/alternating/No error: 1.353 s
+round 3 case 5/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/7B/alternating/No error: 1.426 s
+round 3 case 6/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/1B/alternating/No error: 1.276 s
+round 3 case 7/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/17B/alternating/No error: 1.233 s
+round 3 case 8/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/15B/alternating/No error: 1.487 s
+round 3 case 9/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/4KB/alternating/No error: 0.423 s
+round 3 case 10/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/520B/alternating/No error: 0.665 s
+round 3 case 11/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/9B/alternating/No error: 1.380 s
+round 3 case 12/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/33B/alternating/No error: 1.151 s
+round 3 case 13/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/1MB/alternating/No error: 0.394 s
+round 3 case 14/14 gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/4000000B/alternating/No error: 0.389 s
+Stable measurement: round 3/3 complete
+
+== VAROPS BENCHMARK SUMMARY ==
+  cases:                  14/14 completed x 3 stable rounds
+  sample mode:            10% budget (4000000000 varops), no rejection or one-shot fixed cases
+  schnorr baseline:       80,000 checks: 1.671 s
+  v2 measured worst (sample):OP_BYTEREV 15B: 0.080 s
+  v2 projected worst:     OP_BYTEREV 15B: 1.469 s (0.88x schnorr, 18.25x v2 measured)
+
+  top 5 new-v2 cases (measured or projected):
+  1. 1.469 s (projected, stable): gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/15B/alternating/No error
+  2. 1.423 s (projected, stable): gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/8B/alternating/No error
+  3. 1.418 s (projected, stable): gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/7B/alternating/No error
+  4. 1.375 s (projected, stable): gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/9B/alternating/No error
+  5. 1.355 s (projected, stable): gsr-tapscript-v2/OP_BYTEREV/OP_BYTEREV/byterev-in-place/0B/alternating/No error

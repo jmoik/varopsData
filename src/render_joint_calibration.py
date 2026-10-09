@@ -248,11 +248,13 @@ CHECKS = {
         fixtures='valid signatures over messages of 0 bytes to 4 MB.'),
     'BYTEREV': dict(
         source=('ARITH', 'BIT'), select=lambda p: p['group'].startswith('byterev'),
-        charge='ARITH(W(n)) + WRITE(n)',
-        charged=lambda p: ARITH[0] + ARITH[1] * p['x'] + WRITE[0] + WRITE[1] * p['x'],
-        curve=lambda x: ARITH[0] + ARITH[1] * x + WRITE[0] + WRITE[1] * x,
+        charge='ARITH(W(n))',
+        charged=lambda p: ARITH[0] + ARITH[1] * p['x'],
+        curve=lambda x: ARITH[0] + ARITH[1] * x,
         xlabel='Bytes rounded up to 8, W(n)',
-        models='Reversing the bytes of a value in place: each 64-bit word is byte-swapped and the word order reversed.',
+        models='Reversing the bytes of a value in place: each 64-bit word is byte-swapped and the word order reversed. '
+               'The opcode pays BASE + ARITH(W(n)) and no WRITE, since its result is not a new value. BASE pays for dispatch, '
+               'so the chart compares the work after dispatch with ARITH.',
         fixtures='OP_BYTEREV’s complete work (pop, reverse, push) on values of 1 byte to 4 MB.'),
     'UNROLL': dict(
         source='UNROLL', select=lambda p: p.get('charged') is not None,

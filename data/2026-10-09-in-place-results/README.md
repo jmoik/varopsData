@@ -23,6 +23,14 @@ The 16 opcodes: OP_INVERT, OP_2DIV, OP_1SUB, OP_SUB, OP_AND, OP_OR, OP_XOR, OP_R
 | OP_RIGHT | 0.23 | 3,950,000 bytes |
 | OP_SUBSTR | 0.19 | 3,998,900 bytes |
 
+### OP_BYTEREV on the M4 Pro
+
+Without WRITE, the report's OP_BYTEREV card puts the work after dispatch at up to 1.15 times ARITH on the M4 and 1.10 on the Intel i5-12500, for values of 6 to 31 bytes, where the last bytes are reversed one at a time. BASE pays for dispatch, so whole scripts were checked on the M4:
+
+    bench_varops --opcodes OP_BYTEREV --epochs 3 --sample-budget-percent 10 --file bench-varops-byterev-m4pro.csv
+
+The worst case, 15 bytes, takes 1.469 s per block: 0.88 times this run's Schnorr reference (1.671 s) and 0.94 times the shortest of the M4's three calibration references (1.565 s).
+
 ## Attack scripts
 
 `attack.py <bitcoin-util> 2.255 [cases]` times whole scripts with `bitcoin-util evalscript`. The baseline is the same script with a zero budget, which subtracts process start, JSON and hex parsing and script decoding. `attack-m1pro.log` holds two runs: the first on the prototype, the same code without the in-place OP_SUBSTR; the second on f75feac44a.
