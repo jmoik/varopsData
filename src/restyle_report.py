@@ -432,7 +432,7 @@ def restyle(src):
             if price and 'Charged as' in price.group(0):
                 composed.add(am.group(1))
             # A primitive priced from parts lists its envelope over all machines and parts first.
-            basis = re.search(r'Envelope of all machines(?: and [^<]+)?</td><td><code>(.*?)</code>', am.group(3))
+            basis = re.search(r'Envelope of all machines(?: and [^<]+)?</td><td[^>]*><code>(.*?)</code>', am.group(3))
             prims.append((am.group(1), am.group(2), price.group(1) if price else '', basis.group(1) if basis else ''))
         cats.append((sm.group(1), sm.group(2).split(' · ')[0], prims))
     cat_of = {pid: name for _, name, prims in cats for pid, _, _, _ in prims}
