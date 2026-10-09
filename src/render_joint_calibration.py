@@ -78,8 +78,8 @@ def opcode_examples():
     hash_cost = lambda n: HASH[0] + HASH[1] * hash_span(n)
     rows = [
         ('OP_DUP', 'BASE + WRITE(n)', 'a 32-byte value', BASE + write(32)),
-        ('OP_EQUAL', 'BASE + READ(n) + WRITE(8), READ only if both sizes are n', 'two 32-byte values',
-         BASE + read(32) + write(8)),
+        ('OP_EQUAL', 'BASE + READ(n) + WRITE(r), READ only if both sizes are n', 'two equal 32-byte values',
+         BASE + read(32) + write(1)),
         ('OP_ROLL', 'BASE + READ(m) + MOVE(k + 1), for an m-byte depth k', 'depth 10',
          BASE + read(1) + MOVE[0] + MOVE[1] * 11),
         ('OP_ADD', 'BASE + READ(a) + READ(b) + ARITH(max(a, b)) + WRITE(r)',
@@ -90,12 +90,12 @@ def opcode_examples():
         ('OP_SHA256', 'BASE + HASH(n) + WRITE(32)', 'a 32-byte value', BASE + hash_cost(32) + write(32)),
         ('OP_HASH160', 'BASE + HASH(n) + HASH(32) + WRITE(20)', 'a 33-byte public key',
          BASE + hash_cost(33) + hash_cost(32) + write(20)),
-        ('OP_CHECKSIG', 'BASE + HASH(96) + SIG + WRITE(8), HASH and SIG only for a non-empty signature',
-         'a valid signature', BASE + hash_cost(96) + SIGCHECK + write(8)),
-        ('OP_CHECKSIGFROMSTACK', 'BASE + HASH(64 + n) + SIG + WRITE(8), HASH and SIG only for a non-empty signature',
-         'a 32-byte message', BASE + hash_cost(64 + 32) + SIGCHECK + write(8)),
-        ('OP_TX', 'BASE + READ per scope operand + OP_TX_SELECT(k) + WRITE of each result, WRITE(8) for a number', 'one number, e.g. nVersion',
-         BASE + SELECT[0] + SELECT[1] + write(8)),
+        ('OP_CHECKSIG', 'BASE + HASH(96) + SIG + WRITE(r), HASH and SIG only for a non-empty signature',
+         'a valid signature', BASE + hash_cost(96) + SIGCHECK + write(1)),
+        ('OP_CHECKSIGFROMSTACK', 'BASE + HASH(64 + n) + SIG + WRITE(r), HASH and SIG only for a non-empty signature',
+         'a valid signature on a 32-byte message', BASE + hash_cost(64 + 32) + SIGCHECK + write(1)),
+        ('OP_TX', 'BASE + READ per scope operand + OP_TX_SELECT(k) + WRITE of each result', 'one 1-byte number, e.g. nVersion 2',
+         BASE + SELECT[0] + SELECT[1] + write(1)),
     ]
     link = lambda m: f'<a href="#{OPCODE_PRIMITIVES[m.group(0)]}">{m.group(0)}</a>'
     pattern = r'\b(' + '|'.join(OPCODE_PRIMITIVES) + r')\b'
@@ -112,7 +112,7 @@ def opcodes_html():
             '<table><thead><tr><th>Opcode</th><th>Charge</th><th>Example</th><th>Varops</th></tr></thead>'
             f'<tbody>{rows}</tbody></table>'
             '<p>a and b are operand sizes in bytes and r the size of the result. Every numeric operand pays READ, '
-            'and every result WRITE of its size; counts, comparison results, booleans and constants pay WRITE(8). '
+            'and every result WRITE of its size, including counts, comparison results, booleans and constants. '
             'Macros add no primitive: unrolling pays BASE per substituted instruction and visited reference, plus '
             'WRITE of the unrolled script.</p></div>')
 

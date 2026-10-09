@@ -806,7 +806,7 @@ void MeasureWrite(Runner& r)
                   });
         }
     }
-    // Counts, comparison results, constants and booleans, which pay WRITE(8).
+    // Counts, comparison results, constants and booleans, which pay WRITE of their length.
     ValtypeStack stack;
     MakeRoom(stack, 8);
     for (uint64_t value : {uint64_t{0}, uint64_t{1}, uint64_t{255}, uint64_t{256}, uint64_t{65536}, UINT64_MAX}) {
@@ -1447,7 +1447,7 @@ void MeasureUnroll(Runner& r)
         // The unrolling charge for units and bytes, then OP_0, OP_IF, OP_ENDIF
         // and OP_1.
         const uint64_t expected{units * varops::BaseCost() + varops::WriteCost(bytes + INACTIVE_WRAPPER_BYTES) +
-                                4 * varops::BaseCost() + varops::WriteCost(0) + varops::WriteCost(8)};
+                                4 * varops::BaseCost() + varops::WriteCost(0) + varops::WriteCost(1)};
         Require(charged == expected, "macro fixture charge mismatch: " + shape);
         const std::string label{"UNROLL/" + shape + "/" + util::ToString(units) + "/" +
                                 util::ToString(bytes + INACTIVE_WRAPPER_BYTES) + "/" + util::ToString(charged)};

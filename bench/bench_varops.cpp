@@ -108,7 +108,6 @@ constexpr uint64_t COST_DIV_CELL{(DivCost(16, 8) - DivCost(8, 8) - 8 * COST_DIV_
 constexpr uint64_t COST_HASH_BYTE{(HashCost(64) - HashCost(0)) / 64};
 constexpr uint64_t COST_HASH_FIXED{HashCost(0) - 64 * COST_HASH_BYTE};
 constexpr uint64_t COST_MACRO_UNROLL{BaseCost()};
-constexpr uint64_t COST_SCALAR_WRITE{WriteCost(8)};
 } // namespace varops
 
 namespace {
@@ -551,7 +550,7 @@ static uint64_t CandidateCleanupCost(std::span<const valtype> stack, size_t clea
 //! and the final OP_1.
 static uint64_t SuffixCost(const std::vector<valtype>& stack, size_t cleanup_items)
 {
-    return CandidateCleanupCost(stack, cleanup_items) + varops::COST_BASE + varops::COST_SCALAR_WRITE;
+    return CandidateCleanupCost(stack, cleanup_items) + varops::COST_BASE + varops::WriteCost(1);
 }
 
 //! Lock times pass, as in BenchSignatureChecker; sizing evaluates no signatures.
@@ -1174,7 +1173,7 @@ static uint64_t OneToOneSequenceCost(opcodetype opcode, size_t size, bool three_
         const size_t output_size{(opcode == OP_NOT ? !input_nonzero : input_nonzero) ? 1U : 0U};
         const uint64_t target{varops::COST_BASE +
             varops::COST_READ_FIXED + varops::COST_READ * varops::WordSpan(size) +
-            varops::COST_SCALAR_WRITE};
+            varops::COST_WRITE_FIXED + varops::COST_WRITE_BYTE * varops::WordSpan(output_size)};
         return copy_opcode + transforms * (target + CandidateDropCost(output_size));
     }
     case OP_1ADD:
