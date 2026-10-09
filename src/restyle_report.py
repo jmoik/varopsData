@@ -179,6 +179,7 @@ td .plot-mark,td .plot-line{margin-right:10px}
 .schedule td.pcol code{font-size:13.5px;font-weight:600}
 .schedule td.basis code{color:var(--text-2)}
 #opcodes td:first-child code{white-space:nowrap;font-weight:600}
+#opcodes tr.group>th{background:var(--surface-2);font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);text-align:left;padding-top:7px;padding-bottom:7px}
 #opcodes td.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 .schedule tr.group>td{background:var(--surface-2);font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);padding-top:7px;padding-bottom:7px}
 .footnote{font-size:13px;color:var(--muted);margin-top:10px}

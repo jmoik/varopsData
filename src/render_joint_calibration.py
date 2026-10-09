@@ -65,56 +65,162 @@ def unroll_charge(units, length, base=BASE, write=WRITE, padded=True):
         return write[0] + write[1] * span(n)
     return units * base + write_cost(length) + 4 * base + write_cost(0) + write_cost(8)
 
-# Common opcodes composed from the implemented prices, as the v2 evaluator adds the charges.
 OPCODE_PRIMITIVES = {'BASE': 'F', 'WRITE': 'WRITE', 'READ': 'READ', 'MOVE': 'MOVE', 'ARITH': 'ARITH',
-                     'MUL': 'MULCORE', 'HASH': 'HASH', 'SIG': 'SIG', 'OP_TX_SELECT': 'SELECT'}
+                     'MUL': 'MULCORE', 'DIV': 'DIVCORE', 'HASH': 'HASH', 'SIG': 'SIG', 'OP_TX_SELECT': 'SELECT'}
 
 
-def opcode_examples():
-    """Rows of (opcode, charge, example, varops); the charge links its primitives."""
+# Every executed Tapleaf 0xC2 opcode, composed from the implemented prices. Rows are
+# (group, opcode, charge, example, varops, check); check is the example's initial stack
+# (hex, bottom to top) and script tokens, which src/check_opcode_table.py evaluates with
+# the BIP 441 reference evaluator to confirm the varops.
+DIV = (1150, 60, 11, 1)  # DIV per byte of Q(n, m), W(m) and Q(n, m) × W(m)
+
+
+def opcode_table():
     span = lambda n: (n + 7) // 8 * 8
     write = lambda n: WRITE[0] + WRITE[1] * span(n)
     read = lambda n: READ[0] + READ[1] * span(n)
+    arith = lambda n: ARITH[0] + ARITH[1] * span(n)
+    move = lambda k: MOVE[0] + MOVE[1] * k
     hash_cost = lambda n: HASH[0] + HASH[1] * hash_span(n)
+    mul = lambda n, m: MUL[0] + MUL[1] * span(n) + MUL[2] * span(m) + MUL[3] * span(n) * span(m)
+    def div(n, m):
+        q = max(0, span(n) - span(m))
+        return DIV[0] + DIV[1] * q + DIV[2] * span(m) + DIV[3] * q * span(m)
+    sig = lambda n: hash_cost(n) + SIGCHECK
+    hx = lambda byte, n: f'{byte:02x}' * n
+    v32, n8, n16 = hx(0x55, 32), hx(0x01, 8), hx(0x01, 16)
+    key, schnorr = hx(0x02, 32), hx(0x01, 64)
+    # The generator's x-only key (secret key 1) and its BIP 340 signature of 32 0x55 bytes, zero aux.
+    generator = '79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798'
+    csfs_sig = ('f6c5ee67b3ddf7dabc4d7d23d930c5d0e51396532114c4b55cb1d6c98312964c'
+                'd7e7227093ed63197e728f0e22503690ed6079b50590d215a3c551d179fe9424')
+    one = lambda value: f'{value:02x}'
+    unary_n = 'BASE + READ(n) + ARITH(n) + WRITE(r)'
+    binary_n = 'BASE + READ(a) + READ(b) + ARITH(max(a, b)) + WRITE(r)'
+    compare = 'BASE + READ(a) + READ(b) + WRITE(r)'
     rows = [
-        ('OP_DUP', 'BASE + WRITE(n)', 'a 32-byte value', BASE + write(32)),
-        ('OP_EQUAL', 'BASE + READ(n) + WRITE(r), READ only if both sizes are n', 'two equal 32-byte values',
-         BASE + read(32) + write(1)),
-        ('OP_ROLL', 'BASE + READ(m) + MOVE(k + 1), for an m-byte depth k', 'depth 10',
-         BASE + read(1) + MOVE[0] + MOVE[1] * 11),
-        ('OP_ADD', 'BASE + READ(a) + READ(b) + ARITH(max(a, b)) + WRITE(r)',
-         'two 8-byte numbers, 8-byte sum', BASE + 2 * read(8) + ARITH[0] + ARITH[1] * 8 + write(8)),
-        ('OP_MUL', 'BASE + READ(a) + READ(b) + MUL(n, m) + WRITE(W(a) + W(b))', 'two 8-byte numbers',
-         BASE + 2 * read(8) + MUL[0] + MUL[1] * 8 + MUL[2] * 8 + MUL[3] * 64 + write(16)),
-        ('OP_BYTEREV', 'BASE + ARITH(n) + WRITE(n)', 'a 32-byte value', BASE + ARITH[0] + ARITH[1] * 32 + write(32)),
-        ('OP_SHA256', 'BASE + HASH(n) + WRITE(32)', 'a 32-byte value', BASE + hash_cost(32) + write(32)),
-        ('OP_HASH160', 'BASE + HASH(n) + HASH(32) + WRITE(20)', 'a 33-byte public key',
-         BASE + hash_cost(33) + hash_cost(32) + write(20)),
-        ('OP_CHECKSIG', 'BASE + HASH(96) + SIG + WRITE(r), HASH and SIG only for a non-empty signature',
-         'a valid signature', BASE + hash_cost(96) + SIGCHECK + write(1)),
-        ('OP_CHECKSIGFROMSTACK', 'BASE + HASH(64 + n) + SIG + WRITE(r), HASH and SIG only for a non-empty signature',
-         'a valid signature on a 32-byte message', BASE + hash_cost(64 + 32) + SIGCHECK + write(1)),
-        ('OP_TX', 'BASE + READ per scope operand + OP_TX_SELECT(k) + WRITE of each result', 'one 1-byte number, e.g. nVersion 2',
-         BASE + SELECT[0] + SELECT[1] + write(1)),
+        ('Pushes', 'OP_0', 'BASE + WRITE(0)', 'an empty value', BASE + write(0), ([], ['OP_0'])),
+        ('Pushes', 'Data push of n bytes', 'BASE + WRITE(n)', 'n = 32', BASE + write(32), ([], ['0x20' + v32])),
+        ('Pushes', 'OP_1 to OP_16', 'BASE + WRITE(1)', 'OP_16', BASE + write(1), ([], ['OP_16'])),
+        ('Control', 'OP_NOP, OP_NOP1, OP_NOP4 to OP_NOP10', 'BASE', '', BASE, ([], ['OP_NOP'])),
+        ('Control', 'OP_IF, OP_NOTIF, OP_ELSE, OP_ENDIF', 'BASE each, also in an inactive branch; skipped instructions cost nothing',
+         'OP_IF on a true value', BASE, (['01'], ['OP_IF'])),
+        ('Control', 'OP_VERIFY', 'BASE + READ(n)', 'n = 1', BASE + read(1), (['01'], ['OP_VERIFY'])),
+        ('Control', 'OP_CODESEPARATOR', 'BASE', '', BASE, ([], ['OP_CODESEPARATOR'])),
+        ('Control', 'OP_RETURN', 'fails', '', None, None),
+        ('Control', 'OP_SUCCESSx', 'succeeds before any charge', '', 0, None),
+        ('Stack', 'OP_TOALTSTACK, OP_FROMALTSTACK', 'BASE + MOVE(1)', '', BASE + move(1), ([v32], ['OP_TOALTSTACK'])),
+        ('Stack', 'OP_DROP, OP_2DROP', 'BASE', '', BASE, ([v32, v32], ['OP_2DROP'])),
+        ('Stack', 'OP_DUP', 'BASE + WRITE(n)', 'n = 32', BASE + write(32), ([v32], ['OP_DUP'])),
+        ('Stack', 'OP_2DUP', 'BASE + WRITE(a) + WRITE(b)', 'two 32-byte values', BASE + 2 * write(32), ([v32, v32], ['OP_2DUP'])),
+        ('Stack', 'OP_3DUP', 'BASE + WRITE(a) + WRITE(b) + WRITE(c)', 'three 32-byte values', BASE + 3 * write(32),
+         ([v32] * 3, ['OP_3DUP'])),
+        ('Stack', 'OP_OVER', 'BASE + WRITE(n) of the copied value', 'n = 32', BASE + write(32), ([v32, v32], ['OP_OVER'])),
+        ('Stack', 'OP_2OVER', 'BASE + WRITE(c) + WRITE(d) of the copied values', 'two 32-byte values', BASE + 2 * write(32),
+         ([v32] * 4, ['OP_2OVER'])),
+        ('Stack', 'OP_IFDUP', 'BASE + READ(n) + WRITE(n) if nonzero', 'a nonzero 32-byte value', BASE + read(32) + write(32),
+         ([v32], ['OP_IFDUP'])),
+        ('Stack', 'OP_PICK', 'BASE + READ(m) + WRITE(n), for an m-byte depth and the n-byte copy',
+         'depth 1 of 32-byte values', BASE + read(1) + write(32), ([v32, v32, '01'], ['OP_PICK'])),
+        ('Stack', 'OP_ROLL', 'BASE + READ(m) + MOVE(k + 1), for an m-byte depth k', 'depth 10', BASE + read(1) + move(11),
+         ([v32] * 11 + ['0a'], ['OP_ROLL'])),
+        ('Stack', 'OP_SWAP, OP_NIP', 'BASE + MOVE(2)', '', BASE + move(2), ([v32, v32], ['OP_SWAP'])),
+        ('Stack', 'OP_TUCK', 'BASE + WRITE(n) + MOVE(2)', 'n = 32', BASE + write(32) + move(2), ([v32, v32], ['OP_TUCK'])),
+        ('Stack', 'OP_ROT', 'BASE + MOVE(3)', '', BASE + move(3), ([v32] * 3, ['OP_ROT'])),
+        ('Stack', 'OP_2SWAP', 'BASE + MOVE(4)', '', BASE + move(4), ([v32] * 4, ['OP_2SWAP'])),
+        ('Stack', 'OP_2ROT', 'BASE + MOVE(6)', '', BASE + move(6), ([v32] * 6, ['OP_2ROT'])),
+        ('Stack', 'OP_DEPTH', 'BASE + WRITE(r)', '3 entries, r = 1', BASE + write(1), ([v32] * 3, ['OP_DEPTH'])),
+        ('Stack', 'OP_SIZE', 'BASE + WRITE(r)', 'a 32-byte value, r = 1', BASE + write(1), ([v32], ['OP_SIZE'])),
+        ('Splice', 'OP_CAT', 'BASE + WRITE(a + b)', 'two 32-byte values', BASE + write(64), ([v32, v32], ['OP_CAT'])),
+        ('Splice', 'OP_SUBSTR', 'BASE + READ(begin) + READ(len) + WRITE(out)', '16 bytes of a 32-byte value',
+         BASE + 2 * read(1) + write(16), ([v32, one(4), one(16)], ['OP_SUBSTR'])),
+        ('Splice', 'OP_LEFT, OP_RIGHT', 'BASE + READ(offset) + WRITE(out)', '16 bytes of a 32-byte value',
+         BASE + read(1) + write(16), ([v32, one(16)], ['OP_LEFT'])),
+        ('Bitwise', 'OP_INVERT', unary_n, 'n = r = 32', BASE + read(32) + arith(32) + write(32), ([v32], ['OP_INVERT'])),
+        ('Bitwise', 'OP_AND, OP_OR, OP_XOR', binary_n, 'two 32-byte values, r = 32', BASE + 2 * read(32) + arith(32) + write(32),
+         ([hx(0xff, 32), hx(0x0f, 32)], ['OP_AND'])),
+        ('Bitwise', 'OP_EQUAL', 'BASE + READ(n) if both sizes are n + WRITE(r)', 'two equal 32-byte values, r = 1',
+         BASE + read(32) + write(1), ([v32, v32], ['OP_EQUAL'])),
+        ('Bitwise', 'OP_EQUALVERIFY', 'BASE + READ(n) if both sizes are n', 'two equal 32-byte values', BASE + read(32),
+         ([v32, v32], ['OP_EQUALVERIFY'])),
+        ('Bitwise', 'OP_UPSHIFT, OP_DOWNSHIFT', 'BASE + READ(n) + READ(bits) + ARITH(n) + WRITE(r)', 'an 8-byte number by 8 bits, r = 9',
+         BASE + read(8) + read(1) + arith(8) + write(9), ([n8, one(8)], ['OP_UPSHIFT'])),
+        ('Arithmetic', 'OP_1ADD, OP_1SUB, OP_2MUL, OP_2DIV', unary_n, 'an 8-byte number, r = 8',
+         BASE + read(8) + arith(8) + write(8), ([n8], ['OP_1ADD'])),
+        ('Arithmetic', 'OP_NOT, OP_0NOTEQUAL', 'BASE + READ(n) + WRITE(r)', 'OP_0NOTEQUAL on an 8-byte number, r = 1',
+         BASE + read(8) + write(1), ([n8], ['OP_0NOTEQUAL'])),
+        ('Arithmetic', 'OP_ADD, OP_SUB', binary_n, 'two 8-byte numbers, r = 8', BASE + 2 * read(8) + arith(8) + write(8),
+         ([n8, n8], ['OP_ADD'])),
+        ('Arithmetic', 'OP_MUL', 'BASE + READ(a) + READ(b) + MUL(n, m) + WRITE(W(a) + W(b))', 'two 8-byte numbers',
+         BASE + 2 * read(8) + mul(8, 8) + write(16), ([n8, n8], ['OP_MUL'])),
+        ('Arithmetic', 'OP_DIV, OP_MOD', 'BASE + READ(a) + READ(b) + DIV(n, m) + WRITE(r)', 'OP_DIV of 16 by 8 bytes, r = 9',
+         BASE + read(16) + read(8) + div(16, 8) + write(9), ([n16, n8], ['OP_DIV'])),
+        ('Arithmetic', 'OP_BOOLAND, OP_BOOLOR, OP_NUMEQUAL, OP_NUMNOTEQUAL, OP_LESSTHAN, OP_GREATERTHAN, '
+         'OP_LESSTHANOREQUAL, OP_GREATERTHANOREQUAL', compare, 'OP_NUMEQUAL of two 8-byte numbers, r = 1',
+         BASE + 2 * read(8) + write(1), ([n8, n8], ['OP_NUMEQUAL'])),
+        ('Arithmetic', 'OP_NUMEQUALVERIFY', 'BASE + READ(a) + READ(b)', 'two 8-byte numbers', BASE + 2 * read(8),
+         ([n8, n8], ['OP_NUMEQUALVERIFY'])),
+        ('Arithmetic', 'OP_MIN, OP_MAX', compare, 'two 8-byte numbers, r = 8', BASE + 2 * read(8) + write(8),
+         ([n8, n8], ['OP_MIN'])),
+        ('Arithmetic', 'OP_WITHIN', 'BASE + READ(min) + READ(max) + 2 READ(x) + WRITE(r)', 'three equal 8-byte numbers, r = 0',
+         BASE + 4 * read(8) + write(0), ([n8, n8, n8], ['OP_WITHIN'])),
+        ('Hashes', 'OP_SHA256', 'BASE + HASH(n) + WRITE(32)', 'n = 32', BASE + hash_cost(32) + write(32), ([v32], ['OP_SHA256'])),
+        ('Hashes', 'OP_RIPEMD160, OP_SHA1', 'BASE + HASH(n) + WRITE(20)', 'n = 32', BASE + hash_cost(32) + write(20),
+         ([v32], ['OP_RIPEMD160'])),
+        ('Hashes', 'OP_HASH160', 'BASE + HASH(n) + HASH(32) + WRITE(20)', 'a 33-byte public key',
+         BASE + hash_cost(33) + hash_cost(32) + write(20), ([hx(0x02, 33)], ['OP_HASH160'])),
+        ('Hashes', 'OP_HASH256', 'BASE + HASH(n) + HASH(32) + WRITE(32)', 'n = 32', BASE + hash_cost(32) + hash_cost(32) + write(32),
+         ([v32], ['OP_HASH256'])),
+        ('Signatures', 'OP_CHECKSIG', 'BASE + WRITE(r), plus HASH(96) + SIG for a nonempty signature',
+         'a valid signature, r = 1', BASE + sig(96) + write(1), ([schnorr, key], ['OP_CHECKSIG'])),
+        ('Signatures', 'OP_CHECKSIGVERIFY', 'BASE, plus HASH(96) + SIG for a nonempty signature',
+         'a valid signature', BASE + sig(96), ([schnorr, key], ['OP_CHECKSIGVERIFY'])),
+        ('Signatures', 'OP_CHECKSIGADD', 'BASE + READ(n) + WRITE(r), plus HASH(96) + SIG + ARITH(n) for a nonempty signature',
+         'a valid signature and a 1-byte count, r = 1', BASE + read(1) + sig(96) + arith(1) + write(1),
+         ([schnorr, one(1), key], ['OP_CHECKSIGADD'])),
+        ('Locks', 'OP_CHECKLOCKTIMEVERIFY, OP_CHECKSEQUENCEVERIFY', 'BASE + READ(n)', 'a 4-byte operand', BASE + read(4),
+         ([hx(0x01, 4)], ['OP_CHECKLOCKTIMEVERIFY'])),
+        ('Extended Primitives', 'OP_CHECKSIGFROMSTACK', 'BASE + WRITE(r), plus HASH(64 + n) + SIG for a nonempty signature',
+         'a valid signature on a 32-byte message, r = 1', BASE + sig(64 + 32) + write(1),
+         ([csfs_sig, v32, generator], ['OP_CHECKSIGFROMSTACK'])),
+        ('Extended Primitives', 'OP_TWEAKADD', 'BASE + SIG + WRITE(32)', '', BASE + SIGCHECK + write(32),
+         ([hx(0x00, 31) + '01', generator], ['OP_TWEAKADD'])),
+        ('Extended Primitives', 'OP_BYTEREV', 'BASE + ARITH(n) + WRITE(n)', 'n = 32', BASE + arith(32) + write(32),
+         ([v32], ['OP_BYTEREV'])),
+        ('OP_TX', 'OP_TX', 'BASE + READ per scope operand + OP_TX_SELECT(k) + WRITE of each result',
+         'the code separator position, one 4-byte number', BASE + SELECT[0] + SELECT[1] + write(4), None),
+        ('Reusable Macros', 'Unrolling, once per script with macros',
+         'BASE per substituted instruction and visited reference + WRITE(unrolled length)',
+         '100 references to a body of 10 OP_NOPs, unrolled to 1,000 bytes', 1100 * BASE + write(1000),
+         ([], ['OP_MACRO', '0x0a' + hx(0x61, 10)] + ['OP_CALLMACRO', '0x00'] * 100)),
     ]
-    link = lambda m: f'<a href="#{OPCODE_PRIMITIVES[m.group(0)]}">{m.group(0)}</a>'
-    pattern = r'\b(' + '|'.join(OPCODE_PRIMITIVES) + r')\b'
-    return [(op, re.sub(pattern, link, charge, count=0), example, value) for op, charge, example, value in rows]
+    return rows
 
 
 def opcodes_html():
-    rows = ''.join(f'<tr><td><code>{op}</code></td><td>{charge}</td><td>{example}</td><td class="num">{value:,}</td></tr>'
-                   for op, charge, example, value in opcode_examples())
+    link = lambda m: f'<a href="#{OPCODE_PRIMITIVES[m.group(0)]}">{m.group(0)}</a>'
+    pattern = r'\b(' + '|'.join(OPCODE_PRIMITIVES) + r')\b'
+    rows, previous = [], None
+    for group, op, charge, example, value, _ in opcode_table():
+        if group != previous:
+            rows.append(f'<tr class="group"><th colspan="4">{html.escape(group)}</th></tr>')
+            previous = group
+        varops = '' if value is None else f'{value:,}'
+        names = ', '.join(f'<code>{html.escape(name)}</code>' for name in op.split(', '))
+        rows.append(f'<tr><td>{names}</td><td>{re.sub(pattern, link, html.escape(charge))}</td>'
+                    f'<td>{html.escape(example)}</td><td class="num">{varops}</td></tr>')
     return ('<div class="card prose" id="opcodes"><div class="card-title">How opcodes are charged</div>'
-            '<p>Opcodes have no prices of their own. Each pays BASE plus the primitives for the work it does, sized '
-            'by its actual operands, and the sum is deducted from the budget once per opcode. A few common opcodes, '
-            'at example sizes:</p>'
+            '<p>Opcodes have no prices of their own. Each executed opcode pays BASE plus the primitives for the work '
+            'it does, sized by its actual operands, and the sum is deducted from the budget once per opcode. Every '
+            'Tapleaf 0xC2 opcode, at the implemented prices and an example size:</p>'
             '<table><thead><tr><th>Opcode</th><th>Charge</th><th>Example</th><th>Varops</th></tr></thead>'
-            f'<tbody>{rows}</tbody></table>'
-            '<p>a and b are operand sizes in bytes and r the size of the result. Every numeric operand pays READ, '
-            'and every result WRITE of its size, including counts, comparison results, booleans and constants. '
-            'Macros add no primitive: unrolling pays BASE per substituted instruction and visited reference, plus '
-            'WRITE of the unrolled script.</p></div>')
+            f'<tbody>{"".join(rows)}</tbody></table>'
+            '<p>n is an operand\'s size in bytes, a and b those of two operands, r the size of the result and W(n) '
+            'its 64-bit word span. Every numeric operand pays READ and every result WRITE of its size, including '
+            'counts, comparison results, booleans and constants. Witness values and the final result check cost '
+            'nothing. <code>src/check_opcode_table.py</code> evaluates every example with the BIP 441 reference '
+            'evaluator.</p></div>')
 
 
 # Opcodes charged from existing primitives. Each measured fixture is divided by
