@@ -183,6 +183,7 @@ th,td{padding:9px 14px;text-align:left;border-bottom:1px solid var(--border);ver
 tr:last-child>td{border-bottom:0}
 th{background:var(--surface-2);font-size:12px;font-weight:600;letter-spacing:.03em;color:var(--muted);text-transform:uppercase}
 td code{white-space:nowrap;color:var(--text)}
+#complete-scripts td code{white-space:normal;overflow-wrap:anywhere}
 tbody tr:hover>td{background:var(--surface-2)}
 tr.row-basis>td{background:var(--surface-2);font-weight:600}
 tr.row-basis code{font-weight:650}
@@ -531,7 +532,7 @@ def restyle(src):
 
     sidebar = ['<aside class="sidebar" aria-label="Primitives"><h4>Overview</h4><a href="#prices"><span>Prices</span></a>']
     for anchor, label in (('opcodes', 'How opcodes are charged'), ('method', 'How prices are derived'),
-                          ('machines', 'Machines')):
+                          ('machines', 'Machines'), ('complete-scripts', 'Complete scripts')):
         if f'id="{anchor}"' in header:
             sidebar.append(f'<a href="#{anchor}"><span>{label}</span></a>')
     if diagnostics:

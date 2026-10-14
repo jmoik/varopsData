@@ -3,8 +3,10 @@
 
 import argparse
 from collections import defaultdict
+import csv
 import hashlib
 import html
+import io
 import json
 import math
 import os
@@ -704,7 +706,80 @@ def reference_workload(artifact):
     return f'{opcode} of {size}-byte values' if size.isdigit() else opcode
 
 
-def render(joint_path, output, source_root=None, title=TITLE):
+# Complete-script cases whose repeated operation is a valid signature check or a key
+# tweak. Both are charged SIGCHECK, 500,000, carried over from the existing
+# signature allowance rather than fitted; empty-signature cases are not among them.
+SIGCHECK_SHAPES = {'signature-preserve', 'csfs-valid', 'tweakadd-valid'}
+
+
+def screen_summaries(path):
+    """Summary rows of a bench_varops CSV and its '# Confirmation:' lines."""
+    text = Path(path).read_text()
+    rows = [row for row in csv.DictReader(io.StringIO(''.join(line for line in text.splitlines(True)
+                                                              if not line.startswith('#'))))
+            if row['Record_Type'] == 'summary']
+    confirms = {match.group(1): float(match.group(2)) for match in
+                re.finditer(r'^# Confirmation: (\S.*?) screening=[\d.]+x rounds=\d+ median=([\d.]+)x', text, re.M)}
+    return rows, confirms
+
+
+def case_seconds(row):
+    """Measured or projected full-budget time, whichever is larger, as screening uses it."""
+    return max(float(value) for value in (row['Wall_Seconds'], row['Full_Varops_Wall_Seconds']) if value)
+
+
+def worst_cases(screens_path):
+    """Per machine: the slowest Tapleaf 0xC2 case over the slowest Tapleaf 0xC0 case of the same
+    screen, over all cases and without signature checks, with confirmed medians where recorded."""
+    index = json.loads(Path(screens_path).read_text())
+    out = []
+    for key, name in index['screens'].items():
+        rows, _ = screen_summaries(Path(screens_path).parent / name)
+        reference = max(float(row['Wall_Seconds']) for row in rows if row['Domain'] == 'pre-gsr-tapscript-v1')
+        cases = [row for row in rows if row['Domain'] == 'gsr-tapscript-v2'
+                 and row['Actual_Termination'] == row['Expected_Termination']]
+        confirms = {}
+        if key in index.get('confirms', {}):
+            confirms = screen_summaries(Path(screens_path).parent / index['confirms'][key])[1]
+
+        def worst(candidates):
+            row = max(candidates, key=case_seconds)
+            name = row['Name'].split('/', 1)[1].removesuffix('/No error')
+            return dict(name=name, ratio=case_seconds(row) / reference,
+                        confirmed=confirms.get(row['Name']))
+        out.append(dict(key=key, reference=reference, all=worst(cases),
+                        unsigned=worst([row for row in cases if row['Name'].split('/')[3] not in SIGCHECK_SHAPES])))
+    return index, sorted(out, key=lambda item: MACHINE_ORDER.index(item['key']))
+
+
+def complete_scripts_html(screens_path):
+    index, machines = worst_cases(screens_path)
+
+    def cell(worst):
+        confirmed = (f'; re-measured {worst["confirmed"]:.2f}× (median of 7 rounds)'
+                     if worst['confirmed'] is not None else '')
+        return f'<td><strong>{worst["ratio"]:.2f}×</strong>{confirmed}<br><code>{esc(worst["name"])}</code></td>'
+    rows = ''.join(f'<tr><td><i class="plot-mark {m["key"]}" aria-hidden="true"></i>{esc(MACHINE_NAMES[m["key"]])}</td>'
+                   f'<td>{m["reference"]:.2f} s</td>{cell(m["all"])}{cell(m["unsigned"])}</tr>' for m in machines)
+    missing = [MACHINE_NAMES[key] for key in MACHINE_ORDER if key not in index['screens']]
+    return ('<div class="card prose" id="complete-scripts"><div class="card-title">Complete scripts</div>'
+            f'<p>The slowest Tapleaf 0xC2 case of each machine&#39;s screen over the slowest Tapleaf 0xC0 case of the '
+            f'same screen. A case&#39;s time is its measured or projected full-budget time, whichever is larger. '
+            f'<strong>These are screens at older prices, not the final measurement campaign:</strong> gsr '
+            f'<code>{esc(index["commit"])}</code> with the prices of 2026-10-01, on {len(machines)} machines'
+            + (f' (no {and_list(missing)})' if missing else '') +
+            ', in one quick pass at 2% of the budget, projected to the full budget. A case above 1.0× is '
+            're-measured over 7 rounds against the slowest Tapleaf 0xC0 cases of the same rounds.</p>'
+            '<p>Signature checks are cases that repeat a valid signature check (OP_CHECKSIG, OP_CHECKSIGVERIFY, '
+            'OP_CHECKSIGADD, OP_CHECKSIGFROMSTACK) or a key tweak (OP_TWEAKADD). They are priced at SIGCHECK, '
+            'today&#39;s 50-weight-unit allowance, and sit near 1.0× wherever the reference is itself a signature '
+            'workload; the last column shows how close the fitted prices come to the limit.</p>'
+            '<div class="table-wrap"><table><thead><tr><th>Machine</th><th>Reference</th>'
+            '<th>Slowest Tapleaf 0xC2 case</th><th>Without signature checks</th></tr></thead>'
+            f'<tbody>{rows}</tbody></table></div></div>')
+
+
+def render(joint_path, output, source_root=None, title=TITLE, screens=None):
     joint = json.loads(joint_path.read_text())
     audit_path = joint_path.with_name('source-verification.json')
     joint_digest = hashlib.sha256(joint_path.read_bytes()).hexdigest()
@@ -856,6 +931,8 @@ h1{font-size:28px;margin:0 0 8px}h2{font-size:22px;margin:0 0 10px}h3{font-size:
                  '<span><i class="plot-line basis" aria-hidden="true"></i>Envelope of the fits</span>'
                  '<span><i class="plot-line candidate" aria-hidden="true"></i>Price</span>'
                  '<span><i class="plot-mark hollow" aria-hidden="true"></i>Measured, not fitted</span></div></div>')
+    if screens is not None:
+        parts.append(complete_scripts_html(screens))
 
     warnings = []
     if not same_schedule:
@@ -1130,10 +1207,11 @@ def main():
     parser.add_argument("--output", type=Path, help="HTML path (default beside joint JSON)")
     parser.add_argument("--source-root", type=Path, help="Verify sources against recorded commits and save the audit")
     parser.add_argument("--title", default=TITLE, help="page title")
+    parser.add_argument("--screens", type=Path, help="screens.json of complete-script screens to tabulate")
     args = parser.parse_args()
     source = args.joint.resolve()
     output = args.output.resolve() if args.output else source.with_suffix('.html')
-    render(source, output, args.source_root, args.title)
+    render(source, output, args.source_root, args.title, args.screens)
 
 
 if __name__ == "__main__":

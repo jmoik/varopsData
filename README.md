@@ -44,7 +44,8 @@ Put the artifacts in a new folder under `data/`, then fit, render and test (Pyth
 
     python3 src/fit_calibrations.py data/<dataset>/varop-calibration-*.json --source-root <gsr checkout>
     python3 src/render_joint_calibration.py data/<dataset>/joint-calibration.json \
-        --output report/calibration.html --source-root <gsr checkout>
+        --output report/calibration.html --source-root <gsr checkout> \
+        --screens data/2026-10-01-full-runs-one-deduction/worst-case/screens.json
     python3 -m unittest discover -s src
 
 Repeated runs go into `run1/`, `run2/`, … of one dataset and are fitted together, each as its own fit; runs from
