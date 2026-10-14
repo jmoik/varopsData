@@ -59,13 +59,14 @@ BASE, WRITE, READ, HASH, SIGCHECK = 300, (800, 7), (350, 2), (50, 40), 500_000  
 ARITH, MOVE, MUL, SELECT = (200, 3), (200, 23), (700, 1, 18, 1), (1550, 620)  # MUL per byte of W(n), W(m), W(n) × W(m)
 
 
-def unroll_charge(units, length, base=BASE, write=WRITE, padded=True):
+def unroll_charge(units, length, base=BASE, write=WRITE, read=READ, padded=True):
     """Complete charge of an UNROLL fixture, as bench_varops_primitives composes it: the
-    unrolling charge, then OP_0, OP_IF, OP_ENDIF and OP_1."""
+    unrolling charge, then OP_0, OP_IF, OP_ENDIF, OP_1 and the final check of its result."""
     span = (lambda n: (n + 7) // 8 * 8) if padded else (lambda n: n)
     def write_cost(n):
         return write[0] + write[1] * span(n)
-    return units * base + write_cost(length) + 4 * base + write_cost(0) + write_cost(8)
+    return (units * base + write_cost(length) + 4 * base + write_cost(0) + write_cost(8) +
+            read[0] + read[1] * 8)
 
 OPCODE_PRIMITIVES = {'BASE': 'F', 'WRITE': 'WRITE', 'READ': 'READ', 'MOVE': 'MOVE', 'ARITH': 'ARITH',
                      'MUL': 'MULCORE', 'DIV': 'DIVCORE', 'HASH': 'HASH', 'SIG': 'SIG', 'OP_TX_SELECT': 'SELECT'}
@@ -231,8 +232,8 @@ def opcodes_html():
             f'<tbody>{"".join(rows)}</tbody></table>'
             '<p>n is an operand\'s size in bytes, a and b those of two operands, r the size of the result and W(n) '
             'its 64-bit word span. Every numeric operand pays READ and every result WRITE of its size, including '
-            'counts, comparison results, booleans and constants. Witness values and the final result check cost '
-            'nothing. <code>src/check_opcode_table.py</code> evaluates every example with the BIP 441 reference '
+            'counts, comparison results, booleans and constants. Witness values cost nothing; the final result check '
+            'pays READ of the remaining element. <code>src/check_opcode_table.py</code> evaluates every example with the BIP 441 reference '
             'evaluator.</p></div>')
 
 
