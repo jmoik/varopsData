@@ -2,7 +2,7 @@
 
 How the costs of Tapleaf 0xC2 operations are measured and priced. [BIP 440](https://github.com/jmoik/bips/blob/gsr-full/bip-0440.mediawiki) gives every script a varops budget and prices each operation from a few cost primitives; this repository holds the measurements on several machines, the fitting code and the [report](report/calibration.html) (download to view). The benchmarks are on the `gsr` branch of [jmoik/bitcoin](https://github.com/jmoik/bitcoin/tree/gsr).
 
-**The requirement:** on every machine, a full block of the slowest Tapleaf 0xC2 scripts must take less time than the slowest block of existing scripts on that machine.
+**The requirement:** on every machine, no Tapleaf 0xC2 workload may take longer than the slowest Tapleaf 0xC0 workload of the same weight. Signature checks in legacy and witness version 0 inputs are limited per block, not by weight, and their weight does not fund the varops budget, so this keeps every block within today's worst case.
 
 ## Method
 
