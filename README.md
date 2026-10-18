@@ -58,7 +58,6 @@ different gsr commits need `--source-root`, which checks each against its own co
 | `data/2026-10-08-three-runs-seven-machines/` | Current dataset: three full runs on each of seven machines (`run1/` to `run3/`); the prices come from its fit. |
 | `data/2026-10-05-merged-primitives/` | Runs with the merged READ, WRITE and ARITH primitives, and the macro unrolling checks. |
 | `data/2026-10-01-full-runs-one-deduction/` | Full runs on six machines after the one-deduction-per-opcode change. |
-| `data/2026-10-01-full-runs/` | Full runs on five machines (no M4 Pro), before that change. |
 | `report/calibration.html` | The report, rendered from the current dataset. |
 | `bench/` | The benchmarks, `bench_varops` (complete scripts) and `bench_varops_primitives` (cost primitives), built into a gsr checkout. |
 | `src/` | The calibration runner (`run_calibration.py`), fitting (`fit_calibrations.py`), the report (`render_joint_calibration.py`, `restyle_report.py`) and tests. |

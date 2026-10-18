@@ -20,7 +20,7 @@ Ryzen 5 3600 ran it through `bitcoinSetup.sh` with the same settings. Every run 
 with its own charge made a second atomic deduction after BASE's. F's NOP scripts timed one deduction and the
 primitive measurements none, so complete opcodes cost more than BASE plus their primitives on the i5, i7 and 9950X:
 OP_BYTEREV of 0-1 bytes reached 1.04x on the 9950X. The primitive measurements are unchanged; on the five machines
-of [`2026-10-01-full-runs`](../2026-10-01-full-runs/) every fit except MOVE on the i5-12500 (21 -> 36 varops per
+of `2026-10-01-full-runs`, now in the Git history, every fit except MOVE on the i5-12500 (21 -> 36 varops per
 entry) moved within run-to-run noise. The M4 Pro is new in this dataset and sets the BIT, SELECT, PRODUCE and
 MOVE flats.
 
